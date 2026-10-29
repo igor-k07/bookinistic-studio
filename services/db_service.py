@@ -8,6 +8,8 @@ import json
 import os
 import re
 import sqlite3
+import tempfile
+import threading
 from typing import Any, Dict, List, Optional
 
 from config import DB_PATH, READY_TABLES_DIR
@@ -122,6 +124,9 @@ def save_book_to_db(book: Dict[str, Any]) -> Dict[str, Any]:
         """, (article, title, author, year_val, price_val, mode, status, data_json))
         conn.commit()
 
+    # Асинхронная синхронизация базы в Yandex S3 (в фоне, не тормозит ответ)
+    backup_db_to_s3_async()
+
     return book
 
 
@@ -155,6 +160,8 @@ def delete_book_from_db(article: str) -> bool:
     with get_db_connection() as conn:
         cursor = conn.execute("DELETE FROM books WHERE article = ? COLLATE NOCASE", (target_art,))
         conn.commit()
+        if cursor.rowcount > 0:
+            backup_db_to_s3_async()
         return cursor.rowcount > 0
 
 
@@ -273,4 +280,150 @@ def migrate_existing_excel_to_db():
     if imported_count > 0:
         print(f"📦 [DB:Migration] Успешно импортировано {imported_count} книг из существующих таблиц в базу catalog.db!")
     return imported_count
+
+
+# =========================================================================
+# Синхронизация и резервное копирование SQLite в Yandex Object Storage (S3)
+# =========================================================================
+
+_last_s3_sync: Dict[str, Any] = {
+    "last_sync": None,
+    "status": "idle",
+    "size_bytes": 0,
+    "latest_url": None,
+    "error": None,
+}
+_sync_lock = threading.Lock()
+_backup_timer: Optional[threading.Timer] = None
+_timer_lock = threading.Lock()
+
+
+def get_db_sync_status() -> Dict[str, Any]:
+    """Возвращает информацию о последней синхронизации базы с Yandex S3."""
+    return dict(_last_s3_sync)
+
+
+def backup_db_to_s3_async(delay: float = 2.0):
+    """
+    Запускает бэкап базы в Yandex S3 в фоновом потоке с дебаунсом (задержка 2 сек),
+    чтобы объединять частые сохранения книг в один быстрый сетевой запрос.
+    """
+    global _backup_timer
+    with _timer_lock:
+        if _backup_timer is not None:
+            _backup_timer.cancel()
+        _backup_timer = threading.Timer(delay, backup_db_to_s3)
+        _backup_timer.daemon = True
+        _backup_timer.start()
+
+
+def backup_db_to_s3() -> Dict[str, Any]:
+    """
+    Создает атомарный консистентный снимок SQLite базы и выгружает его в Yandex S3:
+    1. backups/db/catalog_latest.db (всегда актуальная копия)
+    2. backups/db/history/catalog_YYYY-MM-DD.db (суточный исторический архив)
+    """
+    from services.s3_service import get_s3_client
+    global _last_s3_sync
+
+    client, bucket = get_s3_client()
+    if not client or not bucket:
+        _last_s3_sync["status"] = "skipped_no_s3"
+        return {"ok": False, "error": "S3 not configured"}
+
+    if not os.path.exists(DB_PATH):
+        return {"ok": False, "error": "Database file does not exist"}
+
+    with _sync_lock:
+        _last_s3_sync["status"] = "syncing"
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            # Атомарный безопасный снимок без блокировки чтения и записи
+            with sqlite3.connect(DB_PATH) as src, sqlite3.connect(tmp_path) as dst:
+                src.backup(dst)
+
+            with open(tmp_path, "rb") as f:
+                db_bytes = f.read()
+
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            latest_key = "backups/db/catalog_latest.db"
+            history_key = f"backups/db/history/catalog_{today_str}.db"
+
+            # 1. Загрузка актуального слепка
+            client.put_object(
+                Bucket=bucket,
+                Key=latest_key,
+                Body=db_bytes,
+                ContentType="application/x-sqlite3",
+                CacheControl="no-cache",
+            )
+            latest_url = f"https://storage.yandexcloud.net/{bucket}/{latest_key}"
+
+            # 2. Загрузка суточного исторического архива
+            client.put_object(
+                Bucket=bucket,
+                Key=history_key,
+                Body=db_bytes,
+                ContentType="application/x-sqlite3",
+                CacheControl="public, max-age=86400",
+            )
+
+            iso_now = datetime.now().isoformat()
+            _last_s3_sync = {
+                "last_sync": iso_now,
+                "status": "synced",
+                "size_bytes": len(db_bytes),
+                "latest_url": latest_url,
+                "history_key": history_key,
+                "error": None,
+            }
+            print(f"☁️ [DB:S3] База catalog.db синхронизирована с S3 ({len(db_bytes)} байт) -> {latest_key}")
+            return {"ok": True, "data": _last_s3_sync}
+
+        except Exception as e:
+            err_msg = str(e)
+            print(f"⚠️ [DB:S3] Ошибка бэкапа базы в S3: {err_msg}")
+            _last_s3_sync["status"] = "error"
+            _last_s3_sync["error"] = err_msg
+            return {"ok": False, "error": err_msg}
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+
+def restore_db_from_s3() -> Dict[str, Any]:
+    """
+    Восстанавливает локальную базу catalog.db из backups/db/catalog_latest.db в Yandex S3.
+    Перед заменой создает локальную резервную копию catalog.db.bak.
+    """
+    from services.s3_service import get_s3_client
+    import shutil
+
+    client, bucket = get_s3_client()
+    if not client or not bucket:
+        return {"ok": False, "error": "S3 not configured"}
+
+    latest_key = "backups/db/catalog_latest.db"
+    try:
+        response = client.get_object(Bucket=bucket, Key=latest_key)
+        content = response["Body"].read()
+
+        if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
+            shutil.copyfile(DB_PATH, DB_PATH + ".bak")
+
+        with open(DB_PATH, "wb") as f:
+            f.write(content)
+
+        print(f"📥 [DB:S3] База данных успешно восстановлена из S3 ({len(content)} байт)")
+        return {"ok": True, "size_bytes": len(content)}
+    except Exception as e:
+        err_msg = str(e)
+        print(f"⚠️ [DB:S3] Ошибка восстановления базы из S3: {err_msg}")
+        return {"ok": False, "error": err_msg}
+
 

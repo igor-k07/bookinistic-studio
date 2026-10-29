@@ -44,8 +44,10 @@ def get_s3_client():
             aws_access_key_id=key_id,
             aws_secret_access_key=secret_key,
             config=Config(
-                connect_timeout=10,
-                read_timeout=30,
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+                connect_timeout=5,
+                read_timeout=15,
                 retries={"max_attempts": 3, "mode": "standard"},
             ),
         )

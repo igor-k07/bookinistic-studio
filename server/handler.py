@@ -42,6 +42,9 @@ from services.db_service import (
     delete_book_from_db,
     get_all_books_from_db,
     get_next_article_number,
+    backup_db_to_s3,
+    restore_db_from_s3,
+    get_db_sync_status,
 )
 import services.tunnel_service as tunnel_service
 from services.vault_service import create_photos_zip, save_book_vault_photos
@@ -207,6 +210,13 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                     "count": len(db_books),
                     "books": db_books
                 })
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/db_sync_status":
+            try:
+                status_info = get_db_sync_status()
+                self.send_json({"success": True, "sync": status_info})
             except Exception as e:
                 self.send_error_json(e)
 
@@ -602,6 +612,20 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 except Exception as db_e:
                     print(f"⚠️ Ошибка удаления из БД: {db_e}")
                 res = delete_book_from_excel(article, mode)
+                self.send_json(res)
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/backup_db":
+            try:
+                res = backup_db_to_s3()
+                self.send_json(res)
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/restore_db":
+            try:
+                res = restore_db_from_s3()
                 self.send_json(res)
             except Exception as e:
                 self.send_error_json(e)
