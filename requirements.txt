@@ -1,0 +1,11 @@
+# Bookinistic Studio Python Dependencies
+# Built-in modules used: sqlite3, zipfile, xml.etree.ElementTree, http.server, urllib, json, base64
+
+# Photo processing & enhancement
+Pillow>=9.0.0
+
+# Cloud storage (Yandex Object Storage / S3 CDN)
+boto3>=1.26.0
+
+# Background removal (optional, for AI photo crop & whitening)
+rembg>=2.0.50
