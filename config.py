@@ -118,3 +118,32 @@ def save_api_key(key: str) -> None:
         f.write(key.strip())
 
 
+OZON_CREDENTIALS_FILE = os.path.join(BASE_DIR, ".ozon_credentials")
+
+
+def get_ozon_config() -> Optional[dict]:
+    """Возвращает настройки подключения к Ozon Seller API (client_id, api_key)."""
+    if os.environ.get("OZON_CLIENT_ID") and os.environ.get("OZON_API_KEY"):
+        return {
+            "client_id": os.environ.get("OZON_CLIENT_ID").strip(),
+            "api_key": os.environ.get("OZON_API_KEY").strip(),
+        }
+    if os.path.exists(OZON_CREDENTIALS_FILE):
+        try:
+            import json
+            with open(OZON_CREDENTIALS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Ошибка чтения Ozon credentials: {e}")
+    return None
+
+
+def save_ozon_config(client_id: str, api_key: str) -> None:
+    """Сохраняет Ozon credentials в файл .ozon_credentials."""
+    import json
+    data = {"client_id": str(client_id).strip(), "api_key": str(api_key).strip()}
+    with open(OZON_CREDENTIALS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+

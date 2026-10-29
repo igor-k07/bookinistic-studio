@@ -26,6 +26,8 @@ from config import (
     get_saved_api_key,
     get_target_excel_file,
     save_api_key,
+    get_ozon_config,
+    save_ozon_config,
 )
 from server.state import check_mobile_events, record_mobile_upload
 from services.ai_service import call_gemini_vision
@@ -46,6 +48,7 @@ from services.db_service import (
     restore_db_from_s3,
     get_db_sync_status,
 )
+import services.ozon_service as ozon_service
 import services.tunnel_service as tunnel_service
 from services.vault_service import create_photos_zip, save_book_vault_photos
 from services.s3_service import upload_book_photos as s3_upload_book_photos
@@ -217,6 +220,30 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             try:
                 status_info = get_db_sync_status()
                 self.send_json({"success": True, "sync": status_info})
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/ozon/status":
+            try:
+                cfg = get_ozon_config()
+                if not cfg or not cfg.get("client_id") or not cfg.get("api_key"):
+                    self.send_json({"configured": False, "message": "Ключи Ozon Seller API не настроены"})
+                else:
+                    status_res = ozon_service.check_ozon_connection()
+                    cid = str(cfg.get("client_id", ""))
+                    masked_cid = (cid[:4] + "***") if len(cid) > 4 else "***"
+                    self.send_json({
+                        "configured": True,
+                        "client_id": masked_cid,
+                        **status_res
+                    })
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/ozon/import_status":
+            try:
+                st = ozon_service.get_import_status()
+                self.send_json({"success": True, "status": st})
             except Exception as e:
                 self.send_error_json(e)
 
@@ -626,6 +653,26 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/api/restore_db":
             try:
                 res = restore_db_from_s3()
+                self.send_json(res)
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/ozon/save_keys":
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                client_id = body.get("client_id", "").strip()
+                api_key = body.get("api_key", "").strip()
+                if not client_id or not api_key:
+                    raise Exception("Необходимо указать Client-Id и Api-Key")
+                save_ozon_config(client_id, api_key)
+                conn_test = ozon_service.check_ozon_connection()
+                self.send_json({"success": True, "connection": conn_test})
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/ozon/start_import":
+            try:
+                res = ozon_service.start_import_catalog_async()
                 self.send_json(res)
             except Exception as e:
                 self.send_error_json(e)

@@ -5,6 +5,7 @@
 # ==========================================
 .gemini_api_key
 .yandex_s3_credentials
+.ozon_credentials
 .env
 *.env
 *.pem
