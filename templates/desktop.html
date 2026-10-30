@@ -6078,6 +6078,7 @@
           populateDatalist('publisherList', data.references.publishers || []);
           populateDatalist('seriesList', data.references.series || []);
           populateDatalist('brandList', data.references.brands || []);
+          initCaseInsensitiveSnapping();
         }
       } catch (e) {
         console.warn('Не удалось загрузить справочники каталога:', e);
@@ -6090,10 +6091,90 @@
       listEl.innerHTML = items.map(item => `<option value="${escapeHtml(item)}"></option>`).join('');
     }
 
+    // Нечувствительная к регистру сверка с эталонной базой
+    function snapToCanonical(inputEl, categoryKey) {
+      if (!inputEl || !window.CATALOG_REFERENCES) return;
+      const raw = (inputEl.value || '').trim();
+      if (!raw) return;
+      const list = window.CATALOG_REFERENCES[categoryKey] || [];
+      const rawLower = raw.toLowerCase();
+
+      // 1. Точное совпадение без учета регистра
+      let matched = list.find(item => item.toLowerCase() === rawLower);
+
+      // 2. Без кавычек ("Эксмо" <-> Эксмо <-> «эксмо»)
+      if (!matched) {
+        const cleanLower = rawLower.replace(/["'«»]/g, '').trim();
+        matched = list.find(item => item.toLowerCase().replace(/["'«»]/g, '').trim() === cleanLower);
+      }
+
+      // 3. Сопоставление авторов/персон по фамилии и инициалам
+      if (!matched && (categoryKey === 'authors' || categoryKey === 'translators' || categoryKey === 'illustrators')) {
+        const parts = raw.replace(/\./g, '. ').split(/\s+/).filter(Boolean);
+        if (parts.length >= 1) {
+          const surname = parts[0].toLowerCase();
+          const cands = list.filter(item => item.toLowerCase().startsWith(surname + ' '));
+          if (cands.length === 1) {
+            matched = cands[0];
+          } else if (cands.length > 1 && parts.length >= 2) {
+            const firstInit = parts[1][0].toLowerCase();
+            const subCands = cands.filter(c => {
+              const cp = c.split(/\s+/);
+              return cp.length >= 2 && cp[1][0].toLowerCase() === firstInit;
+            });
+            if (subCands.length === 1) {
+              matched = subCands[0];
+            }
+          }
+        }
+      }
+
+      // 4. Для бренда: автоматическая нормализация "нет бренда"
+      if (categoryKey === 'brands' && (rawLower === 'нет бренда' || rawLower === 'нет' || rawLower === 'без бренда')) {
+        matched = 'Нет бренда';
+      }
+
+      if (matched && matched !== raw) {
+        inputEl.value = matched;
+        inputEl.classList.add('field-updated');
+        setTimeout(() => inputEl.classList.remove('field-updated'), 800);
+      }
+    }
+
+    function initCaseInsensitiveSnapping() {
+      const fieldMap = [
+        { id: 'author_cover', cat: 'authors' },
+        { id: 'author', cat: 'authors' },
+        { id: 'publisher', cat: 'publishers' },
+        { id: 'brand', cat: 'brands' },
+        { id: 'series', cat: 'series' },
+        { id: 'translator', cat: 'translators' },
+        { id: 'illustrator', cat: 'illustrators' }
+      ];
+
+      fieldMap.forEach(({ id, cat }) => {
+        const el = document.getElementById(id);
+        if (el && !el._hasCaseSnap) {
+          el._hasCaseSnap = true;
+          el.addEventListener('blur', () => snapToCanonical(el, cat));
+          el.addEventListener('change', () => snapToCanonical(el, cat));
+        }
+      });
+    }
+
     // -------------------------------------------------------------
     // СОХРАНЕНИЕ В ИЗОЛИРОВАННЫЙ EXCEL
     // -------------------------------------------------------------
     async function saveBookToExcel() {
+      // Сначала выполняем нечувствительную к регистру канонизацию полей
+      snapToCanonical(document.getElementById('author_cover'), 'authors');
+      snapToCanonical(document.getElementById('author'), 'authors');
+      snapToCanonical(document.getElementById('publisher'), 'publishers');
+      snapToCanonical(document.getElementById('brand'), 'brands');
+      snapToCanonical(document.getElementById('series'), 'series');
+      snapToCanonical(document.getElementById('translator'), 'translators');
+      snapToCanonical(document.getElementById('illustrator'), 'illustrators');
+
       const title = document.getElementById('title').value.trim();
       if (!title) {
         alert('Пожалуйста, укажите название книги!');

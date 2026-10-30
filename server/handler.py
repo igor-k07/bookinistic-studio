@@ -48,6 +48,7 @@ from services.db_service import (
     restore_db_from_s3,
     get_db_sync_status,
     get_catalog_references,
+    reconcile_with_references,
 )
 import services.ozon_service as ozon_service
 import services.tunnel_service as tunnel_service
@@ -522,6 +523,11 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/api/save_book":
             try:
                 book_data = json.loads(post_data.decode("utf-8"))
+                # Нечувствительная к регистру сверка и канонизация по базе catalog.db
+                try:
+                    book_data = reconcile_with_references(book_data)
+                except Exception as rec_err:
+                    print(f"⚠️ Ошибка канонизации при сохранении: {rec_err}")
 
                 mode = book_data.get("template_mode")
                 if not mode:
