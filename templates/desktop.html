@@ -1064,7 +1064,7 @@
       </div>
 
       <div id="qrVpnBadge" class="text-[11px] py-1.5 px-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-300 font-medium text-center">
-        🛡️ При включенном VPN работает только вкладка <b>«Cloudflare»</b>!
+        💡 Если Cloudflare блокируется оператором — переключитесь на вкладку <b>«📶 Wi-Fi сеть»</b> (оба устройства в одном Wi-Fi)!
       </div>
 
       <p id="qrModeDesc" class="text-xs text-slate-300">Наведите камеру смартфона на QR-код:</p>
@@ -6422,7 +6422,6 @@
         alert('Ошибка сети: ' + err.message);
       }
     }
-    }
 
     // -------------------------------------------------------------
     // QR-КОД И ТУННЕЛЬ (CLOUDFLARE + ЛОКАЛЬНЫЙ WI-FI, ПОРТ 8095)
@@ -6486,10 +6485,10 @@
       const vpnBadge = document.getElementById('qrVpnBadge');
 
       if (vpnBadge) {
-        if (isVpnActiveOnMac) {
-          vpnBadge.innerHTML = '🛡️ На компьютере включен VPN: для телефона используется <b>«Cloudflare»</b>!';
+        if (isCloudflare) {
+          vpnBadge.innerHTML = '🌐 <b>Режим Cloudflare:</b> если мобильный оператор блокирует ссылку — переключитесь на <b>«📶 Wi-Fi сеть»</b>!';
         } else {
-          vpnBadge.innerHTML = '💡 При включенном VPN на телефоне или Mac работает только вкладка <b>«Cloudflare»</b>!';
+          vpnBadge.innerHTML = '📶 <b>Локальный Wi-Fi:</b> телефон и Mac должны быть в одной сети Wi-Fi!';
         }
       }
 

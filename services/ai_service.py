@@ -150,6 +150,7 @@ def call_gemini_vision(categorized_images: List[Dict[str, Any]], api_key: str) -
     # Каскад сверхбыстрых и надежных моделей Gemini Vision
     models = [
         "gemini-3.5-flash-lite",    # ⚡ Легковесная и быстрая модель (~4-6 сек)
+        "gemini-3.6-flash",         # Проверенная скоростная модель
         "gemini-3.1-flash-lite",    # Резервная модель
         "gemini-3-flash-preview",   # Флагманская модель
         "gemini-flash-lite-latest", # Альтернативный lite endpoint
