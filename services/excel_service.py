@@ -226,9 +226,9 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
     if warning_prefix in annotation:
         annotation = annotation.replace(warning_prefix, "").strip()
 
-    # Добавляем предупреждение строго при наличии фото нюансов/дефектов
-    if has_mantra_defects:
-        annotation = (warning_prefix + "\n\n" + annotation).strip() if annotation else warning_prefix
+    # Добавляем предупреждение строго при наличии фото нюансов/дефектов (слот 5)
+    if has_mantra_defects and annotation:
+        annotation = (warning_prefix + "\n\n" + annotation).strip()
 
     # Размеры и вес книги (нетто)
     try:

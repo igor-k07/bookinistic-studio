@@ -5170,8 +5170,8 @@
       }
 
       if (hasMantraDefects) {
-        if (!text.includes(ANNOTATION_WARNING)) {
-          antEl.value = cleanText ? (ANNOTATION_WARNING + '\n\n' + cleanText) : ANNOTATION_WARNING;
+        if (cleanText && !text.includes(ANNOTATION_WARNING)) {
+          antEl.value = ANNOTATION_WARNING + '\n\n' + cleanText;
           antEl.classList.add('field-updated');
           setTimeout(() => antEl.classList.remove('field-updated'), 600);
         }
@@ -5406,7 +5406,8 @@
         illustrator: document.getElementById('illustrator')?.value?.trim() || '',
         series: document.getElementById('series')?.value?.trim() || '',
         original_title: document.getElementById('original_title')?.value?.trim() || '',
-        pages: document.getElementById('pages')?.value?.trim() || ''
+        pages: document.getElementById('pages')?.value?.trim() || '',
+        annotation: document.getElementById('annotation')?.value?.trim() || ''
       };
 
       const fs = document.getElementById('formStatus');
@@ -5498,22 +5499,40 @@
         fill('series', data.series || '');
         fill('pages', data.pages || '');
 
-        const rawAnt = (data.annotation || '').trim();
+        // Аннотация:
+        // Если новая аннотация передана (от Gemini) — используем её.
+        // Если в data аннотации нет (при сверке с FantLab) — сохраняем ТЕКУЩИЙ текст из поля, чтобы он не слетал!
+        const existingAnt = (document.getElementById('annotation')?.value || '').trim();
+        const incomingAnt = (data && data.annotation !== undefined && data.annotation !== null) ? String(data.annotation).trim() : '';
+        const rawAnt = incomingAnt || existingAnt;
+
         let cleanAnt = rawAnt;
-        if (cleanAnt.startsWith(ANNOTATION_WARNING)) {
-          cleanAnt = cleanAnt.substring(ANNOTATION_WARNING.length).trim();
-        } else if (cleanAnt.includes(ANNOTATION_WARNING)) {
+        if (cleanAnt.includes(ANNOTATION_WARNING)) {
           cleanAnt = cleanAnt.replace(ANNOTATION_WARNING, '').trim();
+          while (cleanAnt.startsWith('\n')) cleanAnt = cleanAnt.substring(1).trim();
         }
         for (const m of ['\\n\\nСохранность / Дефекты:', '\\n\\nСохранность:', '\\n\\nДефекты:', '\\nСохранность / Дефекты:', '\\nСохранность:', '\\nДефекты:']) {
           if (cleanAnt.includes(m)) cleanAnt = cleanAnt.split(m)[0].trim();
         }
 
-        // Правило: плашка добавляется ТОЛЬКО если есть фото мантры / нюансов (слот 5)
+        // Правило: плашка добавляется ТОЛЬКО если есть фото мантры / дефектов (слот 5) И есть содержательный текст
         const curBookObj = getActiveBook();
         const hasMantraDefects = Boolean(curBookObj && curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
-        const fullAnt = hasMantraDefects ? (cleanAnt ? (ANNOTATION_WARNING + '\\n\\n' + cleanAnt) : ANNOTATION_WARNING) : cleanAnt;
-        fill('annotation', fullAnt);
+
+        let fullAnt = cleanAnt;
+        if (hasMantraDefects && cleanAnt) {
+          fullAnt = ANNOTATION_WARNING + '\n\n' + cleanAnt;
+        }
+
+        const antEl = document.getElementById('annotation');
+        if (antEl && (fullAnt || antEl.value.includes(ANNOTATION_WARNING))) {
+          antEl.value = fullAnt;
+          antEl.classList.add('field-updated');
+          setTimeout(() => antEl.classList.remove('field-updated'), 1200);
+        }
+        if (curBookObj && curBookObj.formData) {
+          curBookObj.formData.annotation = fullAnt;
+        }
 
         fill('translator', data.translator || '');
 
@@ -5948,8 +5967,8 @@
         finalAnt = finalAnt.replace(ANNOTATION_WARNING, '').trim();
         while (finalAnt.startsWith('\n')) finalAnt = finalAnt.substring(1).trim();
       }
-      if (hasMantraDefects) {
-        finalAnt = finalAnt ? (ANNOTATION_WARNING + '\n\n' + finalAnt) : ANNOTATION_WARNING;
+      if (hasMantraDefects && finalAnt) {
+        finalAnt = ANNOTATION_WARNING + '\n\n' + finalAnt;
       }
       payload.annotation = finalAnt;
 

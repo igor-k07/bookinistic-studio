@@ -62,8 +62,8 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     ant = str(clean.get("annotation") or "").strip()
     if warning_prefix in ant:
         ant = ant.replace(warning_prefix, "").strip()
-    if has_mantra_defects:
-        ant = (warning_prefix + "\n\n" + ant).strip() if ant else warning_prefix
+    if has_mantra_defects and ant:
+        ant = (warning_prefix + "\n\n" + ant).strip()
     clean["annotation"] = ant
 
     # Санитизация возрастного ценза: только строго допустимые значения, иначе пустая строка
