@@ -54,10 +54,13 @@ def generate():
             lines.append(f'\n### {current_letter}\n')
         lines.append(f'- **`{b}`** *(в магазине: {count} шт.)*')
 
-    with open('OZON_BRANDS.md', 'w', encoding='utf-8') as f:
+    import os
+    os.makedirs('docs', exist_ok=True)
+    target_path = os.path.join('docs', 'OZON_BRANDS.md')
+    with open(target_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')
 
-    print(f'OZON_BRANDS.md successfully created with {len(brands)} brands!')
+    print(f'{target_path} successfully created with {len(brands)} brands!')
 
 if __name__ == '__main__':
     generate()

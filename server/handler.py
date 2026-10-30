@@ -15,6 +15,7 @@ from typing import Any, Dict
 
 from config import (
     BASE_DIR,
+    DOCS_DIR,
     DRAFT_FILE,
     INBOX_DIR,
     PORT,
@@ -297,12 +298,120 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error_json(e)
 
         elif parsed.path == "/api/open_guide":
-            guide_file = os.path.join(BASE_DIR, "OZON_FIELDS_GUIDE.md")
+            qs = urllib.parse.parse_qs(parsed.query)
+            doc_name = qs.get("name", ["OZON_FIELDS_GUIDE.md"])[0]
+            # Защита от выхода за пределы директории
+            clean_name = os.path.basename(doc_name)
+            candidates = [
+                os.path.join(DOCS_DIR, clean_name),
+                os.path.join(BASE_DIR, clean_name),
+            ]
+            target_doc = None
+            for p in candidates:
+                if os.path.exists(p):
+                    target_doc = p
+                    break
+            if not target_doc:
+                target_doc = os.path.join(DOCS_DIR, "OZON_FIELDS_GUIDE.md")
+
             try:
-                subprocess.Popen(["open", guide_file])
-                self.send_json({"success": True, "file": guide_file})
+                subprocess.Popen(["open", target_doc])
+                self.send_json({
+                    "success": True,
+                    "file": target_doc,
+                    "filename": os.path.basename(target_doc),
+                    "rel_path": os.path.relpath(target_doc, BASE_DIR)
+                })
             except Exception as e:
                 self.send_error_json(e)
+
+        elif parsed.path == "/api/open_docs_folder":
+            try:
+                subprocess.Popen(["open", DOCS_DIR])
+                self.send_json({
+                    "success": True,
+                    "path": DOCS_DIR,
+                    "rel_path": os.path.relpath(DOCS_DIR, BASE_DIR)
+                })
+            except Exception as e:
+                self.send_error_json(e)
+
+        elif parsed.path == "/api/get_memos":
+            memo_defs = [
+                {
+                    "id": "OZON_FIELDS_GUIDE.md",
+                    "title": "Поля Ozon и правила заполнения",
+                    "category": "Ozon & Каталог",
+                    "icon": "📋",
+                    "badge": "Главная",
+                    "badge_color": "bg-amber-500/20 text-amber-300 border-amber-500/40",
+                    "desc": "Справочник всех 81/86 колонок Ozon, обязательная ручная цена, 12 типов бумаги, авторы, ГОСТ-габариты и вес.",
+                },
+                {
+                    "id": "OZON_DICTIONARIES.md",
+                    "title": "Официальные словари Ozon",
+                    "category": "Ozon & Каталог",
+                    "icon": "📖",
+                    "badge": "Словари",
+                    "badge_color": "bg-blue-500/20 text-blue-300 border-blue-500/40",
+                    "desc": "16 типов обложек, 12 типов бумаги, 56 жанров Ozon, 5 градаций сохранности и возрастные маркировки.",
+                },
+                {
+                    "id": "OZON_BRANDS.md",
+                    "title": "Справочник 397 брендов Ozon",
+                    "category": "Ozon & Каталог",
+                    "icon": "🏷️",
+                    "badge": "397 брендов",
+                    "badge_color": "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+                    "desc": "Реестр подтвержденных брендов Ozon из catalog.db, рейтинг ТОП-30 и правила подстановки «Нет бренда».",
+                },
+                {
+                    "id": "KEYS_GUIDE.md",
+                    "title": "Справочник по ключам и API",
+                    "category": "Безопасность & Доступы",
+                    "icon": "🔑",
+                    "badge": "Ключи",
+                    "badge_color": "bg-purple-500/20 text-purple-300 border-purple-500/40",
+                    "desc": "Карта ключей: Gemini AI, Ozon Seller API, Yandex S3, Cloudflare Tunnel, .env и приоритеты загрузки.",
+                },
+                {
+                    "id": "PHOTO_PIPELINE.md",
+                    "title": "Регламент фотосъемки и ракурсов",
+                    "category": "Склад & Съемка",
+                    "icon": "📸",
+                    "badge": "Фото",
+                    "badge_color": "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
+                    "desc": "Ракурсы съемки (обложка, титул, мантра, дефекты), постоянная карточка card.png, обрезка и S3 CDN.",
+                },
+                {
+                    "id": "BARCODE_CHEAT_SHEET.md",
+                    "title": "Штрихкоды и термоэтикетки",
+                    "category": "Склад & Съемка",
+                    "icon": "🏷️",
+                    "badge": "EAN-13",
+                    "badge_color": "bg-rose-500/20 text-rose-300 border-rose-500/40",
+                    "desc": "Генерация штрихкодов EAN-13 из артикула, работа с ISBN и печать этикеток 58х40 мм для Ozon.",
+                },
+                {
+                    "id": "TECH_STACK.md",
+                    "title": "Архитектура и технический стек",
+                    "category": "Разработка",
+                    "icon": "💻",
+                    "badge": "Стек",
+                    "badge_color": "bg-slate-500/20 text-slate-300 border-slate-500/40",
+                    "desc": "Техническое описание, прямой парсер OpenXML Excel, схема SQLite catalog.db и REST API.",
+                },
+            ]
+            result = []
+            for m in memo_defs:
+                fpath = os.path.join(DOCS_DIR, m["id"])
+                exists = os.path.exists(fpath)
+                size_kb = round(os.path.getsize(fpath) / 1024, 1) if exists else 0
+                item = dict(m)
+                item["exists"] = exists
+                item["size_kb"] = size_kb
+                result.append(item)
+            self.send_json({"success": True, "memos": result, "docs_dir": DOCS_DIR})
 
         elif parsed.path == "/api/reveal_file":
             qs = urllib.parse.parse_qs(parsed.query)

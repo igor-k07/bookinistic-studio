@@ -208,9 +208,9 @@
           <span>📂 Папка таблиц</span>
         </button>
 
-        <!-- ПАМЯТКА ПОЛЕЙ OZON -->
-        <button type="button" onclick="openFieldsGuide()" class="px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-purple-300 text-xs font-semibold border border-purple-700/60 shadow-sm transition flex items-center gap-1.5" title="Открыть памятку полей Ozon в режиме чтения">
-          <span>📚 Памятка полей</span>
+        <!-- ПАМЯТКИ И ИНСТРУКЦИИ СТУДИИ -->
+        <button type="button" onclick="openMemosModal()" class="px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-purple-300 text-xs font-semibold border border-purple-700/60 shadow-sm transition flex items-center gap-1.5" title="Открыть меню памяток, словарей и регламентов студии">
+          <span>📚 Памятки (7)</span>
         </button>
 
         <button type="button" onclick="revealTableFile('pre2011')" class="px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="Показать готовую таблицу до 2011 г. в папке ready_tables">
@@ -1293,6 +1293,40 @@
           <span id="copyBarcodeIcon">📋</span>
           <span id="copyBarcodeBtnText">Копировать код</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО ПАМЯТОК И РЕГЛАМЕНТОВ СТУДИИ -->
+  <div id="memosModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closeMemosModal()">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">📚</span>
+          <div>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Памятки и регламенты Bookinistic Studio</h3>
+            <p class="text-[11px] text-slate-400">7 официальных стандартов и справочников в папке <code class="text-amber-400 font-mono font-bold">docs/</code></p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="openDocsFolder()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5" title="Открыть папку docs/ в Finder на Mac">
+            <span>📂 Папка docs</span>
+          </button>
+          <button type="button" onclick="closeMemosModal()" class="text-slate-400 hover:text-white text-base px-2">✕</button>
+        </div>
+      </div>
+
+      <!-- СПИСОК ПАМЯТОК -->
+      <div class="overflow-y-auto space-y-2.5 pr-1 flex-1" id="memosListContainer">
+        <div class="text-center py-6 text-slate-500 text-xs font-medium">Загрузка списка памяток...</div>
+      </div>
+
+      <div class="border-t border-slate-800 pt-3 flex items-center justify-between text-[11px] text-slate-400">
+        <div class="flex items-center gap-1.5">
+          <span class="text-emerald-400">💡</span>
+          <span>Нажмите «Открыть на Mac», чтобы мгновенно просмотреть памятку в удобном окне</span>
+        </div>
+        <button type="button" onclick="closeMemosModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Закрыть</button>
       </div>
     </div>
   </div>
@@ -6664,17 +6698,75 @@
       }
     }
 
-    async function openFieldsGuide() {
+    async function openFieldsGuide(docName = 'OZON_FIELDS_GUIDE.md') {
       try {
-        const res = await fetch('/api/open_guide');
+        const res = await fetch('/api/open_guide?name=' + encodeURIComponent(docName));
         const data = await res.json();
         if (data.success) {
-          showToast('📚 Памятка полей Ozon <b>OZON_FIELDS_GUIDE.md</b> открыта в режиме чтения!');
+          showToast(`📚 Памятка <b>${data.filename || docName}</b> открыта в режиме чтения!`);
         } else {
           alert('Ошибка открытия памятки: ' + (data.error || ''));
         }
       } catch (e) {
         alert('Ошибка: ' + e.message);
+      }
+    }
+
+    async function openDocsFolder() {
+      try {
+        const res = await fetch('/api/open_docs_folder');
+        const data = await res.json();
+        if (data.success) {
+          showToast('📂 Папка с памятками <b>docs</b> открыта в Finder!');
+        } else {
+          alert('Ошибка открытия папки docs: ' + (data.error || ''));
+        }
+      } catch (e) {
+        alert('Ошибка: ' + e.message);
+      }
+    }
+
+    async function openMemosModal() {
+      const modal = document.getElementById('memosModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      loadMemosList();
+    }
+
+    function closeMemosModal() {
+      const modal = document.getElementById('memosModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function loadMemosList() {
+      const container = document.getElementById('memosListContainer');
+      if (!container) return;
+      try {
+        const res = await fetch('/api/get_memos');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.memos)) {
+          container.innerHTML = data.memos.map(m => `
+            <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition">
+              <div class="flex items-start gap-3 min-w-0 pr-3">
+                <span class="text-2xl shrink-0 mt-0.5">${m.icon || '📄'}</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-xs font-bold text-white">${m.title}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-mono border ${m.badge_color || 'bg-slate-800 text-slate-300 border-slate-700'}">${m.badge || m.category}</span>
+                    <span class="text-[10px] text-slate-500 font-mono">${m.id} (${m.size_kb} KB)</span>
+                  </div>
+                  <p class="text-[11px] text-slate-400 mt-1 leading-snug">${m.desc}</p>
+                </div>
+              </div>
+              <button type="button" onclick="openFieldsGuide('${m.id}')" class="shrink-0 px-3 py-1.5 rounded-xl bg-purple-900/60 hover:bg-purple-800/80 text-purple-200 text-xs font-semibold border border-purple-700/60 shadow-sm transition flex items-center gap-1.5">
+                <span>📖</span>
+                <span>Открыть на Mac</span>
+              </button>
+            </div>
+          `).join('');
+        }
+      } catch (e) {
+        console.warn('Ошибка загрузки памяток:', e);
       }
     }
 
