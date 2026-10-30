@@ -353,16 +353,20 @@ def import_all_ozon_cards_to_db(on_progress: Optional[Callable[[int, int], None]
                 for k, v in book.items():
                     if v and (not existing.get(k) or k in ("ozon_product_id", "status", "price", "images")):
                         existing[k] = v
-                save_book_to_db(existing)
+                save_book_to_db(existing, sync_s3=False)
                 skipped += 1
             else:
-                save_book_to_db(book)
+                save_book_to_db(book, sync_s3=False)
                 imported += 1
 
         if on_progress:
             on_progress(min(i + batch_size, total_count), total_count, imported, skipped)
 
-        time.sleep(0.15)  # вежливая пауза
+        time.sleep(0.1)  # вежливая пауза
+
+    # Финальная синхронизация базы в S3 после завершения всех пачек
+    from services.db_service import backup_db_to_s3_async
+    backup_db_to_s3_async()
 
     print(f"✅ [Ozon Import] Завершено! Импортировано новых: {imported}, обновлено существующих: {skipped} из {total_count}.")
     return {

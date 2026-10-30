@@ -85,7 +85,7 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     return clean
 
 
-def save_book_to_db(book: Dict[str, Any]) -> Dict[str, Any]:
+def save_book_to_db(book: Dict[str, Any], sync_s3: bool = True) -> Dict[str, Any]:
     """
     Сохраняет или обновляет книгу в базе данных SQLite (UPSERT).
     """
@@ -142,7 +142,8 @@ def save_book_to_db(book: Dict[str, Any]) -> Dict[str, Any]:
         conn.commit()
 
     # Асинхронная синхронизация базы в Yandex S3 (в фоне, не тормозит ответ)
-    backup_db_to_s3_async()
+    if sync_s3:
+        backup_db_to_s3_async()
 
     return book
 
@@ -248,6 +249,9 @@ def get_next_article_number() -> str:
                 digits = re.findall(r"\d+", art)
                 if digits:
                     val = int(digits[-1])
+                    # Защита от опечаток с лишними нулями в Ozon вроде DP-B-025013 вместо 02513
+                    if val > 10000:
+                        continue
                     if val > max_num:
                         max_num = val
     except Exception:
@@ -262,6 +266,8 @@ def get_next_article_number() -> str:
                 if digits:
                     try:
                         val = int(digits[0])
+                        if val > 10000:
+                            continue
                         if val > max_num:
                             max_num = val
                     except Exception:

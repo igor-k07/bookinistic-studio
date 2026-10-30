@@ -32,40 +32,22 @@ os.makedirs(VAULT_DIR, exist_ok=True)
 def get_target_excel_file(mode: str) -> str:
     """
     Возвращает актуальный путь к готовой таблице за сегодняшнюю дату в папке ready_tables.
-    Если файла за сегодня ещё нет, инициализирует его из шаблона или существующей рабочей таблицы.
+    Если файла за сегодня ещё нет, инициализирует его из чистого шаблона Ozon.
     """
     today_str = datetime.now().strftime("%d.%m.%Y")
     if mode == "pre2011":
         filename = f"{today_str}_Печатная книга_до_2011.xlsx"
         target_path = os.path.join(READY_TABLES_DIR, filename)
         if not os.path.exists(target_path):
-            candidates = [
-                os.path.join(READY_TABLES_DIR, f"Печатная книга_до_2011_{today_str}.xlsx"),
-                os.path.join(READY_TABLES_DIR, "27.10.2026_Печатная книга_до_2011.xlsx"),
-                os.path.join(READY_TABLES_DIR, "Печатная книга_до_2011_27.10.2026.xlsx"),
-                os.path.join(BASE_DIR, "Печатная книга_26.10.2026.xlsx"),
-                BACKUP_FILE_PRE2011,
-            ]
-            for c in candidates:
-                if os.path.exists(c) and os.path.getsize(c) > 0:
-                    shutil.copyfile(c, target_path)
-                    break
+            if os.path.exists(BACKUP_FILE_PRE2011) and os.path.getsize(BACKUP_FILE_PRE2011) > 0:
+                shutil.copyfile(BACKUP_FILE_PRE2011, target_path)
         return target_path
     else:
         filename = f"{today_str}_Печатная книга_после_2011.xlsx"
         target_path = os.path.join(READY_TABLES_DIR, filename)
         if not os.path.exists(target_path):
-            candidates = [
-                os.path.join(READY_TABLES_DIR, f"Печатная книга_после_2011_{today_str}.xlsx"),
-                os.path.join(READY_TABLES_DIR, "27.10.2026_Печатная книга_после_2011.xlsx"),
-                os.path.join(READY_TABLES_DIR, "Печатная книга_после_2011_27.10.2026.xlsx"),
-                os.path.join(BASE_DIR, "Печатная книга_ozon.xlsx"),
-                BACKUP_FILE_POST2011,
-            ]
-            for c in candidates:
-                if os.path.exists(c) and os.path.getsize(c) > 0:
-                    shutil.copyfile(c, target_path)
-                    break
+            if os.path.exists(BACKUP_FILE_POST2011) and os.path.getsize(BACKUP_FILE_POST2011) > 0:
+                shutil.copyfile(BACKUP_FILE_POST2011, target_path)
         return target_path
 
 
