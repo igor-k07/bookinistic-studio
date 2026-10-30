@@ -1834,9 +1834,9 @@
           });
           relinkSessionPhotos();
           renderBooksTabs();
+          restoreFormFromActiveBook();
           renderActiveBookSlots();
           renderPool();
-          restoreFormFromActiveBook();
           autoCalcDimensions();
           autoDetectCountry();
           updateAutoSaveStatus('restored');
@@ -2646,8 +2646,8 @@
       }
       renderPool();
       renderBooksTabs();
-      renderActiveBookSlots();
       restoreFormFromActiveBook();
+      renderActiveBookSlots();
       scheduleAutoSave();
     }
 
@@ -2782,45 +2782,51 @@
     function restoreFormFromActiveBook() {
       const book = getActiveBook();
       if (!book) return;
-      if (book.formData && Object.keys(book.formData).length > 0) {
-        FORM_FIELD_IDS.forEach(id => {
-          const el = document.getElementById(id);
-          if (el && book.formData[id] !== undefined) el.value = book.formData[id];
-        });
-        if (document.getElementById('autoPackageAdder')) {
-          document.getElementById('autoPackageAdder').checked = (book.formData.auto_package_adder !== false);
+      if (!book.formData) book.formData = {};
+
+      // Гарантированно очищаем или заполняем каждое поле формы из book.formData текущей книги
+      FORM_FIELD_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.value = (book.formData[id] !== undefined && book.formData[id] !== null) ? String(book.formData[id]) : '';
         }
-        // Распаковка габаритов для старых черновиков если width/length отсутствуют
-        const wEl = document.getElementById('width');
-        const lEl = document.getElementById('length');
-        const hEl = document.getElementById('height');
-        if ((!wEl?.value || !lEl?.value) && book.formData.dimensions) {
-          const parts = String(book.formData.dimensions).split(/[хxXХ*×/]/).map(p => parseInt(p.trim())).filter(n => !isNaN(n));
-          if (parts.length >= 3) {
-            if (wEl && !wEl.value) wEl.value = parts[0];
-            if (lEl && !lEl.value) lEl.value = parts[1];
-            if (hEl && !hEl.value) hEl.value = parts[2];
-          }
-        }
-        const art = (book.formData && book.formData.article) || book.article || 'DP-B-00001';
-        syncArticleInputs(art);
-        if (book.formData.condition) setCondition(book.formData.condition);
-        const mode = book.formData.template_mode || (parseInt(book.formData.year) > 2011 ? 'post2011' : 'pre2011');
-        setTemplateMode(mode, false);
-        updateDimensionsPreviewBadge();
-        // Синхронизируем предупреждение строго после восстановления полей формы
-        syncAnnotationWarningWithDefectsSlot();
-      } else {
-        clearForm(book.article || null);
+      });
+      if (document.getElementById('autoPackageAdder')) {
+        document.getElementById('autoPackageAdder').checked = (book.formData.auto_package_adder !== false);
       }
+      // Распаковка габаритов для старых черновиков если width/length отсутствуют
+      const wEl = document.getElementById('width');
+      const lEl = document.getElementById('length');
+      const hEl = document.getElementById('height');
+      if ((!wEl?.value || !lEl?.value) && book.formData.dimensions) {
+        const parts = String(book.formData.dimensions).split(/[хxXХ*×/]/).map(p => parseInt(p.trim())).filter(n => !isNaN(n));
+        if (parts.length >= 3) {
+          if (wEl && !wEl.value) wEl.value = parts[0];
+          if (lEl && !lEl.value) lEl.value = parts[1];
+          if (hEl && !hEl.value) hEl.value = parts[2];
+        }
+      }
+      const art = (book.formData && book.formData.article) || book.article || 'DP-B-00001';
+      syncArticleInputs(art);
+      if (book.formData.condition) {
+        setCondition(book.formData.condition);
+      } else {
+        setCondition('Очень хорошая');
+      }
+      const mode = book.formData.template_mode || (parseInt(book.formData.year) > 2011 ? 'post2011' : 'pre2011');
+      setTemplateMode(mode, false);
+      updateDimensionsPreviewBadge();
+      // Синхронизируем предупреждение строго после восстановления полей формы
+      syncAnnotationWarningWithDefectsSlot();
     }
 
     function switchBook(id) {
+      if (activeBookId === id) return;
       saveCurrentFormToActiveBook();
       activeBookId = id;
       renderBooksTabs();
-      renderActiveBookSlots();
       restoreFormFromActiveBook();
+      renderActiveBookSlots();
       scheduleAutoSave();
     }
 
@@ -5193,31 +5199,29 @@
       const antEl = document.getElementById('annotation');
       const hintEl = document.getElementById('annotationNoticeHint');
       if (!antEl || !book) return;
+      if (!book.formData) book.formData = {};
+
       const defectCount = (book.slots && book.slots.mantra_defects) ? book.slots.mantra_defects.length : 0;
       const hasMantraDefects = defectCount > 0;
 
-      let cleanText = cleanAnnotationText(antEl.value);
+      // Источник аннотации: берем строго из book.formData.annotation текущей книги, если сохранено
+      const baseText = (book.formData.annotation !== undefined && book.formData.annotation !== null)
+        ? String(book.formData.annotation)
+        : antEl.value;
 
-      if (hasMantraDefects) {
-        if (cleanText) {
-          const expected = ANNOTATION_WARNING + '\n\n' + cleanText;
-          if (antEl.value !== expected) {
-            antEl.value = expected;
-            antEl.classList.add('field-updated');
-            setTimeout(() => antEl.classList.remove('field-updated'), 600);
-          }
-        }
-      } else {
-        if (antEl.value !== cleanText || antEl.value.includes(ANNOTATION_WARNING)) {
-          antEl.value = cleanText;
-          antEl.classList.add('field-updated');
-          setTimeout(() => antEl.classList.remove('field-updated'), 600);
-        }
+      let cleanText = cleanAnnotationText(baseText);
+
+      let finalValue = cleanText;
+      if (hasMantraDefects && cleanText) {
+        finalValue = ANNOTATION_WARNING + '\n\n' + cleanText;
       }
 
-      if (book.formData) {
-        book.formData.annotation = antEl.value;
+      if (antEl.value !== finalValue) {
+        antEl.value = finalValue;
+        antEl.classList.add('field-updated');
+        setTimeout(() => antEl.classList.remove('field-updated'), 600);
       }
+      book.formData.annotation = finalValue;
 
       if (hintEl) {
         if (hasMantraDefects) {
@@ -5331,6 +5335,7 @@
       }
 
       const book = getActiveBook();
+      const targetBookId = book ? book.id : null;
       const sendImages = [];
 
       const addCleanImg = (role, photo) => {
@@ -5396,7 +5401,8 @@
         const result = await res.json();
         if (!result.success) throw new Error(result.error || 'Ошибка распознавания');
 
-        populateFields(result.data);
+        const bookToPopulate = (targetBookId ? booksSession.find(b => b.id === targetBookId) : null) || getActiveBook();
+        populateFields(result.data, bookToPopulate);
 
         // Визуальное подтверждение успешного распознавания
         if (btnText) btnText.textContent = '✓ Успешно распознано!';
@@ -5466,7 +5472,7 @@
         });
         const json = await res.json();
         if (json.success && json.data) {
-          populateFields(json.data);
+          populateFields(json.data, curBook);
           if (fs) {
             const vSource = json.data.verified_by || 'База проверена';
             fs.textContent = `✓ Данные успешно синхронизированы с базой: ${vSource}!`;
@@ -5487,15 +5493,25 @@
       }
     }
 
-    function populateFields(data) {
+    function populateFields(data, targetBook = null) {
       if (!data) return;
+      const curBookObj = targetBook || getActiveBook();
+      if (!curBookObj) return;
+      if (!curBookObj.formData) curBookObj.formData = {};
+
+      const isCurrentActive = (curBookObj.id === activeBookId);
+
       try {
         const fill = (id, val) => {
-          const el = document.getElementById(id);
-          if (el && val !== undefined && val !== null && String(val).trim() !== '') {
-            el.value = val;
-            el.classList.add('field-updated');
-            setTimeout(() => el.classList.remove('field-updated'), 1200);
+          const sVal = (val !== undefined && val !== null) ? String(val) : '';
+          curBookObj.formData[id] = sVal;
+          if (isCurrentActive) {
+            const el = document.getElementById(id);
+            if (el && sVal.trim() !== '') {
+              el.value = sVal;
+              el.classList.add('field-updated');
+              setTimeout(() => el.classList.remove('field-updated'), 1200);
+            }
           }
         };
 
@@ -5508,7 +5524,9 @@
         const recognizedYear = data.year ? parseInt(data.year, 10) : 0;
         if (data.year) {
           fill('year', data.year);
-          try { onYearInput(data.year); } catch (e) { console.warn('onYearInput error', e); }
+          if (isCurrentActive) {
+            try { onYearInput(data.year); } catch (e) { console.warn('onYearInput error', e); }
+          }
         }
 
         // Правило: если книга до 2011 года и ISBN не был распознан на 100% прямо с фото — строго не указывать
@@ -5529,12 +5547,14 @@
           fill('isbn', '978-5-0000-0000-0');
         } else {
           fill('isbn', '');
-          const isbnEl = document.getElementById('isbn');
-          if (isbnEl) isbnEl.value = '';
+          if (isCurrentActive) {
+            const isbnEl = document.getElementById('isbn');
+            if (isbnEl) isbnEl.value = '';
+          }
         }
         let bcVal = data.barcode ? String(data.barcode).trim() : '';
         if (!bcVal || bcVal === 'генерирует озон' || !/^\d{12,13}$/.test(bcVal)) {
-          const curArt = document.getElementById('article')?.value.trim() || 'DP-B-00001';
+          const curArt = curBookObj.formData.article || curBookObj.article || 'DP-B-00001';
           bcVal = generateEan13FromArticle(curArt);
         }
         fill('barcode', bcVal);
@@ -5543,95 +5563,127 @@
 
         // Аннотация:
         // Если новая аннотация передана (от Gemini) — используем её.
-        // Если в data аннотации нет (при сверке с FantLab) — сохраняем ТЕКУЩИЙ текст из поля, чтобы он не слетал!
-        const existingAnt = (document.getElementById('annotation')?.value || '').trim();
+        // Если в data аннотации нет (при сверке с FantLab) — сохраняем ТЕКУЩИЙ текст именно этой книги!
+        const existingAnt = (curBookObj.formData.annotation || (isCurrentActive ? document.getElementById('annotation')?.value : '') || '').trim();
         const incomingAnt = (data && data.annotation !== undefined && data.annotation !== null) ? String(data.annotation).trim() : '';
         const rawAnt = incomingAnt || existingAnt;
 
         let cleanAnt = cleanAnnotationText(rawAnt);
-
-        // Правило: плашка добавляется ТОЛЬКО если есть фото дефектов (слот 5) И есть содержательный текст
-        const curBookObj = getActiveBook();
-        const hasMantraDefects = Boolean(curBookObj && curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
+        const hasMantraDefects = Boolean(curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
 
         let fullAnt = cleanAnt;
         if (hasMantraDefects && cleanAnt) {
           fullAnt = ANNOTATION_WARNING + '\n\n' + cleanAnt;
         }
 
-        const antEl = document.getElementById('annotation');
-        if (antEl) {
-          antEl.value = fullAnt;
-          antEl.classList.add('field-updated');
-          setTimeout(() => antEl.classList.remove('field-updated'), 1200);
+        curBookObj.formData.annotation = fullAnt;
+
+        if (isCurrentActive) {
+          const antEl = document.getElementById('annotation');
+          if (antEl) {
+            antEl.value = fullAnt;
+            antEl.classList.add('field-updated');
+            setTimeout(() => antEl.classList.remove('field-updated'), 1200);
+          }
+          syncAnnotationWarningWithDefectsSlot();
         }
-        if (curBookObj && curBookObj.formData) {
-          curBookObj.formData.annotation = fullAnt;
-        }
-        syncAnnotationWarningWithDefectsSlot();
 
         fill('translator', data.translator || '');
 
         // Правило: иллюстратора указываем ТОЛЬКО если в слоте иллюстраций есть реальные фото
-        const hasIllustrationsPhotos = curBookObj && curBookObj.slots && curBookObj.slots.illustrations && curBookObj.slots.illustrations.length > 0;
+        const hasIllustrationsPhotos = curBookObj.slots && curBookObj.slots.illustrations && curBookObj.slots.illustrations.length > 0;
         if (!hasIllustrationsPhotos) {
           fill('illustrator', '');
-          const illEl = document.getElementById('illustrator');
-          if (illEl) illEl.value = '';
+          if (isCurrentActive) {
+            const illEl = document.getElementById('illustrator');
+            if (illEl) illEl.value = '';
+          }
         } else {
           fill('illustrator', data.illustrator || '');
         }
 
         fill('hashtags', '');
-        const ageEl = document.getElementById('age_limit');
-        if (ageEl) {
-          const ageVal = (data.age_limit || '').trim();
-          ageEl.value = ageVal;
-          if (ageVal) {
-            ageEl.classList.add('field-updated');
-            setTimeout(() => ageEl.classList.remove('field-updated'), 1200);
+        const ageVal = (data.age_limit || '').trim();
+        fill('age_limit', ageVal);
+        if (isCurrentActive) {
+          const ageEl = document.getElementById('age_limit');
+          if (ageEl) {
+            ageEl.value = ageVal;
+            if (ageVal) {
+              ageEl.classList.add('field-updated');
+              setTimeout(() => ageEl.classList.remove('field-updated'), 1200);
+            }
           }
         }
+
         if (data.cover_type) fill('cover_type', data.cover_type);
 
         if (data.genre) {
-          const genreEl = document.getElementById('genre');
-          if (genreEl) {
-            let matched = false;
-            for (let opt of genreEl.options) {
-              if (opt.value === data.genre || opt.text === data.genre) {
-                genreEl.value = opt.value;
-                matched = true;
-                break;
+          fill('genre', data.genre);
+          if (isCurrentActive) {
+            const genreEl = document.getElementById('genre');
+            if (genreEl) {
+              let matched = false;
+              for (let opt of genreEl.options) {
+                if (opt.value === data.genre || opt.text === data.genre) {
+                  genreEl.value = opt.value;
+                  matched = true;
+                  break;
+                }
               }
+              if (!matched && typeof data.genre === 'string' && data.genre.trim()) {
+                const opt = document.createElement('option');
+                opt.value = data.genre;
+                opt.textContent = data.genre;
+                genreEl.appendChild(opt);
+                genreEl.value = data.genre;
+              }
+              try { handleGenreChange(); } catch (e) { console.warn('handleGenreChange error', e); }
             }
-            if (!matched && typeof data.genre === 'string' && data.genre.trim()) {
-              const opt = document.createElement('option');
-              opt.value = data.genre;
-              opt.textContent = data.genre;
-              genreEl.appendChild(opt);
-              genreEl.value = data.genre;
-            }
-            try { handleGenreChange(); } catch (e) { console.warn('handleGenreChange error', e); }
           }
         }
 
         if (data.paper_type) fill('paper_type', data.paper_type);
         if (data.condition) {
-          try { setCondition(data.condition); } catch (e) { console.warn('setCondition error', e); }
+          curBookObj.formData.condition = data.condition;
+          if (isCurrentActive) {
+            try { setCondition(data.condition); } catch (e) { console.warn('setCondition error', e); }
+          }
         }
         if (data.suggested_price) {
-          try { setPrice(data.suggested_price); } catch (e) { console.warn('setPrice error', e); }
+          const p = parseInt(data.suggested_price);
+          if (!isNaN(p) && p > 0) {
+            curBookObj.formData.price = String(p);
+            curBookObj.formData.old_price = String(Math.round(p * 1.4));
+            if (isCurrentActive) {
+              try { setPrice(p); } catch (e) { console.warn('setPrice error', e); }
+            }
+          }
         }
 
-        if (data.width_mm && document.getElementById('width')) document.getElementById('width').value = data.width_mm;
-        if (data.length_mm && document.getElementById('length')) document.getElementById('length').value = data.length_mm;
-        if (data.height_mm && document.getElementById('height')) document.getElementById('height').value = data.height_mm;
-        if (data.weight_g && document.getElementById('weight')) document.getElementById('weight').value = data.weight_g;
+        if (data.width_mm && data.length_mm && data.height_mm) {
+          curBookObj.formData.width = String(data.width_mm);
+          curBookObj.formData.length = String(data.length_mm);
+          curBookObj.formData.height = String(data.height_mm);
+          curBookObj.formData.dimensions = `${data.width_mm}x${data.length_mm}x${data.height_mm}`;
+          if (isCurrentActive) {
+            if (document.getElementById('width')) document.getElementById('width').value = data.width_mm;
+            if (document.getElementById('length')) document.getElementById('length').value = data.length_mm;
+            if (document.getElementById('height')) document.getElementById('height').value = data.height_mm;
+            try { onDimensionChange(); } catch (e) { console.warn('onDimensionChange error', e); }
+          }
+        }
+        if (data.weight_g) {
+          curBookObj.formData.weight = String(data.weight_g);
+          if (isCurrentActive && document.getElementById('weight')) {
+            document.getElementById('weight').value = data.weight_g;
+          }
+        }
 
-        try { onDimensionChange(); } catch (e) { console.warn('onDimensionChange error', e); }
-        try { autoDetectCountry(); } catch (e) { console.warn('autoDetectCountry error', e); }
-        try { saveCurrentFormToActiveBook(); } catch (e) { console.warn('saveCurrentFormToActiveBook error', e); }
+        if (isCurrentActive) {
+          try { autoDetectCountry(); } catch (e) { console.warn('autoDetectCountry error', e); }
+          try { saveCurrentFormToActiveBook(); } catch (e) { console.warn('saveCurrentFormToActiveBook error', e); }
+        }
         try { renderBooksTabs(); } catch (e) { console.warn('renderBooksTabs error', e); }
         try { scheduleAutoSave(); } catch (e) { console.warn('scheduleAutoSave error', e); }
       } catch (err) {
