@@ -785,10 +785,11 @@
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Возраст Ozon:</label>
                 <select id="age_limit" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
-                  <option value="16+">16+</option>
-                  <option value="12+">12+</option>
-                  <option value="6+">6+</option>
+                  <option value="">— Не указан —</option>
                   <option value="0+">0+</option>
+                  <option value="6+">6+</option>
+                  <option value="12+">12+</option>
+                  <option value="16+">16+</option>
                   <option value="18+">18+</option>
                 </select>
               </div>
@@ -5527,7 +5528,15 @@
         }
 
         fill('hashtags', '');
-        if (data.age_limit) fill('age_limit', data.age_limit);
+        const ageEl = document.getElementById('age_limit');
+        if (ageEl) {
+          const ageVal = (data.age_limit || '').trim();
+          ageEl.value = ageVal;
+          if (ageVal) {
+            ageEl.classList.add('field-updated');
+            setTimeout(() => ageEl.classList.remove('field-updated'), 1200);
+          }
+        }
         if (data.cover_type) fill('cover_type', data.cover_type);
 
         if (data.genre) {
@@ -5722,7 +5731,6 @@
       const g = document.getElementById('genre').value;
       if (g === 'Детская литература') {
         document.getElementById('target_audience').value = 'Для детей';
-        document.getElementById('age_limit').value = '6+';
       } else {
         document.getElementById('target_audience').value = 'Для взрослых';
       }
@@ -5802,7 +5810,7 @@
       document.getElementById('cover_type').value = 'Твердый переплет';
       document.getElementById('paper_type').value = 'Офсетная';
       document.getElementById('genre').value = 'Проза';
-      document.getElementById('age_limit').value = '16+';
+      document.getElementById('age_limit').value = '';
       document.getElementById('target_audience').value = 'Для взрослых';
       if (document.getElementById('hashtags')) document.getElementById('hashtags').value = '';
 

@@ -277,7 +277,10 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
         default_country = "Россия"
     country = b.get("country") or default_country
 
-    age_lim = b.get("age_limit", "16+")
+    raw_age = b.get("age_limit")
+    age_lim = str(raw_age).strip() if raw_age is not None else ""
+    if age_lim not in ("0+", "6+", "12+", "16+", "18+"):
+        age_lim = ""
     is_18_plus = "Да" if age_lim == "18+" else ""
     genre = b.get("genre", "Проза")
     brand = b.get("brand") or "Нет бренда"

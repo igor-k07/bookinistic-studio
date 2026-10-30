@@ -78,6 +78,18 @@ def sanitize_ai_book_data(parsed: Dict[str, Any]) -> Dict[str, Any]:
         elif isbn_raw in ["978-5-0000-0000-0", "000-0-0000-0000-0", "—", "-"]:
             parsed["isbn"] = ""
 
+    # Санитизация возрастного ограничения (age_limit):
+    # Указывается строго при 100% подтверждении на фото (без догадок и значений по умолчанию)
+    age_raw = str(parsed.get("age_limit") or "").strip()
+    if age_raw:
+        if age_raw not in ["0+", "6+", "12+", "16+", "18+"]:
+            m_age = re.search(r"\b(0|6|12|16|18)\s*\+", age_raw)
+            age_raw = f"{m_age.group(1)}+" if m_age else ""
+        # Для советских и букинистических книг до 2012 года маркировка 436-ФЗ (16+/18+) не существовала
+        if year_val and year_val < 2012 and age_raw in ["16+", "18+"]:
+            age_raw = ""
+    parsed["age_limit"] = age_raw
+
     # Санитизация габаритов и массы книги
     try:
         pages_val = int(parsed.get("pages") or 200)

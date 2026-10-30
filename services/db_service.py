@@ -66,6 +66,11 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
         ant = (warning_prefix + "\n\n" + ant).strip() if ant else warning_prefix
     clean["annotation"] = ant
 
+    # Санитизация возрастного ценза: только строго допустимые значения, иначе пустая строка
+    raw_age = str(clean.get("age_limit") or "").strip()
+    if raw_age not in ("0+", "6+", "12+", "16+", "18+"):
+        clean["age_limit"] = ""
+
     # Если в slots_photos были base64-данные, сохраняем только имена файлов
     if "slots_photos" in clean and isinstance(clean["slots_photos"], dict):
         compact_slots = {}
