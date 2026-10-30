@@ -19,7 +19,6 @@ from config import (
     DRAFT_FILE,
     INBOX_DIR,
     PORT,
-    RAW_TEST_DIR,
     READY_TABLES_DIR,
     READY_TABLES_PRE2011_DIR,
     READY_TABLES_POST2011_DIR,
@@ -177,19 +176,7 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error_json(e)
 
         elif parsed.path == "/api/load_test_batch":
-            try:
-                photos = []
-                if os.path.exists(RAW_TEST_DIR):
-                    for fname in sorted(os.listdir(RAW_TEST_DIR)):
-                        if fname.lower().endswith((".jpg", ".jpeg", ".webp", ".png")):
-                            p = os.path.join(RAW_TEST_DIR, fname)
-                            mime = "image/webp" if fname.endswith(".webp") else "image/jpeg"
-                            with open(p, "rb") as f:
-                                b64 = base64.b64encode(f.read()).decode("utf-8")
-                            photos.append({"name": fname, "mime": mime, "data": b64})
-                self.send_json({"success": True, "photos": photos})
-            except Exception as e:
-                self.send_error_json(e)
+            self.send_json({"success": True, "photos": []})
 
         elif parsed.path == "/api/get_books":
             qs = urllib.parse.parse_qs(parsed.query)

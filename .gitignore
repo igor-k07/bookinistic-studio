@@ -12,6 +12,8 @@
 *.key
 credentials/*
 !credentials/.gitkeep
+!credentials/*.example
+!credentials/.*.example
 
 # ==========================================
 # 2. Исполняемые бинарные файлы
@@ -46,9 +48,6 @@ storage/inbox/*
 
 storage/books_vault/*
 !storage/books_vault/.gitkeep
-
-books/test_raw/*
-!books/test_raw/.gitkeep
 
 scratch/*
 !scratch/.gitkeep
