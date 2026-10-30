@@ -8,7 +8,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List
 
-from core.constants import SYSTEM_PROMPT
+from core.constants import OZON_PAPERS, SYSTEM_PROMPT
+from services.db_service import reconcile_with_references
 from services.enrichment_service import calculate_dimensions_and_weight, parse_book_format_code
 
 
@@ -90,6 +91,28 @@ def sanitize_ai_book_data(parsed: Dict[str, Any]) -> Dict[str, Any]:
             age_raw = ""
     parsed["age_limit"] = age_raw
 
+    # По правилу пользователя: целевая аудитория исключена (строго пустая строка)
+    parsed["target_audience"] = ""
+
+    # По правилу пользователя: цена никогда не генерируется ИИ (строго пустая строка под ручной ввод)
+    parsed["price"] = ""
+    parsed["suggested_price"] = ""
+
+    # Санитизация автора: если ИИ не уверен на 100% или автор отсутствует — строго пустая строка
+    for a_field in ("author", "author_cover"):
+        a_val = str(parsed.get(a_field) or "").strip()
+        if a_val.lower() in ("не указан", "нет автора", "none", "null", "—", "-"):
+            parsed[a_field] = ""
+        else:
+            parsed[a_field] = a_val
+
+    # Санитизация типа бумаги: строго одно из 12 значений Ozon, иначе пустая строка под ручной выбор
+    paper_raw = str(parsed.get("paper_type") or "").strip()
+    if paper_raw not in OZON_PAPERS:
+        parsed["paper_type"] = ""
+    else:
+        parsed["paper_type"] = paper_raw
+
     # Санитизация аннотации: убираем любые случайные предупреждения или дисклеймеры от ИИ
     if parsed.get("annotation"):
         ant = str(parsed["annotation"]).strip()
@@ -131,6 +154,12 @@ def sanitize_ai_book_data(parsed: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[Sanitize] Габариты и масса рассчитаны физически: {cw}×{cl}×{ch} мм, {cwt} г ({fmt_val}, {pages_val} стр.)", flush=True)
     except Exception as e:
         print(f"[Sanitize] Ошибка санитизации габаритов: {e}", flush=True)
+
+    # Интеллектуальная сверка и канонизация по накопленной базе магазина catalog.db
+    try:
+        parsed = reconcile_with_references(parsed)
+    except Exception as e:
+        print(f"[Sanitize] Ошибка сверки с базой catalog.db: {e}", flush=True)
 
     return parsed
 

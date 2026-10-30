@@ -47,6 +47,7 @@ from services.db_service import (
     backup_db_to_s3,
     restore_db_from_s3,
     get_db_sync_status,
+    get_catalog_references,
 )
 import services.ozon_service as ozon_service
 import services.tunnel_service as tunnel_service
@@ -163,6 +164,13 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             query = urllib.parse.parse_qs(parsed.query)
             last_client_id = int(query.get("last_id", ["0"])[0])
             self.send_json(check_mobile_events(last_client_id))
+
+        elif parsed.path == "/api/references":
+            try:
+                refs = get_catalog_references()
+                self.send_json({"success": True, "references": refs})
+            except Exception as e:
+                self.send_error_json(e)
 
         elif parsed.path == "/api/load_test_batch":
             try:

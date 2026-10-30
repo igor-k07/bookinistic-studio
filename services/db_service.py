@@ -141,6 +141,8 @@ def save_book_to_db(book: Dict[str, Any], sync_s3: bool = True) -> Dict[str, Any
         """, (article, title, author, year_val, price_val, mode, status, data_json))
         conn.commit()
 
+    invalidate_references_cache()
+
     # Асинхронная синхронизация базы в Yandex S3 (в фоне, не тормозит ответ)
     if sync_s3:
         backup_db_to_s3_async()
@@ -448,5 +450,224 @@ def restore_db_from_s3() -> Dict[str, Any]:
         err_msg = str(e)
         print(f"⚠️ [DB:S3] Ошибка восстановления базы из S3: {err_msg}")
         return {"ok": False, "error": err_msg}
+
+
+# -------------------------------------------------------------
+# КАТАЛОГ ЭТАЛОННЫХ ЗНАЧЕНИЙ И СВЕРКА (КАНАНИЗАЦИЯ)
+# -------------------------------------------------------------
+
+_REF_CACHE = None
+_REF_CACHE_TIME = 0.0
+
+
+def invalidate_references_cache():
+    """Сбрасывает кэш эталонных справочников при добавлении новой книги."""
+    global _REF_CACHE
+    _REF_CACHE = None
+
+
+def get_catalog_references(force_reload: bool = False) -> Dict[str, List[str]]:
+    """
+    Возвращает уникальные эталонные списки значений из базы данных catalog.db:
+    авторы, переводчики, иллюстраторы, издательства, серии, бренды.
+    """
+    global _REF_CACHE, _REF_CACHE_TIME
+    import time
+    now = time.time()
+    if not force_reload and _REF_CACHE is not None and (now - _REF_CACHE_TIME < 300):
+        return _REF_CACHE
+
+    init_db()
+    with get_db_connection() as conn:
+        rows = conn.execute("SELECT data FROM books").fetchall()
+
+    authors_set = set()
+    translators_set = set()
+    illustrators_set = set()
+    publishers_set = set()
+    series_set = set()
+    brands_set = set()
+
+    for r in rows:
+        try:
+            d = json.loads(r["data"])
+        except Exception:
+            continue
+
+        raw_author = str(d.get("author") or "").strip()
+        for a in raw_author.split(";"):
+            a = a.strip()
+            if a and a.lower() not in ("не указан", "нет автора", "none", "null"):
+                authors_set.add(a)
+
+        raw_trans = str(d.get("translator") or "").strip()
+        for t in raw_trans.split(";"):
+            t = t.strip()
+            if t and t.lower() not in ("не указан", "нет", "none"):
+                translators_set.add(t)
+
+        raw_ill = str(d.get("illustrator") or "").strip()
+        for ill in raw_ill.split(";"):
+            ill = ill.strip()
+            if ill and ill.lower() not in ("не указан", "нет", "none"):
+                illustrators_set.add(ill)
+
+        pub = str(d.get("publisher") or "").strip()
+        if pub and pub.lower() not in ("none", "null"):
+            publishers_set.add(pub)
+
+        ser = str(d.get("series") or "").strip()
+        if ser and ser.lower() not in ("none", "null"):
+            series_set.add(ser)
+
+        br = str(d.get("brand") or "").strip()
+        if br and br.lower() not in ("none", "null"):
+            brands_set.add(br)
+
+    brands_set.add("Нет бренда")
+
+    # Сортировка: бренды с "Нет бренда" на первом месте
+    sorted_brands = sorted(list(brands_set), key=lambda x: (x != "Нет бренда", x.lower()))
+
+    _REF_CACHE = {
+        "authors": sorted(list(authors_set), key=lambda x: x.lower()),
+        "translators": sorted(list(translators_set), key=lambda x: x.lower()),
+        "illustrators": sorted(list(illustrators_set), key=lambda x: x.lower()),
+        "publishers": sorted(list(publishers_set), key=lambda x: x.lower()),
+        "series": sorted(list(series_set), key=lambda x: x.lower()),
+        "brands": sorted_brands,
+    }
+    _REF_CACHE_TIME = now
+    return _REF_CACHE
+
+
+def _match_person(name: str, known_list: List[str]) -> str:
+    """
+    Сверяет имя персоны (автор/переводчик/иллюстратор) со списком из базы.
+    Поддерживает: точное совпадение, нечувствительность к регистру,
+    сопоставление инициалов с полным ФИО (например, Толстой Л. Н. -> Толстой Лев Николаевич).
+    Если совпадение не найдено, возвращает исходное имя.
+    """
+    clean = name.strip()
+    if not clean or clean.lower() in ("не указан", "нет автора", "—", "-"):
+        return clean
+
+    lower_map = {p.lower(): p for p in known_list}
+    if clean.lower() in lower_map:
+        return lower_map[clean.lower()]
+
+    parts = clean.replace(".", ". ").split()
+    if not parts:
+        return clean
+    surname = parts[0].lower()
+
+    candidates = [p for p in known_list if p.lower().startswith(surname + " ")]
+    if len(candidates) == 1:
+        return candidates[0]
+    elif len(candidates) > 1 and len(parts) >= 2:
+        # Сверяем первую букву имени
+        first_init = parts[1][0].lower()
+        sub_cands = []
+        for c in candidates:
+            c_parts = c.split()
+            if len(c_parts) >= 2 and c_parts[1][0].lower() == first_init:
+                sub_cands.append(c)
+        if len(sub_cands) == 1:
+            return sub_cands[0]
+
+    return clean
+
+
+def _match_title_or_org(val: str, known_list: List[str]) -> str:
+    """
+    Сверяет название издательства или серии с базой (без учета регистра и внешних кавычек).
+    """
+    clean = val.strip().strip('"\'«»')
+    if not clean:
+        return val
+
+    lower_map = {p.strip().strip('"\'«»').lower(): p for p in known_list}
+    if clean.lower() in lower_map:
+        return lower_map[clean.lower()]
+
+    return val
+
+
+def reconcile_with_references(book_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Канонизирует распознанные ИИ поля на основе накопленной базы данных магазина (catalog.db):
+    автор официальный, переводчик, иллюстратор, издательство, серия, бренд.
+    Если значение новое (нет в базе) — сохраняет как есть по старым правилам.
+    """
+    if not isinstance(book_data, dict):
+        return book_data
+
+    refs = get_catalog_references()
+    authors_ref = refs.get("authors", [])
+    translators_ref = refs.get("translators", [])
+    illustrators_ref = refs.get("illustrators", [])
+    publishers_ref = refs.get("publishers", [])
+    series_ref = refs.get("series", [])
+    brands_ref = refs.get("brands", [])
+
+    # 1. Автор официальный (author)
+    raw_author = str(book_data.get("author") or "").strip()
+    if raw_author and raw_author.lower() not in ("не указан", "нет автора"):
+        matched_authors = []
+        for part in raw_author.split(";"):
+            m = _match_person(part, authors_ref)
+            matched_authors.append(m)
+        book_data["author"] = ";".join(matched_authors)
+
+    # 2. Переводчик (translator)
+    raw_trans = str(book_data.get("translator") or "").strip()
+    if raw_trans and raw_trans.lower() not in ("не указан", "нет"):
+        matched_trans = []
+        for part in raw_trans.split(";"):
+            m = _match_person(part, translators_ref)
+            matched_trans.append(m)
+        book_data["translator"] = ";".join(matched_trans)
+
+    # 3. Иллюстратор (illustrator)
+    raw_ill = str(book_data.get("illustrator") or "").strip()
+    if raw_ill and raw_ill.lower() not in ("не указан", "нет"):
+        matched_ills = []
+        for part in raw_ill.split(";"):
+            m = _match_person(part, illustrators_ref)
+            matched_ills.append(m)
+        book_data["illustrator"] = ";".join(matched_ills)
+
+    # 4. Издательство (publisher)
+    raw_pub = str(book_data.get("publisher") or "").strip()
+    if raw_pub:
+        book_data["publisher"] = _match_title_or_org(raw_pub, publishers_ref)
+
+    # 5. Серия (series)
+    raw_ser = str(book_data.get("series") or "").strip()
+    if raw_ser:
+        book_data["series"] = _match_title_or_org(raw_ser, series_ref)
+
+    # 6. Бренд (brand)
+    raw_brand = str(book_data.get("brand") or "").strip()
+    if raw_brand:
+        canon_brand = _match_title_or_org(raw_brand, brands_ref)
+        # Если бренд найден в Ozon-справочнике — ставим его
+        brands_lower = {b.lower(): b for b in brands_ref}
+        if canon_brand.lower() in brands_lower:
+            book_data["brand"] = brands_lower[canon_brand.lower()]
+        else:
+            # Если бренд не распознан среди официальных — ставим "Нет бренда"
+            book_data["brand"] = "Нет бренда"
+    else:
+        # Проверяем, может ли издательство книги быть брендом
+        pub_cand = str(book_data.get("publisher") or "").strip()
+        brands_lower = {b.lower(): b for b in brands_ref}
+        if pub_cand.lower() in brands_lower:
+            book_data["brand"] = brands_lower[pub_cand.lower()]
+        else:
+            book_data["brand"] = "Нет бренда"
+
+    return book_data
+
 
 

@@ -638,7 +638,8 @@
 
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Серия книги (если есть):</label>
-              <input type="text" id="series" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="например: Библиотека приключений, ЖЗЛ">
+              <input type="text" id="series" list="seriesList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="например: Библиотека приключений, ЖЗЛ">
+              <datalist id="seriesList"></datalist>
             </div>
           </div>
 
@@ -649,12 +650,14 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Автор на обложке: <span class="text-rose-400">*</span></label>
-                <input type="text" id="author_cover" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Майн Рид (как напечатано)">
+                <input type="text" id="author_cover" list="authorCoverList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Майн Рид (как напечатано)">
+                <datalist id="authorCoverList"></datalist>
                 <p class="text-[10px] text-slate-500 mt-0.5">Строго как на обложке (обычно Имя Фамилия)</p>
               </div>
               <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Автор по паспорту (ФИО):</label>
-                <input type="text" id="author" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Рид Томас Майн">
+                <label class="block text-xs font-medium text-slate-300 mb-1">Автор по паспорту (ФИО): <span class="text-rose-400">*</span></label>
+                <input type="text" id="author" list="authorList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Рид Томас Майн">
+                <datalist id="authorList"></datalist>
                 <p class="text-[10px] text-slate-500 mt-0.5">Строго Фамилия Имя Отчество</p>
               </div>
             </div>
@@ -662,11 +665,13 @@
             <div class="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <label class="block text-slate-400 mb-1">Иллюстратор:</label>
-                <input type="text" id="illustrator" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Художник">
+                <input type="text" id="illustrator" list="illustratorList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Художник">
+                <datalist id="illustratorList"></datalist>
               </div>
               <div>
                 <label class="block text-slate-400 mb-1">Переводчик:</label>
-                <input type="text" id="translator" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Перевод с языка">
+                <input type="text" id="translator" list="translatorList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Перевод с языка">
+                <datalist id="translatorList"></datalist>
               </div>
             </div>
           </div>
@@ -681,15 +686,17 @@
                   <label class="text-xs font-medium text-slate-300">Издательство:</label>
                   <button type="button" onclick="document.getElementById('publisher').value='Художественная литература'" class="text-[10px] text-amber-400 hover:text-amber-300">«Худлит»</button>
                 </div>
-                <input type="text" id="publisher" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
+                <input type="text" id="publisher" list="publisherList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
+                <datalist id="publisherList"></datalist>
               </div>
 
               <div>
                 <div class="flex items-center justify-between mb-1">
                   <label class="text-xs font-medium text-slate-300">Бренд Ozon: <span class="text-rose-400">*</span></label>
-                  <button type="button" onclick="document.getElementById('brand').value='Нет бренда'" class="text-[10px] text-amber-400 hover:text-amber-300">«Нет бренда»</button>
+                  <button type="button" onclick="document.getElementById('brand').value='Нет бренда'" class="text-[10px] text-amber-400 hover:text-amber-300 font-bold">«Нет бренда»</button>
                 </div>
-                <input type="text" id="brand" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Нет бренда">
+                <input type="text" id="brand" list="brandList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Нет бренда">
+                <datalist id="brandList"></datalist>
               </div>
 
               <div>
@@ -709,12 +716,12 @@
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Страниц:</label>
-                <input type="number" id="pages" oninput="autoCalcDimensions()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="384">
+                <input type="number" id="pages" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="384">
               </div>
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Переплет:</label>
-                <select id="cover_type" onchange="autoCalcDimensions()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                <select id="cover_type" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
                   <option value="Твердый переплет">Твердый переплет</option>
                   <option value="Твердый переплет, суперобложка">Твердый переплет, суперобложка</option>
                   <option value="Мягкая обложка">Мягкая обложка</option>
@@ -737,12 +744,21 @@
 
             <div class="grid grid-cols-3 gap-3">
               <div>
-                <label class="block text-xs font-medium text-slate-300 mb-1">Бумага:</label>
-                <select id="paper_type" onchange="autoCalcDimensions()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
-                  <option value="Офсетная">Офсетная</option>
+                <label class="block text-xs font-medium text-slate-300 mb-1">Бумага: <span class="text-rose-400">*</span></label>
+                <select id="paper_type" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                  <option value="">-- Выберите тип бумаги --</option>
                   <option value="Типографская">Типографская</option>
+                  <option value="Офсетная">Офсетная</option>
                   <option value="Газетная">Газетная</option>
-                  <option value="Мелованная матовая">Мелованная</option>
+                  <option value="Пухлая">Пухлая</option>
+                  <option value="Мелованная матовая">Мелованная матовая</option>
+                  <option value="Мелованная глянцевая">Мелованная глянцевая</option>
+                  <option value="Картон">Картон</option>
+                  <option value="Дизайнерская">Дизайнерская</option>
+                  <option value="Картографическая">Картографическая</option>
+                  <option value="Вторичной переработки">Вторичной переработки</option>
+                  <option value="Влагостойкая">Влагостойкая</option>
+                  <option value="Самоклеющаяся">Самоклеющаяся</option>
                 </select>
               </div>
 
@@ -807,7 +823,7 @@
               </div>
             </div>
 
-            <input type="hidden" id="target_audience" value="Для взрослых">
+            <input type="hidden" id="target_audience" value="">
           </div>
 
         </div>
@@ -849,7 +865,7 @@
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Цена продажи (₽): <span class="text-rose-400">*</span></label>
-                <input type="number" id="price" oninput="calcOldPrice()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-emerald-400 font-bold focus:border-amber-500 focus:outline-none transition font-mono" placeholder="350">
+                <input type="number" id="price" oninput="calcOldPrice()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-emerald-400 font-bold focus:border-amber-500 focus:outline-none transition font-mono" placeholder="Введите цену">
                 <div class="flex gap-1 mt-1.5">
                   <button type="button" onclick="setPrice(250)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300">250</button>
                   <button type="button" onclick="setPrice(350)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300">350</button>
@@ -860,7 +876,7 @@
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Старая цена (₽):</label>
-                <input type="number" id="old_price" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-slate-400 focus:border-amber-500 focus:outline-none transition font-mono" placeholder="490">
+                <input type="number" id="old_price" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-slate-400 focus:border-amber-500 focus:outline-none transition font-mono" placeholder="не заполнено">
                 <p class="text-[10px] text-slate-500 mt-1">Автоскидка ~40%</p>
               </div>
             </div>
@@ -888,13 +904,13 @@
               <div class="grid grid-cols-4 gap-2 text-xs">
                 <div>
                   <label class="block text-[10px] text-slate-400 mb-1 font-medium" title="Ширина самой книги по линейке">Ширина книги:</label>
-                  <input type="number" id="width" value="130" min="10" max="1000" oninput="autoCalcDimensions()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="130">
+                  <input type="number" id="width" value="130" min="10" max="1000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="130">
                   <div id="pkgWidthHint" class="text-[9px] text-amber-400/90 text-center mt-1 font-mono">упак: 140 мм (+10)</div>
                 </div>
 
                 <div>
                   <label class="block text-[10px] text-slate-400 mb-1 font-medium" title="Высота книги по вертикали / Длина Ozon">Длина книги:</label>
-                  <input type="number" id="length" value="205" min="10" max="1000" oninput="autoCalcDimensions()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="205">
+                  <input type="number" id="length" value="205" min="10" max="1000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="205">
                   <div id="pkgLengthHint" class="text-[9px] text-amber-400/90 text-center mt-1 font-mono">упак: 215 мм (+10)</div>
                 </div>
 
@@ -2043,6 +2059,7 @@
       updateBooksCount();
       refreshPreviewTable('pre2011');
       loadMobileUrl();
+      loadCatalogReferences();
       startMobileEventListener();
       initRotaryDial();
 
@@ -5938,12 +5955,9 @@
     }
 
     function handleGenreChange() {
-      const g = document.getElementById('genre').value;
-      if (g === 'Детская литература') {
-        document.getElementById('target_audience').value = 'Для детей';
-      } else {
-        document.getElementById('target_audience').value = 'Для взрослых';
-      }
+      // Целевая аудитория исключена по правилам каталогизации
+      const ta = document.getElementById('target_audience');
+      if (ta) ta.value = '';
     }
 
 
@@ -6018,10 +6032,10 @@
       }
       document.getElementById('country').value = 'Россия';
       document.getElementById('cover_type').value = 'Твердый переплет';
-      document.getElementById('paper_type').value = 'Офсетная';
+      document.getElementById('paper_type').value = '';
       document.getElementById('genre').value = 'Проза';
       document.getElementById('age_limit').value = '';
-      document.getElementById('target_audience').value = 'Для взрослых';
+      document.getElementById('target_audience').value = '';
       if (document.getElementById('hashtags')) document.getElementById('hashtags').value = '';
 
       const book = getActiveBook();
@@ -6049,6 +6063,34 @@
     }
 
     // -------------------------------------------------------------
+    // ЭТАЛОННЫЕ СПРАВОЧНИКИ ИЗ БАЗЫ CATALOG.DB
+    // -------------------------------------------------------------
+    async function loadCatalogReferences() {
+      try {
+        const resp = await fetch('/api/references');
+        const data = await resp.json();
+        if (data.success && data.references) {
+          window.CATALOG_REFERENCES = data.references;
+          populateDatalist('authorList', data.references.authors || []);
+          populateDatalist('authorCoverList', data.references.authors || []);
+          populateDatalist('translatorList', data.references.translators || []);
+          populateDatalist('illustratorList', data.references.illustrators || []);
+          populateDatalist('publisherList', data.references.publishers || []);
+          populateDatalist('seriesList', data.references.series || []);
+          populateDatalist('brandList', data.references.brands || []);
+        }
+      } catch (e) {
+        console.warn('Не удалось загрузить справочники каталога:', e);
+      }
+    }
+
+    function populateDatalist(elementId, items) {
+      const listEl = document.getElementById(elementId);
+      if (!listEl) return;
+      listEl.innerHTML = items.map(item => `<option value="${escapeHtml(item)}"></option>`).join('');
+    }
+
+    // -------------------------------------------------------------
     // СОХРАНЕНИЕ В ИЗОЛИРОВАННЫЙ EXCEL
     // -------------------------------------------------------------
     async function saveBookToExcel() {
@@ -6056,6 +6098,35 @@
       if (!title) {
         alert('Пожалуйста, укажите название книги!');
         document.getElementById('title').focus();
+        return;
+      }
+
+      const authorCover = document.getElementById('author_cover').value.trim();
+      if (!authorCover) {
+        alert('Пожалуйста, укажите автора на обложке (если автор отсутствует в книге, введите «не указан»)!');
+        document.getElementById('author_cover').focus();
+        return;
+      }
+
+      const author = document.getElementById('author').value.trim();
+      if (!author) {
+        alert('Пожалуйста, укажите официального автора книги (в паспортном формате «Фамилия Имя Отчество», либо «не указан»)!');
+        document.getElementById('author').focus();
+        return;
+      }
+
+      const paperType = document.getElementById('paper_type').value.trim();
+      if (!paperType) {
+        alert('Пожалуйста, выберите тип бумаги перед сохранением карточки!');
+        document.getElementById('paper_type').focus();
+        return;
+      }
+
+      const priceRaw = document.getElementById('price').value.trim();
+      const priceVal = parseInt(priceRaw, 10);
+      if (!priceVal || priceVal <= 0 || isNaN(priceVal)) {
+        alert('Пожалуйста, укажите цену продажи книги (должна быть больше 0)!');
+        document.getElementById('price').focus();
         return;
       }
 
@@ -6098,8 +6169,8 @@
         title: title,
         original_title: (document.getElementById('original_title')?.value || '').trim(),
         series: document.getElementById('series').value.trim(),
-        author_cover: document.getElementById('author_cover').value.trim(),
-        author: document.getElementById('author').value.trim(),
+        author_cover: authorCover,
+        author: author,
         illustrator: document.getElementById('illustrator').value.trim(),
         translator: document.getElementById('translator').value.trim(),
         publisher: publisherVal,
@@ -6108,16 +6179,16 @@
         pages: document.getElementById('pages').value.trim(),
         country: document.getElementById('country').value,
         cover_type: document.getElementById('cover_type').value,
-        paper_type: document.getElementById('paper_type').value,
+        paper_type: paperType,
         genre: document.getElementById('genre').value,
         age_limit: document.getElementById('age_limit').value,
-        target_audience: document.getElementById('target_audience').value,
+        target_audience: '',
         condition: document.getElementById('condition').value,
         defects: '',
         annotation: document.getElementById('annotation').value.trim(),
         hashtags: '',
-        price: document.getElementById('price').value.trim() || '350',
-        old_price: document.getElementById('old_price').value.trim() || '490',
+        price: String(priceVal),
+        old_price: document.getElementById('old_price').value.trim(),
         dimensions: dimStr,
         weight: rawWeight,
         width: rawWidth,
@@ -6179,6 +6250,7 @@
           showToast(`✅ Записано в <b>ready_tables/${fileName}</b> (строка ${result.row})${s3Badge}`);
 
           book.isSavedToExcel = true;
+          loadCatalogReferences();
           renderBooksTabs();
           scheduleAutoSave();
           
