@@ -27,6 +27,8 @@ cloudflared
 *.db-shm
 *.db-wal
 storage/catalog.db*
+storage/backups/
+storage/archive/
 
 # ==========================================
 # 4. Временные сессии и тяжелые черновики
