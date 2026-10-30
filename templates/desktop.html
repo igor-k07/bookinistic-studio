@@ -315,17 +315,17 @@
               <span class="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono font-bold">2</span>
               <span>🔄 2. Обложка (зад)</span>
             </button>
-            <button type="button" onclick="assignSelectedToSlot('info_pages')" class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-emerald-400/40" title="Титульный лист, оборот с годом и ISBN (для ИИ Gemini)">
+            <button type="button" onclick="assignSelectedToSlot('info_pages')" class="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-emerald-400/40" title="Титульный лист, оборот, колофон/мантра с годом и ISBN (для ИИ Gemini)">
               <span class="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono font-bold">3</span>
-              <span>📄 3. Титул и выходные (ИИ)</span>
+              <span>📄 3. Титул и мантра (ИИ)</span>
             </button>
             <button type="button" onclick="assignSelectedToSlot('illustrations')" class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-indigo-400/40" title="Красивые внутренние страницы, гравюры, рисунки (мульти)">
               <span class="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono font-bold">4</span>
               <span>🎨 4. Иллюстрации</span>
             </button>
-            <button type="button" onclick="assignSelectedToSlot('mantra_defects')" class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-rose-400/40" title="Корешок, углы, повреждения, пометки книги (для описания и ИИ)">
+            <button type="button" onclick="assignSelectedToSlot('mantra_defects')" class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-rose-400/40" title="Только фото повреждений (надрывы, пометки, сбитые углы). Если дефектов нет — не заполнять!">
               <span class="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono font-bold">5</span>
-              <span>⚠️ 5. Дефекты и нюансы</span>
+              <span>⚠️ 5. Только дефекты</span>
             </button>
           </div>
         </div>
@@ -471,25 +471,26 @@
           </div>
         </div>
 
-        <!-- СЛОТ 5: МАНТРА И ДЕФЕКТЫ (МУЛЬТИ) -->
+        <!-- СЛОТ 5: ТОЛЬКО ДЕФЕКТЫ КНИГИ (МУЛЬТИ) -->
         <div class="slot-card bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between min-h-[280px] relative group hover:border-rose-500/60 transition shadow-lg"
              ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'mantra_defects')">
           <div class="flex flex-col gap-1 mb-2.5">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5">
                 <span class="text-xs font-bold text-rose-400 flex items-center gap-1">
-                  <span>⚠️ 5. Дефекты и нюансы</span>
+                  <span>⚠️ 5. Только дефекты книги</span>
                 </span>
-                <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-700 font-bold">ИИ</span>
+                <span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-700 font-bold">Дефекты</span>
               </div>
               <span class="text-[10px] font-mono text-slate-400 font-bold">Мульти [5]</span>
             </div>
-            <span class="text-[10px] text-slate-400">Корешок, углы, повреждения (для честного описания)</span>
+            <span class="text-[10px] text-slate-400">Надрывы, пометки, сбитые углы (если нет — оставить пустым!)</span>
           </div>
           <div id="slot_mantra_defects" class="flex-1 grid grid-cols-2 gap-2 border-2 border-dashed border-slate-800/90 rounded-xl p-2 overflow-y-auto max-h-[300px] bg-slate-900/40 min-h-[190px] items-center">
             <span class="col-span-full text-xs text-slate-500 text-center px-2 leading-relaxed">
               <span class="block text-xl mb-1 opacity-60">⚠️</span>
-              Перетащите фото нюансов и корешка книги или нажмите <span class="text-rose-400 font-mono font-bold">[5]</span>
+              Только фото дефектов/повреждений или нажмите <span class="text-rose-400 font-mono font-bold">[5]</span>.<br>
+              <span class="text-[10px] text-slate-500">Если повреждений нет — оставьте слот пустым. Мантру/колофон кладите в Слот [3].</span>
             </span>
           </div>
         </div>
@@ -821,7 +822,9 @@
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Аннотация книги (пойдет в карточку Ozon):</label>
               <textarea id="annotation" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-amber-500 focus:outline-none transition leading-relaxed" placeholder="Текст аннотации книги..."></textarea>
-              <p class="text-[10px] text-slate-500 mt-1" id="annotationNoticeHint">💡 Плашка «ВНИМАНИЕ! КНИГА НЕ НОВАЯ...» добавляется <b>только при наличии фото в слоте [5. Дефекты / колофон]</b>.</p>
+              <p class="text-xs mt-1.5 transition-all text-slate-400 font-medium flex items-center gap-1.5" id="annotationNoticeHint">
+                <span>💡</span> <span>Плашка «ВНИМАНИЕ! КНИГА НЕ НОВАЯ...» добавляется строго при наличии фото в слоте [5. Только дефекты].</span>
+              </p>
             </div>
 
             <!-- Скрытые хештеги Ozon (не проставляются по требованию) -->
@@ -1605,6 +1608,26 @@
   <script>
     // Константы букинистики и Ozon
     const ANNOTATION_WARNING = 'ВНИМАНИЕ! КНИГА НЕ НОВАЯ. Имеются определённые нюансы (повреждения) см. дополнительные фото.';
+
+    function cleanAnnotationText(text) {
+      if (!text) return '';
+      let clean = String(text);
+      while (clean.includes(ANNOTATION_WARNING)) {
+        clean = clean.replace(ANNOTATION_WARNING, '').trim();
+      }
+      clean = clean.replace(/^ВНИМАНИЕ!\s*КНИГА\s*НЕ\s*НОВАЯ[^\n]*\n*/gi, '').trim();
+      const markers = [
+        '\\n\\nСохранность / Дефекты:', '\\n\\nСохранность:', '\\n\\nДефекты:',
+        '\\nСохранность / Дефекты:', '\\nСохранность:', '\\nДефекты:',
+        '\n\nСохранность / Дефекты:', '\n\nСохранность:', '\n\nДефекты:',
+        '\nСохранность / Дефекты:', '\nСохранность:', '\nДефекты:'
+      ];
+      for (const m of markers) {
+        if (clean.includes(m)) clean = clean.split(m)[0].trim();
+      }
+      while (clean.startsWith('\n')) clean = clean.substring(1).trim();
+      return clean.trim();
+    }
     const OZON_GENRES = [
       "Проза", "История", "Фантастика", "Фэнтези", "Детектив", "Поэзия",
       "Научная и научно-популярная литература", "Искусство и культура",
@@ -1802,6 +1825,13 @@
           booksSession = draft.booksSession;
           photoPool = draft.photoPool || [];
           activeBookId = draft.activeBookId || booksSession[0].id;
+          // Санитизация аннотаций: убираем предупреждения из черновика для книг без дефектов
+          booksSession.forEach(b => {
+            const hasDefects = Boolean(b.slots && b.slots.mantra_defects && b.slots.mantra_defects.length > 0);
+            if (!hasDefects && b.formData && b.formData.annotation) {
+              b.formData.annotation = cleanAnnotationText(b.formData.annotation);
+            }
+          });
           relinkSessionPhotos();
           renderBooksTabs();
           renderActiveBookSlots();
@@ -2778,6 +2808,8 @@
         const mode = book.formData.template_mode || (parseInt(book.formData.year) > 2011 ? 'post2011' : 'pre2011');
         setTemplateMode(mode, false);
         updateDimensionsPreviewBadge();
+        // Синхронизируем предупреждение строго после восстановления полей формы
+        syncAnnotationWarningWithDefectsSlot();
       } else {
         clearForm(book.article || null);
       }
@@ -5148,9 +5180,9 @@
         }).join('');
       };
 
-      renderMulti('slot_info_pages', book.slots.info_pages, 'Перетащите титул / оборот (ИИ считает данные) или нажмите [3]');
+      renderMulti('slot_info_pages', book.slots.info_pages, 'Перетащите титул / оборот / колофон (ИИ считает данные) или нажмите [3]');
       renderMulti('slot_illustrations', book.slots.illustrations, 'Перетащите иллюстрации и развороты сюда или нажмите [4]');
-      renderMulti('slot_mantra_defects', book.slots.mantra_defects, 'Перетащите фото нюансов и дефектов книги или нажмите [5]');
+      renderMulti('slot_mantra_defects', book.slots.mantra_defects, 'Только фото повреждений (надрывы, пометки) или нажмите [5]');
 
       // Синхронизируем обязательную плашку-предупреждение в аннотации в зависимости от слота [5. Дефекты]
       syncAnnotationWarningWithDefectsSlot();
@@ -5159,24 +5191,24 @@
     function syncAnnotationWarningWithDefectsSlot() {
       const book = getActiveBook();
       const antEl = document.getElementById('annotation');
+      const hintEl = document.getElementById('annotationNoticeHint');
       if (!antEl || !book) return;
-      const hasMantraDefects = Boolean(book.slots && book.slots.mantra_defects && book.slots.mantra_defects.length > 0);
+      const defectCount = (book.slots && book.slots.mantra_defects) ? book.slots.mantra_defects.length : 0;
+      const hasMantraDefects = defectCount > 0;
 
-      let text = antEl.value;
-      let cleanText = text;
-      if (cleanText.includes(ANNOTATION_WARNING)) {
-        cleanText = cleanText.replace(ANNOTATION_WARNING, '').trim();
-        while (cleanText.startsWith('\n')) cleanText = cleanText.substring(1).trim();
-      }
+      let cleanText = cleanAnnotationText(antEl.value);
 
       if (hasMantraDefects) {
-        if (cleanText && !text.includes(ANNOTATION_WARNING)) {
-          antEl.value = ANNOTATION_WARNING + '\n\n' + cleanText;
-          antEl.classList.add('field-updated');
-          setTimeout(() => antEl.classList.remove('field-updated'), 600);
+        if (cleanText) {
+          const expected = ANNOTATION_WARNING + '\n\n' + cleanText;
+          if (antEl.value !== expected) {
+            antEl.value = expected;
+            antEl.classList.add('field-updated');
+            setTimeout(() => antEl.classList.remove('field-updated'), 600);
+          }
         }
       } else {
-        if (text.includes(ANNOTATION_WARNING)) {
+        if (antEl.value !== cleanText || antEl.value.includes(ANNOTATION_WARNING)) {
           antEl.value = cleanText;
           antEl.classList.add('field-updated');
           setTimeout(() => antEl.classList.remove('field-updated'), 600);
@@ -5185,6 +5217,16 @@
 
       if (book.formData) {
         book.formData.annotation = antEl.value;
+      }
+
+      if (hintEl) {
+        if (hasMantraDefects) {
+          hintEl.className = 'text-xs text-amber-400 mt-1.5 font-medium flex items-center gap-1.5';
+          hintEl.innerHTML = `<span>⚠️</span> <span>В слоте [5. Дефекты] фото (${defectCount} шт.). Предупреждение добавлено в аннотацию Ozon.</span>`;
+        } else {
+          hintEl.className = 'text-xs text-emerald-400 mt-1.5 font-medium flex items-center gap-1.5';
+          hintEl.innerHTML = `<span>✓</span> <span>Слот [5. Дефекты] пуст. Плашка предупреждения отключена (чистая аннотация).</span>`;
+        }
       }
     }
 
@@ -5506,16 +5548,9 @@
         const incomingAnt = (data && data.annotation !== undefined && data.annotation !== null) ? String(data.annotation).trim() : '';
         const rawAnt = incomingAnt || existingAnt;
 
-        let cleanAnt = rawAnt;
-        if (cleanAnt.includes(ANNOTATION_WARNING)) {
-          cleanAnt = cleanAnt.replace(ANNOTATION_WARNING, '').trim();
-          while (cleanAnt.startsWith('\n')) cleanAnt = cleanAnt.substring(1).trim();
-        }
-        for (const m of ['\\n\\nСохранность / Дефекты:', '\\n\\nСохранность:', '\\n\\nДефекты:', '\\nСохранность / Дефекты:', '\\nСохранность:', '\\nДефекты:']) {
-          if (cleanAnt.includes(m)) cleanAnt = cleanAnt.split(m)[0].trim();
-        }
+        let cleanAnt = cleanAnnotationText(rawAnt);
 
-        // Правило: плашка добавляется ТОЛЬКО если есть фото мантры / дефектов (слот 5) И есть содержательный текст
+        // Правило: плашка добавляется ТОЛЬКО если есть фото дефектов (слот 5) И есть содержательный текст
         const curBookObj = getActiveBook();
         const hasMantraDefects = Boolean(curBookObj && curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
 
@@ -5525,7 +5560,7 @@
         }
 
         const antEl = document.getElementById('annotation');
-        if (antEl && (fullAnt || antEl.value.includes(ANNOTATION_WARNING))) {
+        if (antEl) {
           antEl.value = fullAnt;
           antEl.classList.add('field-updated');
           setTimeout(() => antEl.classList.remove('field-updated'), 1200);
@@ -5533,6 +5568,7 @@
         if (curBookObj && curBookObj.formData) {
           curBookObj.formData.annotation = fullAnt;
         }
+        syncAnnotationWarningWithDefectsSlot();
 
         fill('translator', data.translator || '');
 
@@ -5962,11 +5998,7 @@
       const hasMantraDefects = Boolean(book.slots.mantra_defects && book.slots.mantra_defects.length > 0);
       payload.has_mantra_defects = hasMantraDefects;
 
-      let finalAnt = document.getElementById('annotation').value.trim();
-      if (finalAnt.includes(ANNOTATION_WARNING)) {
-        finalAnt = finalAnt.replace(ANNOTATION_WARNING, '').trim();
-        while (finalAnt.startsWith('\n')) finalAnt = finalAnt.substring(1).trim();
-      }
+      let finalAnt = cleanAnnotationText(document.getElementById('annotation').value);
       if (hasMantraDefects && finalAnt) {
         finalAnt = ANNOTATION_WARNING + '\n\n' + finalAnt;
       }

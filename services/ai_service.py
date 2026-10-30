@@ -90,6 +90,23 @@ def sanitize_ai_book_data(parsed: Dict[str, Any]) -> Dict[str, Any]:
             age_raw = ""
     parsed["age_limit"] = age_raw
 
+    # Санитизация аннотации: убираем любые случайные предупреждения или дисклеймеры от ИИ
+    if parsed.get("annotation"):
+        ant = str(parsed["annotation"]).strip()
+        warning_str = "ВНИМАНИЕ! КНИГА НЕ НОВАЯ. Имеются определённые нюансы (повреждения) см. дополнительные фото."
+        if warning_str in ant:
+            ant = ant.replace(warning_str, "").strip()
+        clean_marker_list = [
+            "\n\nСохранность / Дефекты:", "\n\nСохранность:", "\n\nДефекты:",
+            "\nСохранность / Дефекты:", "\nСохранность:", "\nДефекты:"
+        ]
+        for m in clean_marker_list:
+            if m in ant:
+                ant = ant.split(m)[0].strip()
+        while ant.startswith("\n"):
+            ant = ant.lstrip("\n").strip()
+        parsed["annotation"] = ant
+
     # Санитизация габаритов и массы книги
     try:
         pages_val = int(parsed.get("pages") or 200)
