@@ -638,8 +638,7 @@
 
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Серия книги (если есть):</label>
-              <input type="text" id="series" list="seriesList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="например: Библиотека приключений, ЖЗЛ">
-              <datalist id="seriesList"></datalist>
+              <input type="text" id="series" data-autocomplete="series" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="например: Библиотека приключений, ЖЗЛ">
             </div>
           </div>
 
@@ -650,14 +649,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Автор на обложке: <span class="text-rose-400">*</span></label>
-                <input type="text" id="author_cover" list="authorCoverList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Майн Рид (как напечатано)">
-                <datalist id="authorCoverList"></datalist>
+                <input type="text" id="author_cover" data-autocomplete="authors" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Майн Рид (как напечатано)">
                 <p class="text-[10px] text-slate-500 mt-0.5">Строго как на обложке (обычно Имя Фамилия)</p>
               </div>
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Автор по паспорту (ФИО): <span class="text-rose-400">*</span></label>
-                <input type="text" id="author" list="authorList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Рид Томас Майн">
-                <datalist id="authorList"></datalist>
+                <input type="text" id="author" data-autocomplete="authors" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Рид Томас Майн">
                 <p class="text-[10px] text-slate-500 mt-0.5">Строго Фамилия Имя Отчество</p>
               </div>
             </div>
@@ -665,13 +662,11 @@
             <div class="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <label class="block text-slate-400 mb-1">Иллюстратор:</label>
-                <input type="text" id="illustrator" list="illustratorList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Художник">
-                <datalist id="illustratorList"></datalist>
+                <input type="text" id="illustrator" data-autocomplete="illustrators" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Художник">
               </div>
               <div>
                 <label class="block text-slate-400 mb-1">Переводчик:</label>
-                <input type="text" id="translator" list="translatorList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Перевод с языка">
-                <datalist id="translatorList"></datalist>
+                <input type="text" id="translator" data-autocomplete="translators" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Перевод с языка">
               </div>
             </div>
           </div>
@@ -686,8 +681,7 @@
                   <label class="text-xs font-medium text-slate-300">Издательство:</label>
                   <button type="button" onclick="document.getElementById('publisher').value='Художественная литература'" class="text-[10px] text-amber-400 hover:text-amber-300">«Худлит»</button>
                 </div>
-                <input type="text" id="publisher" list="publisherList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
-                <datalist id="publisherList"></datalist>
+                <input type="text" id="publisher" data-autocomplete="publishers" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
               </div>
 
               <div>
@@ -695,8 +689,7 @@
                   <label class="text-xs font-medium text-slate-300">Бренд Ozon: <span class="text-rose-400">*</span></label>
                   <button type="button" onclick="document.getElementById('brand').value='Нет бренда'" class="text-[10px] text-amber-400 hover:text-amber-300 font-bold">«Нет бренда»</button>
                 </div>
-                <input type="text" id="brand" list="brandList" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Нет бренда">
-                <datalist id="brandList"></datalist>
+                <input type="text" id="brand" data-autocomplete="brands" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Нет бренда">
               </div>
 
               <div>
@@ -1721,6 +1714,9 @@
 
     </div>
   </div>
+
+  <!-- ВСПЛЫВАЮЩЕЕ МЕНЮ АВТОДОПОЛНЕНИЯ (НЕ ЧУВСТВИТЕЛЬНОЕ К РЕГИСТРУ) -->
+  <div id="customAutocompleteMenu" class="hidden fixed z-[999999] bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl max-h-64 overflow-y-auto text-xs py-1 scrollbar-thin"></div>
 
   <!-- СКРИПТ УПРАВЛЕНИЯ ПУЛОМ, СЛОТАМИ И КНИГАМИ -->
   <script>
@@ -6071,24 +6067,181 @@
         const data = await resp.json();
         if (data.success && data.references) {
           window.CATALOG_REFERENCES = data.references;
-          populateDatalist('authorList', data.references.authors || []);
-          populateDatalist('authorCoverList', data.references.authors || []);
-          populateDatalist('translatorList', data.references.translators || []);
-          populateDatalist('illustratorList', data.references.illustrators || []);
-          populateDatalist('publisherList', data.references.publishers || []);
-          populateDatalist('seriesList', data.references.series || []);
-          populateDatalist('brandList', data.references.brands || []);
-          initCaseInsensitiveSnapping();
+          initCustomAutocomplete();
         }
       } catch (e) {
         console.warn('Не удалось загрузить справочники каталога:', e);
       }
     }
 
-    function populateDatalist(elementId, items) {
-      const listEl = document.getElementById(elementId);
-      if (!listEl) return;
-      listEl.innerHTML = items.map(item => `<option value="${escapeHtml(item)}"></option>`).join('');
+    let currentAutocompleteInput = null;
+    let currentAutocompleteCategory = null;
+    let currentAutocompleteMatches = [];
+    let activeAutocompleteIndex = -1;
+
+    function highlightMatch(text, query) {
+      if (!query) return escapeHtml(text);
+      const lowerText = text.toLowerCase();
+      const lowerQ = query.toLowerCase();
+      const idx = lowerText.indexOf(lowerQ);
+      if (idx === -1) return escapeHtml(text);
+      const before = escapeHtml(text.substring(0, idx));
+      const match = escapeHtml(text.substring(idx, idx + query.length));
+      const after = escapeHtml(text.substring(idx + query.length));
+      return `${before}<span class="text-amber-400 font-bold underline decoration-amber-400/50">${match}</span>${after}`;
+    }
+
+    function showCustomAutocomplete(inputEl, categoryKey) {
+      const menu = document.getElementById('customAutocompleteMenu');
+      if (!menu) return;
+
+      const raw = (inputEl.value || '').trim();
+      const rawLower = raw.toLowerCase();
+      const list = (window.CATALOG_REFERENCES && window.CATALOG_REFERENCES[categoryKey]) || [];
+      if (!list.length) {
+        hideCustomAutocomplete();
+        return;
+      }
+
+      let matches = [];
+      if (!rawLower) {
+        // Если поле пустое, показываем первые 15 популярных вариантов
+        matches = list.slice(0, 15);
+      } else {
+        // 100% case-insensitive: сначала начинающиеся с запроса, затем содержащие запрос
+        const starts = [];
+        const contains = [];
+        for (const item of list) {
+          const itemLower = item.toLowerCase();
+          if (itemLower.startsWith(rawLower)) {
+            starts.push(item);
+          } else if (itemLower.includes(rawLower) || itemLower.replace(/["'«»]/g, '').includes(rawLower.replace(/["'«»]/g, ''))) {
+            contains.push(item);
+          }
+          if (starts.length + contains.length >= 35) break;
+        }
+        matches = starts.concat(contains).slice(0, 25);
+      }
+
+      if (!matches.length) {
+        hideCustomAutocomplete();
+        return;
+      }
+
+      currentAutocompleteInput = inputEl;
+      currentAutocompleteCategory = categoryKey;
+      currentAutocompleteMatches = matches;
+      activeAutocompleteIndex = -1;
+
+      menu.innerHTML = matches.map((item, idx) => `
+        <div class="autocomplete-item px-3 py-1.5 cursor-pointer text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 font-medium transition flex items-center justify-between" data-index="${idx}" data-val="${escapeHtml(item)}">
+          <span class="truncate">${highlightMatch(item, raw)}</span>
+          <span class="text-[9px] text-slate-500 ml-2 shrink-0">в базе</span>
+        </div>
+      `).join('');
+
+      const rect = inputEl.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.left = `${rect.left}px`;
+      menu.style.width = `${Math.max(rect.width, 240)}px`;
+      menu.classList.remove('hidden');
+    }
+
+    function selectAutocompleteItem(val) {
+      if (currentAutocompleteInput && val) {
+        currentAutocompleteInput.value = val;
+        currentAutocompleteInput.dispatchEvent(new Event('input', { bubbles: true }));
+        currentAutocompleteInput.dispatchEvent(new Event('change', { bubbles: true }));
+        currentAutocompleteInput.classList.add('field-updated');
+        setTimeout(() => currentAutocompleteInput && currentAutocompleteInput.classList.remove('field-updated'), 800);
+      }
+      hideCustomAutocomplete();
+    }
+
+    function hideCustomAutocomplete() {
+      const menu = document.getElementById('customAutocompleteMenu');
+      if (menu) menu.classList.add('hidden');
+      currentAutocompleteInput = null;
+      currentAutocompleteCategory = null;
+      currentAutocompleteMatches = [];
+      activeAutocompleteIndex = -1;
+    }
+
+    function updateAutocompleteHighlight() {
+      const menu = document.getElementById('customAutocompleteMenu');
+      if (!menu) return;
+      const items = menu.querySelectorAll('.autocomplete-item');
+      items.forEach((item, idx) => {
+        if (idx === activeAutocompleteIndex) {
+          item.classList.add('bg-amber-500/25', 'text-amber-300');
+          item.scrollIntoView({ block: 'nearest' });
+        } else {
+          item.classList.remove('bg-amber-500/25', 'text-amber-300');
+        }
+      });
+    }
+
+    function initCustomAutocomplete() {
+      const menu = document.getElementById('customAutocompleteMenu');
+      if (menu && !menu._hasListeners) {
+        menu._hasListeners = true;
+        menu.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // prevent blur on input
+          const item = e.target.closest('.autocomplete-item');
+          if (item) {
+            selectAutocompleteItem(item.getAttribute('data-val'));
+          }
+        });
+      }
+
+      document.addEventListener('pointerdown', (e) => {
+        const m = document.getElementById('customAutocompleteMenu');
+        if (!m || m.classList.contains('hidden')) return;
+        if (!m.contains(e.target) && e.target !== currentAutocompleteInput) {
+          hideCustomAutocomplete();
+        }
+      });
+
+      window.addEventListener('scroll', hideCustomAutocomplete, true);
+      window.addEventListener('resize', hideCustomAutocomplete);
+
+      document.querySelectorAll('[data-autocomplete]').forEach(el => {
+        if (el._hasAutoInit) return;
+        el._hasAutoInit = true;
+        const cat = el.getAttribute('data-autocomplete');
+
+        el.addEventListener('focus', () => showCustomAutocomplete(el, cat));
+        el.addEventListener('input', () => showCustomAutocomplete(el, cat));
+        el.addEventListener('blur', () => {
+          setTimeout(() => {
+            snapToCanonical(el, cat);
+            hideCustomAutocomplete();
+          }, 150);
+        });
+        el.addEventListener('change', () => snapToCanonical(el, cat));
+
+        el.addEventListener('keydown', (e) => {
+          const m = document.getElementById('customAutocompleteMenu');
+          if (!m || m.classList.contains('hidden')) return;
+
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeAutocompleteIndex = (activeAutocompleteIndex + 1) % currentAutocompleteMatches.length;
+            updateAutocompleteHighlight();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeAutocompleteIndex = (activeAutocompleteIndex - 1 + currentAutocompleteMatches.length) % currentAutocompleteMatches.length;
+            updateAutocompleteHighlight();
+          } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (activeAutocompleteIndex >= 0 && activeAutocompleteIndex < currentAutocompleteMatches.length) {
+              e.preventDefault();
+              selectAutocompleteItem(currentAutocompleteMatches[activeAutocompleteIndex]);
+            }
+          } else if (e.key === 'Escape') {
+            hideCustomAutocomplete();
+          }
+        });
+      });
     }
 
     // Нечувствительная к регистру сверка с эталонной базой
@@ -6139,27 +6292,6 @@
         inputEl.classList.add('field-updated');
         setTimeout(() => inputEl.classList.remove('field-updated'), 800);
       }
-    }
-
-    function initCaseInsensitiveSnapping() {
-      const fieldMap = [
-        { id: 'author_cover', cat: 'authors' },
-        { id: 'author', cat: 'authors' },
-        { id: 'publisher', cat: 'publishers' },
-        { id: 'brand', cat: 'brands' },
-        { id: 'series', cat: 'series' },
-        { id: 'translator', cat: 'translators' },
-        { id: 'illustrator', cat: 'illustrators' }
-      ];
-
-      fieldMap.forEach(({ id, cat }) => {
-        const el = document.getElementById(id);
-        if (el && !el._hasCaseSnap) {
-          el._hasCaseSnap = true;
-          el.addEventListener('blur', () => snapToCanonical(el, cat));
-          el.addEventListener('change', () => snapToCanonical(el, cat));
-        }
-      });
     }
 
     // -------------------------------------------------------------
