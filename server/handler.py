@@ -20,6 +20,8 @@ from config import (
     PORT,
     RAW_TEST_DIR,
     READY_TABLES_DIR,
+    READY_TABLES_PRE2011_DIR,
+    READY_TABLES_POST2011_DIR,
     TEMPLATES_DIR,
     VAULT_DIR,
     get_card_image_path,
@@ -276,9 +278,21 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
 
         elif parsed.path == "/api/open_ready_folder":
+            qs = urllib.parse.parse_qs(parsed.query)
+            mode = qs.get("mode", [None])[0]
+            if mode == "pre2011":
+                folder_to_open = READY_TABLES_PRE2011_DIR
+            elif mode in ("post2011", "post"):
+                folder_to_open = READY_TABLES_POST2011_DIR
+            else:
+                folder_to_open = READY_TABLES_DIR
             try:
-                subprocess.Popen(["open", READY_TABLES_DIR])
-                self.send_json({"success": True, "path": READY_TABLES_DIR})
+                subprocess.Popen(["open", folder_to_open])
+                self.send_json({
+                    "success": True,
+                    "path": folder_to_open,
+                    "rel_path": os.path.relpath(folder_to_open, BASE_DIR)
+                })
             except Exception as e:
                 self.send_error_json(e)
 
@@ -294,13 +308,15 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             qs = urllib.parse.parse_qs(parsed.query)
             mode = qs.get("mode", ["pre2011"])[0]
             target_file = get_target_excel_file(mode)
+            folder = os.path.dirname(target_file)
             try:
                 subprocess.Popen(["open", "-R", target_file])
                 self.send_json({
                     "success": True,
                     "file": target_file,
                     "filename": os.path.basename(target_file),
-                    "folder": READY_TABLES_DIR
+                    "folder": folder,
+                    "rel_folder": os.path.relpath(folder, BASE_DIR)
                 })
             except Exception as e:
                 self.send_error_json(e)

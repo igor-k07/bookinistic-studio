@@ -1334,7 +1334,7 @@
               <input type="radio" name="clearScope" value="pre2011" id="clearScopePre" class="text-amber-500 focus:ring-amber-500 bg-slate-900 border-slate-700">
               <div>
                 <span class="text-xs font-semibold text-white">🏛️ До 2011 года</span>
-                <p class="text-[10px] text-slate-400 font-mono" id="clearScopePreDesc">ready_tables/..._Печатная книга_до_2011.xlsx</p>
+                <p class="text-[10px] text-slate-400 font-mono" id="clearScopePreDesc">ready_tables/1942-2010/..._Печатная книга_до_2011.xlsx</p>
               </div>
             </div>
             <span id="clearScopePreCountBadge" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-950/80 text-amber-300 border border-amber-800/60">0 книг</span>
@@ -1345,7 +1345,7 @@
               <input type="radio" name="clearScope" value="post2011" id="clearScopePost" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-slate-700">
               <div>
                 <span class="text-xs font-semibold text-white">📖 После 2011 года</span>
-                <p class="text-[10px] text-slate-400 font-mono" id="clearScopePostDesc">ready_tables/..._Печатная книга_после_2011.xlsx</p>
+                <p class="text-[10px] text-slate-400 font-mono" id="clearScopePostDesc">ready_tables/с_2011/..._Печатная книга_после_2011.xlsx</p>
               </div>
             </div>
             <span id="clearScopePostCountBadge" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">0 книг</span>
@@ -6457,10 +6457,11 @@
           const s3Badge = result.s3_enabled ? ' ☁️ [Yandex S3]' : '';
           const photoMsg = photoCount > 0 ? ` (в архив и S3 сохранено ${photoCount} фото${s3Badge})` : '';
           const fileName = result.file_name || ((result.template_mode === 'pre2011') ? `${getTodayStr()}_Печатная книга_до_2011.xlsx` : `${getTodayStr()}_Печатная книга_после_2011.xlsx`);
+          const targetFolder = result.folder || ((result.template_mode === 'pre2011') ? 'ready_tables/1942-2010' : 'ready_tables/с_2011');
           const status = document.getElementById('formStatus');
-          status.textContent = `✅ Книга "${result.title}" записана в ready_tables/${fileName} (строка ${result.row})!${photoMsg}`;
+          status.textContent = `✅ Книга "${result.title}" записана в ${targetFolder}/${fileName} (строка ${result.row})!${photoMsg}`;
           status.className = 'text-center text-xs text-emerald-400 font-semibold';
-          showToast(`✅ Записано в <b>ready_tables/${fileName}</b> (строка ${result.row})${s3Badge}`);
+          showToast(`✅ Записано в <b>${targetFolder}/${fileName}</b> (строка ${result.row})${s3Badge}`);
 
           book.isSavedToExcel = true;
           loadCatalogReferences();
@@ -6682,7 +6683,7 @@
         const res = await fetch('/api/reveal_file?mode=' + mode);
         const data = await res.json();
         if (data.success) {
-          showToast(`📂 Файл <b>${data.filename}</b> открыт в папке <b>ready_tables</b>!`);
+          showToast(`📂 Файл <b>${data.filename}</b> открыт в папке <b>${data.rel_folder || 'ready_tables'}</b>!`);
         } else {
           window.location.href = '/api/download_excel?mode=' + mode;
         }
@@ -6723,11 +6724,11 @@
       if (currentPreviewMode === 'pre2011') {
         if (btnPre) btnPre.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-amber-600 text-white shadow-sm flex items-center gap-1.5';
         if (btnPost) btnPost.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-400 hover:text-white flex items-center gap-1.5';
-        if (subtitle) subtitle.innerHTML = 'Готовая таблица в проекте: <code class="text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded font-mono font-bold">ready_tables/' + getTodayStr() + '_Печатная книга_до_2011.xlsx</code> (81 колонка)';
+        if (subtitle) subtitle.innerHTML = 'Готовая таблица в проекте: <code class="text-amber-400 bg-amber-950/40 px-1.5 py-0.5 rounded font-mono font-bold">ready_tables/1942-2010/' + getTodayStr() + '_Печатная книга_до_2011.xlsx</code> (81 колонка)';
       } else {
         if (btnPre) btnPre.className = 'px-3 py-1.5 text-xs font-medium rounded-lg transition text-slate-400 hover:text-white flex items-center gap-1.5';
         if (btnPost) btnPost.className = 'px-3 py-1.5 text-xs font-semibold rounded-lg transition bg-emerald-600 text-white shadow-sm flex items-center gap-1.5';
-        if (subtitle) subtitle.innerHTML = 'Готовая таблица в проекте: <code class="text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded font-mono font-bold">ready_tables/' + getTodayStr() + '_Печатная книга_после_2011.xlsx</code> (86 колонок)';
+        if (subtitle) subtitle.innerHTML = 'Готовая таблица в проекте: <code class="text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded font-mono font-bold">ready_tables/с_2011/' + getTodayStr() + '_Печатная книга_после_2011.xlsx</code> (86 колонок)';
       }
 
       if (shouldRefresh) {
@@ -6767,8 +6768,8 @@
 
       const preDesc = document.getElementById('clearScopePreDesc');
       const postDesc = document.getElementById('clearScopePostDesc');
-      if (preDesc) preDesc.textContent = `ready_tables/${getTodayStr()}_Печатная книга_до_2011.xlsx`;
-      if (postDesc) postDesc.textContent = `ready_tables/${getTodayStr()}_Печатная книга_после_2011.xlsx`;
+      if (preDesc) preDesc.textContent = `ready_tables/1942-2010/${getTodayStr()}_Печатная книга_до_2011.xlsx`;
+      if (postDesc) postDesc.textContent = `ready_tables/с_2011/${getTodayStr()}_Печатная книга_после_2011.xlsx`;
 
       if (currentPreviewMode === 'post2011') {
         const rPost = document.getElementById('clearScopePost');

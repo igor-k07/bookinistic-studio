@@ -56,7 +56,10 @@ scratch/*
 # (Шаблоны в templates/ остаются в Git!)
 # ==========================================
 ready_tables/*.xlsx
+ready_tables/**/*.xlsx
 ready_tables/backups/*
+ready_tables/**/backups/*
+!ready_tables/**/.gitkeep
 !ready_tables/.gitkeep
 !ready_tables/backups/.gitkeep
 /Печатная книга_*.xlsx

@@ -14,7 +14,10 @@ from typing import Any, Dict, List
 from config import (
     BACKUP_FILE_POST2011,
     BACKUP_FILE_PRE2011,
+    BASE_DIR,
     READY_TABLES_DIR,
+    READY_TABLES_PRE2011_DIR,
+    READY_TABLES_POST2011_DIR,
     VAULT_DIR,
     get_target_excel_file,
 )
@@ -532,6 +535,7 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             z_out.writestr(name, data)
 
     os.replace(tmp_out, target_file)
+    folder_rel = os.path.relpath(os.path.dirname(target_file), BASE_DIR)
     return {
         "success": True,
         "row": next_row,
@@ -540,24 +544,26 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
         "barcode": barcode,
         "title": b.get("title"),
         "file_name": os.path.basename(target_file),
-        "folder": "ready_tables"
+        "folder": folder_rel
     }
 
 
 def clear_excel_table(mode: str = "pre2011") -> dict:
     """
     Очищает выбранную таблицу Excel Ozon (pre2011, post2011 или all),
-    сохраняя резервную копию в ready_tables/backups/.
+    сохраняя резервную копию в ready_tables/backups/[era]/.
     Возвращает чистый шаблон Ozon со всеми формулами, шапкой и валидацией.
     """
     modes = ["pre2011", "post2011"] if mode == "all" else [mode]
     results = []
-    backup_dir = os.path.join(READY_TABLES_DIR, "backups")
-    os.makedirs(backup_dir, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     for m in modes:
         target_file = get_target_excel_file(m)
+        subfolder = "1942-2010" if m == "pre2011" else "с_2011"
+        backup_dir = os.path.join(READY_TABLES_DIR, "backups", subfolder)
+        os.makedirs(backup_dir, exist_ok=True)
+
         clean_template = BACKUP_FILE_PRE2011 if m == "pre2011" else BACKUP_FILE_POST2011
         if not os.path.exists(clean_template):
             continue
@@ -578,6 +584,7 @@ def clear_excel_table(mode: str = "pre2011") -> dict:
         results.append({
             "mode": m,
             "filename": os.path.basename(target_file),
+            "folder": os.path.relpath(os.path.dirname(target_file), BASE_DIR),
             "cleared_count": cleared_count,
             "backup_file": os.path.basename(backup_file) if backup_file else None
         })
@@ -593,7 +600,7 @@ def clear_excel_table(mode: str = "pre2011") -> dict:
 def delete_book_from_excel(article: str, mode: str = "pre2011") -> dict:
     """
     Удаляет конкретную строку книги по артикулу из таблицы Excel Ozon.
-    1. Создает резервную копию таблицы в ready_tables/backups/.
+    1. Создает резервную копию таблицы в ready_tables/backups/[era]/.
     2. Извлекает текущие книги и отсекает удаляемую.
     3. Разворачивает чистый шаблон Ozon.
     4. Заново последовательно записывает оставшиеся книги с правильной сквозной нумерацией (№ 1, 2, 3...).
@@ -606,7 +613,8 @@ def delete_book_from_excel(article: str, mode: str = "pre2011") -> dict:
         raise Exception(f"Файл таблицы ({mode}) не найден")
 
     # 1. Резервная копия перед удалением
-    backup_dir = os.path.join(READY_TABLES_DIR, "backups")
+    subfolder = "1942-2010" if mode == "pre2011" else "с_2011"
+    backup_dir = os.path.join(READY_TABLES_DIR, "backups", subfolder)
     os.makedirs(backup_dir, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     target_base = os.path.basename(target_file)

@@ -11,6 +11,8 @@ PORT = 8095
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 READY_TABLES_DIR = os.path.join(BASE_DIR, "ready_tables")
+READY_TABLES_PRE2011_DIR = os.path.join(READY_TABLES_DIR, "1942-2010")
+READY_TABLES_POST2011_DIR = os.path.join(READY_TABLES_DIR, "с_2011")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 INBOX_DIR = os.path.join(BASE_DIR, "storage/inbox")
 VAULT_DIR = os.path.join(BASE_DIR, "storage/books_vault")
@@ -25,26 +27,46 @@ CARD_TEMPLATE_PATH = os.path.join(TEMPLATES_DIR, "card.png")
 
 # Гарантируем существование обязательных директорий
 os.makedirs(READY_TABLES_DIR, exist_ok=True)
+os.makedirs(READY_TABLES_PRE2011_DIR, exist_ok=True)
+os.makedirs(READY_TABLES_POST2011_DIR, exist_ok=True)
 os.makedirs(INBOX_DIR, exist_ok=True)
 os.makedirs(VAULT_DIR, exist_ok=True)
 
 
 def get_target_excel_file(mode: str) -> str:
     """
-    Возвращает актуальный путь к готовой таблице за сегодняшнюю дату в папке ready_tables.
+    Возвращает актуальный путь к готовой таблице за сегодняшнюю дату.
+    Книги 1942-2010 сохраняются в папке ready_tables/1942-2010/.
+    Книги с 2011 сохраняются в папке ready_tables/с_2011/.
     Если файла за сегодня ещё нет, инициализирует его из чистого шаблона Ozon.
     """
     today_str = datetime.now().strftime("%d.%m.%Y")
     if mode == "pre2011":
+        folder = READY_TABLES_PRE2011_DIR
+        os.makedirs(folder, exist_ok=True)
         filename = f"{today_str}_Печатная книга_до_2011.xlsx"
-        target_path = os.path.join(READY_TABLES_DIR, filename)
+        target_path = os.path.join(folder, filename)
+
+        # Проверяем миграцию: если файл остался в корне ready_tables/, переносим
+        old_root_path = os.path.join(READY_TABLES_DIR, filename)
+        if os.path.exists(old_root_path) and not os.path.exists(target_path):
+            shutil.move(old_root_path, target_path)
+
         if not os.path.exists(target_path):
             if os.path.exists(BACKUP_FILE_PRE2011) and os.path.getsize(BACKUP_FILE_PRE2011) > 0:
                 shutil.copyfile(BACKUP_FILE_PRE2011, target_path)
         return target_path
     else:
+        folder = READY_TABLES_POST2011_DIR
+        os.makedirs(folder, exist_ok=True)
         filename = f"{today_str}_Печатная книга_после_2011.xlsx"
-        target_path = os.path.join(READY_TABLES_DIR, filename)
+        target_path = os.path.join(folder, filename)
+
+        # Проверяем миграцию: если файл остался в корне ready_tables/, переносим
+        old_root_path = os.path.join(READY_TABLES_DIR, filename)
+        if os.path.exists(old_root_path) and not os.path.exists(target_path):
+            shutil.move(old_root_path, target_path)
+
         if not os.path.exists(target_path):
             if os.path.exists(BACKUP_FILE_POST2011) and os.path.getsize(BACKUP_FILE_POST2011) > 0:
                 shutil.copyfile(BACKUP_FILE_POST2011, target_path)
