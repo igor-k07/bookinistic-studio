@@ -171,3 +171,4 @@ flowchart TD
 1. Файлы `.gemini_api_key`, `.ozon_credentials`, `.yandex_s3_credentials`, `.env`, а также каталог `credentials/` внесены в [`.gitignore`](file:///Users/igor/Projects/real_projects/bookinistic/.gitignore).
 2. Для удобства новых установок в проекте поддерживается единый файл-образец [`.env.example`](file:///Users/igor/Projects/real_projects/bookinistic/.env.example).
 3. Права доступа к файлам с ключами рекомендуется выставлять как `600` (`chmod 600 .ozon_credentials .gemini_api_key .yandex_s3_credentials`).
+
