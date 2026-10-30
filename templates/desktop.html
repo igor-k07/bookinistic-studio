@@ -819,8 +819,8 @@
 
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Аннотация книги (пойдет в карточку Ozon):</label>
-              <textarea id="annotation" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-amber-500 focus:outline-none transition leading-relaxed" placeholder="ВНИМАНИЕ! КНИГА НЕ НОВАЯ. Имеются определённые нюансы (повреждения) см. дополнительные фото.&#10;&#10;Текст аннотации книги..."></textarea>
-              <p class="text-[10px] text-slate-500 mt-1">Обязательное предупреждение о не новой книге будет в начале аннотации автоматически.</p>
+              <textarea id="annotation" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-amber-500 focus:outline-none transition leading-relaxed" placeholder="Текст аннотации книги..."></textarea>
+              <p class="text-[10px] text-slate-500 mt-1" id="annotationNoticeHint">💡 Плашка «ВНИМАНИЕ! КНИГА НЕ НОВАЯ...» добавляется <b>только при наличии фото в слоте [5. Дефекты / колофон]</b>.</p>
             </div>
 
             <!-- Скрытые хештеги Ozon (не проставляются по требованию) -->
@@ -5150,6 +5150,41 @@
       renderMulti('slot_info_pages', book.slots.info_pages, 'Перетащите титул / оборот (ИИ считает данные) или нажмите [3]');
       renderMulti('slot_illustrations', book.slots.illustrations, 'Перетащите иллюстрации и развороты сюда или нажмите [4]');
       renderMulti('slot_mantra_defects', book.slots.mantra_defects, 'Перетащите фото нюансов и дефектов книги или нажмите [5]');
+
+      // Синхронизируем обязательную плашку-предупреждение в аннотации в зависимости от слота [5. Дефекты]
+      syncAnnotationWarningWithDefectsSlot();
+    }
+
+    function syncAnnotationWarningWithDefectsSlot() {
+      const book = getActiveBook();
+      const antEl = document.getElementById('annotation');
+      if (!antEl || !book) return;
+      const hasMantraDefects = Boolean(book.slots && book.slots.mantra_defects && book.slots.mantra_defects.length > 0);
+
+      let text = antEl.value;
+      let cleanText = text;
+      if (cleanText.includes(ANNOTATION_WARNING)) {
+        cleanText = cleanText.replace(ANNOTATION_WARNING, '').trim();
+        while (cleanText.startsWith('\n')) cleanText = cleanText.substring(1).trim();
+      }
+
+      if (hasMantraDefects) {
+        if (!text.includes(ANNOTATION_WARNING)) {
+          antEl.value = cleanText ? (ANNOTATION_WARNING + '\n\n' + cleanText) : ANNOTATION_WARNING;
+          antEl.classList.add('field-updated');
+          setTimeout(() => antEl.classList.remove('field-updated'), 600);
+        }
+      } else {
+        if (text.includes(ANNOTATION_WARNING)) {
+          antEl.value = cleanText;
+          antEl.classList.add('field-updated');
+          setTimeout(() => antEl.classList.remove('field-updated'), 600);
+        }
+      }
+
+      if (book.formData) {
+        book.formData.annotation = antEl.value;
+      }
     }
 
     // -------------------------------------------------------------
@@ -5466,17 +5501,22 @@
         let cleanAnt = rawAnt;
         if (cleanAnt.startsWith(ANNOTATION_WARNING)) {
           cleanAnt = cleanAnt.substring(ANNOTATION_WARNING.length).trim();
+        } else if (cleanAnt.includes(ANNOTATION_WARNING)) {
+          cleanAnt = cleanAnt.replace(ANNOTATION_WARNING, '').trim();
         }
         for (const m of ['\\n\\nСохранность / Дефекты:', '\\n\\nСохранность:', '\\n\\nДефекты:', '\\nСохранность / Дефекты:', '\\nСохранность:', '\\nДефекты:']) {
           if (cleanAnt.includes(m)) cleanAnt = cleanAnt.split(m)[0].trim();
         }
-        const fullAnt = cleanAnt ? (ANNOTATION_WARNING + '\\n\\n' + cleanAnt) : ANNOTATION_WARNING;
+
+        // Правило: плашка добавляется ТОЛЬКО если есть фото мантры / нюансов (слот 5)
+        const curBookObj = getActiveBook();
+        const hasMantraDefects = Boolean(curBookObj && curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
+        const fullAnt = hasMantraDefects ? (cleanAnt ? (ANNOTATION_WARNING + '\\n\\n' + cleanAnt) : ANNOTATION_WARNING) : cleanAnt;
         fill('annotation', fullAnt);
 
         fill('translator', data.translator || '');
 
         // Правило: иллюстратора указываем ТОЛЬКО если в слоте иллюстраций есть реальные фото
-        const curBookObj = getActiveBook();
         const hasIllustrationsPhotos = curBookObj && curBookObj.slots && curBookObj.slots.illustrations && curBookObj.slots.illustrations.length > 0;
         if (!hasIllustrationsPhotos) {
           fill('illustrator', '');
@@ -5747,7 +5787,8 @@
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
-      document.getElementById('annotation').value = ANNOTATION_WARNING;
+      document.getElementById('annotation').value = '';
+      syncAnnotationWarningWithDefectsSlot();
       document.getElementById('brand').value = 'Нет бренда';
       if (document.getElementById('autoPackageAdder')) {
         document.getElementById('autoPackageAdder').checked = true;
@@ -5890,6 +5931,19 @@
         mantra_defects: (book.slots.mantra_defects || []).map(extractPhotoPayload).filter(Boolean)
       };
       payload.slots_photos = slots_photos;
+
+      const hasMantraDefects = Boolean(book.slots.mantra_defects && book.slots.mantra_defects.length > 0);
+      payload.has_mantra_defects = hasMantraDefects;
+
+      let finalAnt = document.getElementById('annotation').value.trim();
+      if (finalAnt.includes(ANNOTATION_WARNING)) {
+        finalAnt = finalAnt.replace(ANNOTATION_WARNING, '').trim();
+        while (finalAnt.startsWith('\n')) finalAnt = finalAnt.substring(1).trim();
+      }
+      if (hasMantraDefects) {
+        finalAnt = finalAnt ? (ANNOTATION_WARNING + '\n\n' + finalAnt) : ANNOTATION_WARNING;
+      }
+      payload.annotation = finalAnt;
 
       try {
         const res = await fetch('/api/save_book', {

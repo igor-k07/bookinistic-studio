@@ -217,9 +217,17 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
         if marker in annotation:
             annotation = annotation.split(marker)[0].strip()
 
-    if not annotation.startswith(warning_prefix):
-        if warning_prefix in annotation:
-            annotation = annotation.replace(warning_prefix, "").strip()
+    # Правило: плашка-предупреждение вставляется ТОЛЬКО если есть фото мантры / дефектов (слот 5)
+    slots_photos = b.get("slots_photos") or {}
+    mantra_photos = slots_photos.get("mantra_defects") or []
+    has_mantra_defects = bool(mantra_photos) or bool(b.get("has_mantra_defects"))
+
+    # Очищаем warning_prefix, если он уже присутствовал в тексте
+    if warning_prefix in annotation:
+        annotation = annotation.replace(warning_prefix, "").strip()
+
+    # Добавляем предупреждение строго при наличии фото нюансов/дефектов
+    if has_mantra_defects:
         annotation = (warning_prefix + "\n\n" + annotation).strip() if annotation else warning_prefix
 
     # Размеры и вес книги (нетто)

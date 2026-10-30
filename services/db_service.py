@@ -54,6 +54,18 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     (фото сохраняются в хранилище books_vault и Yandex S3, в БД хранятся ссылки и имена файлов).
     """
     clean = dict(book)
+    # Правило: плашка-предупреждение вставляется ТОЛЬКО если есть фото мантры / дефектов (слот 5)
+    warning_prefix = "ВНИМАНИЕ! КНИГА НЕ НОВАЯ. Имеются определённые нюансы (повреждения) см. дополнительные фото."
+    slots_photos_raw = clean.get("slots_photos") or {}
+    mantra_photos = slots_photos_raw.get("mantra_defects") or []
+    has_mantra_defects = bool(mantra_photos) or bool(clean.get("has_mantra_defects"))
+    ant = str(clean.get("annotation") or "").strip()
+    if warning_prefix in ant:
+        ant = ant.replace(warning_prefix, "").strip()
+    if has_mantra_defects:
+        ant = (warning_prefix + "\n\n" + ant).strip() if ant else warning_prefix
+    clean["annotation"] = ant
+
     # Если в slots_photos были base64-данные, сохраняем только имена файлов
     if "slots_photos" in clean and isinstance(clean["slots_photos"], dict):
         compact_slots = {}
