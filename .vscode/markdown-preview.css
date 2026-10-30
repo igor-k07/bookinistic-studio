@@ -1,0 +1,136 @@
+/* Modern elegant reading style for Markdown Preview in Bookinistic Studio */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--vscode-editor-foreground, #d4d4d4);
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+  color: var(--vscode-titleBar-activeForeground, #ffffff);
+}
+
+h1 {
+  font-size: 2.1em;
+  padding-bottom: 0.4em;
+  border-bottom: 2px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+h2 {
+  font-size: 1.55em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-top: 1.8em;
+}
+
+h3 {
+  font-size: 1.25em;
+  color: #fbbf24;
+}
+
+/* Tables */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin: 1.5em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+th {
+  background-color: rgba(15, 23, 42, 0.85);
+  color: #38bdf8;
+  font-weight: 600;
+  text-align: left;
+  padding: 11px 14px;
+  border-bottom: 2px solid rgba(56, 189, 248, 0.4);
+}
+
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  vertical-align: top;
+}
+
+tr:nth-child(even) td {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+tr:hover td {
+  background-color: rgba(56, 189, 248, 0.07);
+}
+
+/* Inline code and badges */
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 2.5px 6.5px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fbbf24;
+}
+
+pre {
+  background-color: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+pre code {
+  padding: 0;
+  background-color: transparent;
+  border: none;
+  color: inherit;
+}
+
+/* Blockquotes & Callouts */
+blockquote {
+  margin: 1.4em 0;
+  padding: 12px 18px;
+  border-left: 4px solid #38bdf8;
+  background-color: rgba(56, 189, 248, 0.09);
+  border-radius: 0 10px 10px 0;
+  color: #e2e8f0;
+}
+
+/* Horizontal Rule */
+hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  margin: 2em 0;
+}
+
+/* Links */
+a {
+  color: #38bdf8;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
+}
+
+/* List spacing */
+li {
+  margin: 0.35em 0;
+}

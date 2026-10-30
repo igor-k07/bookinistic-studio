@@ -208,6 +208,11 @@
           <span>📂 Папка таблиц</span>
         </button>
 
+        <!-- ПАМЯТКА ПОЛЕЙ OZON -->
+        <button type="button" onclick="openFieldsGuide()" class="px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-purple-300 text-xs font-semibold border border-purple-700/60 shadow-sm transition flex items-center gap-1.5" title="Открыть памятку полей Ozon в режиме чтения">
+          <span>📚 Памятка полей</span>
+        </button>
+
         <button type="button" onclick="revealTableFile('pre2011')" class="px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="Показать готовую таблицу до 2011 г. в папке ready_tables">
           <span>🏛️ До 2011 г.</span>
           <span id="excelPre2011Count" class="px-1.5 py-0.2 rounded-full bg-amber-900 text-[10px] font-mono font-bold">0</span>
@@ -6367,6 +6372,20 @@
           showToast('📂 Папка с готовыми таблицами <b>ready_tables</b> открыта в Finder!');
         } else {
           alert('Ошибка открытия папки: ' + (data.error || ''));
+        }
+      } catch (e) {
+        alert('Ошибка: ' + e.message);
+      }
+    }
+
+    async function openFieldsGuide() {
+      try {
+        const res = await fetch('/api/open_guide');
+        const data = await res.json();
+        if (data.success) {
+          showToast('📚 Памятка полей Ozon <b>OZON_FIELDS_GUIDE.md</b> открыта в режиме чтения!');
+        } else {
+          alert('Ошибка открытия памятки: ' + (data.error || ''));
         }
       } catch (e) {
         alert('Ошибка: ' + e.message);

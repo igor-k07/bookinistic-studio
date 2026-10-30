@@ -273,6 +273,14 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error_json(e)
 
+        elif parsed.path == "/api/open_guide":
+            guide_file = os.path.join(BASE_DIR, "OZON_FIELDS_GUIDE.md")
+            try:
+                subprocess.Popen(["open", guide_file])
+                self.send_json({"success": True, "file": guide_file})
+            except Exception as e:
+                self.send_error_json(e)
+
         elif parsed.path == "/api/reveal_file":
             qs = urllib.parse.parse_qs(parsed.query)
             mode = qs.get("mode", ["pre2011"])[0]
