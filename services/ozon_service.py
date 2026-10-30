@@ -67,15 +67,15 @@ def _make_ozon_request(endpoint: str, payload: Optional[Dict[str, Any]] = None) 
 
 def check_ozon_connection() -> Dict[str, Any]:
     """
-    Проверяет валидность Client-Id и Api-Key, запрашивая список складов.
+    Проверяет валидность Client-Id и Api-Key через /v3/product/list (подходит для роли 'Товары' / Product).
     """
-    ok, res = _make_ozon_request("/v1/warehouse/list", {})
-    if ok:
-        warehouses = res if isinstance(res, list) else res.get("result", [])
+    ok, res = _make_ozon_request("/v3/product/list", {"filter": {"visibility": "ALL"}, "limit": 1})
+    if ok and isinstance(res, dict):
+        total_items = res.get("total") or res.get("total_items") or len(res.get("items", []))
         return {
             "success": True,
-            "message": "Успешное подключение к Ozon Seller API",
-            "warehouses_count": len(warehouses),
+            "message": "Успешное подключение к Ozon Seller API (роль: Товары)",
+            "total_products": total_items,
         }
     else:
         return {
@@ -86,8 +86,8 @@ def check_ozon_connection() -> Dict[str, Any]:
 
 def get_all_ozon_product_ids(visibility: str = "ALL", limit_per_req: int = 1000) -> List[Dict[str, Any]]:
     """
-    Итерируется по /v2/product/list и возвращает все товары продавца:
-    [{ "product_id": 123456, "offer_id": "DP-B-00101", "archived": False }, ...]
+    Итерируется по /v3/product/list и возвращает все товары продавца:
+    [{ "product_id": 447624100, "offer_id": "DP-B-01557", "archived": False }, ...]
     """
     all_items: List[Dict[str, Any]] = []
     last_id = ""
@@ -101,8 +101,8 @@ def get_all_ozon_product_ids(visibility: str = "ALL", limit_per_req: int = 1000)
             "limit": min(limit_per_req, 1000)
         }
 
-        ok, res = _make_ozon_request("/v2/product/list", payload)
-        if not ok:
+        ok, res = _make_ozon_request("/v3/product/list", payload)
+        if not ok or not isinstance(res, dict):
             print(f"⚠️ [Ozon API] Ошибка получения списка товаров: {res}")
             break
 
@@ -118,52 +118,62 @@ def get_all_ozon_product_ids(visibility: str = "ALL", limit_per_req: int = 1000)
         if not last_id or len(items) < limit_per_req:
             break
 
-        time.sleep(0.2)  # вежливая пауза против rate-limit
+        time.sleep(0.1)  # вежливая пауза против rate-limit
 
     return all_items
 
 
-def get_products_info_batch(offer_ids: List[str] = None, product_ids: List[int] = None) -> List[Dict[str, Any]]:
+def get_products_info_batch(product_ids: Optional[List[int]] = None, offer_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
-    Запрашивает базовую информацию (цены, статусы, штрихкоды, фото) через /v2/product/info/list.
+    Запрашивает базовую информацию (цены, статусы, штрихкоды, фото) через /v3/product/info/list.
     Максимум 1000 товаров за один запрос.
     """
     payload: Dict[str, Any] = {}
-    if offer_ids:
-        payload["offer_id"] = offer_ids[:1000]
     if product_ids:
         payload["product_id"] = product_ids[:1000]
+    elif offer_ids:
+        payload["offer_id"] = offer_ids[:1000]
+    else:
+        return []
 
-    ok, res = _make_ozon_request("/v2/product/info/list", payload)
-    if not ok:
+    ok, res = _make_ozon_request("/v3/product/info/list", payload)
+    if not ok or not isinstance(res, dict):
         print(f"⚠️ [Ozon API] Ошибка получения инфо товаров: {res}")
         return []
 
     return res.get("items", [])
 
 
-def get_products_attributes_batch(offer_ids: List[str] = None, product_ids: List[int] = None) -> List[Dict[str, Any]]:
+def get_products_attributes_batch(product_ids: Optional[List[int]] = None, offer_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
-    Запрашивает полные атрибуты товаров (автор, год, переплет, страницы, описание) через /v3/products/info/attributes.
+    Запрашивает полные атрибуты товаров (автор, год, переплет, страницы, описание) через /v4/product/info/attributes.
     Максимум 50 товаров за один запрос.
     """
-    payload = {
+    payload: Dict[str, Any] = {
         "filter": {
             "visibility": "ALL"
         },
         "limit": 50
     }
-    if offer_ids:
-        payload["filter"]["offer_id"] = offer_ids[:50]
     if product_ids:
         payload["filter"]["product_id"] = product_ids[:50]
+        payload["limit"] = min(len(product_ids), 50)
+    elif offer_ids:
+        payload["filter"]["offer_id"] = offer_ids[:50]
+        payload["limit"] = min(len(offer_ids), 50)
+    else:
+        return []
 
-    ok, res = _make_ozon_request("/v3/products/info/attributes", payload)
+    ok, res = _make_ozon_request("/v4/product/info/attributes", payload)
     if not ok:
         print(f"⚠️ [Ozon API] Ошибка получения атрибутов товаров: {res}")
         return []
 
-    return res.get("result", []) if isinstance(res, dict) else res
+    if isinstance(res, list):
+        return res
+    if isinstance(res, dict):
+        return res.get("result", [])
+    return []
 
 
 def parse_ozon_book_to_catalog(item_info: Dict[str, Any], item_attrs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -176,10 +186,12 @@ def parse_ozon_book_to_catalog(item_info: Dict[str, Any], item_attrs: Optional[D
       "year": 1985,
       "price": 450,
       "template_mode": "pre2011",
-      "status": "ready",
+      "status": "imported",
       ...
     }
     """
+    import re
+
     article = str(item_info.get("offer_id") or "").strip()
     title = str(item_info.get("name") or "").strip()
     price = 0.0
@@ -188,77 +200,104 @@ def parse_ozon_book_to_catalog(item_info: Dict[str, Any], item_attrs: Optional[D
     except Exception:
         pass
 
-    barcode = str(item_info.get("barcode") or "").strip()
+    old_price = 0.0
+    try:
+        old_price = float(str(item_info.get("old_price") or 0).replace(",", "."))
+    except Exception:
+        pass
+
+    barcodes = item_info.get("barcodes") or []
+    barcode = str(item_info.get("barcode") or (barcodes[0] if barcodes else "")).strip()
+
     images = item_info.get("images") or []
-    primary_image = item_info.get("primary_image") or (images[0] if images else "")
+    primary_image_raw = item_info.get("primary_image")
+    if isinstance(primary_image_raw, list) and primary_image_raw:
+        primary_image = primary_image_raw[0]
+    elif isinstance(primary_image_raw, str):
+        primary_image = primary_image_raw
+    else:
+        primary_image = images[0] if images else ""
+
+    add_images = [img for img in images if img != primary_image]
 
     book: Dict[str, Any] = {
         "article": article,
         "title": title,
         "price": price,
+        "old_price": old_price,
         "barcode": barcode,
         "main_photo_url": primary_image,
-        "add_photo_urls": " ".join([img for img in images if img != primary_image]),
+        "add_photo_urls": " ".join(add_images),
         "status": "imported",
         "ozon_product_id": item_info.get("id"),
     }
 
-    # Парсим атрибуты (из /v3/products/info/attributes)
-    author = ""
-    year = None
-    pages = None
-    binding = ""
-    annotation = ""
-    condition = ""
-
+    # Точный маппинг атрибутов Ozon Seller API для категории "Печатная книга":
+    # 105: Автор, 4182: Автор на обложке, 4180: Название, 4183: Оригинальное название,
+    # 85: Издательство/Бренд, 1: Серия, 4081: Год выпуска, 4051: Страниц, 4184: ISBN,
+    # 4191: Аннотация, 9356: Переплет, 8857: Сохранность, 23273: Направление/Жанр,
+    # 8862: Возраст, 22391: Целевая аудитория, 112: Переводчик, 4082: Размеры
     if item_attrs:
         attributes = item_attrs.get("attributes", [])
         for attr in attributes:
             attr_id = attr.get("id")
             vals = [v.get("value", "") for v in attr.get("values", []) if isinstance(v, dict)]
-            val_str = ", ".join(filter(None, vals))
+            val_str = ", ".join(filter(None, vals)).strip()
+            if not val_str:
+                continue
 
-            # Имя атрибута
-            # 85: Автор, 9024: Год выпуска, 4389: Количество страниц, 4390: Тип обложки
-            # Также проверяем по словарю или ключевым словам
-            if attr_id in (85, 4191) or "автор" in str(attr.get("name", "")).lower():
-                author = val_str
-            elif attr_id in (9024, 4194) or "год" in str(attr.get("name", "")).lower():
-                import re
+            if attr_id == 105:
+                book["author"] = val_str
+            elif attr_id == 4182:
+                book["author_cover"] = val_str
+            elif attr_id == 4180 and val_str:
+                book["title"] = val_str
+            elif attr_id == 4183:
+                book["original_title"] = val_str
+            elif attr_id == 85:
+                book["publisher"] = val_str
+                book["brand"] = val_str
+            elif attr_id == 1:
+                book["series"] = val_str
+            elif attr_id == 4081:
                 m = re.findall(r"\d{4}", val_str)
                 if m:
                     try:
-                        year = int(m[0])
+                        book["year"] = int(m[0])
                     except Exception:
                         pass
-            elif attr_id == 4389 or "страниц" in str(attr.get("name", "")).lower():
-                try:
-                    pages = int(re.findall(r"\d+", val_str)[0])
-                except Exception:
-                    pass
-            elif attr_id == 4390 or "обложк" in str(attr.get("name", "")).lower() or "переплет" in str(attr.get("name", "")).lower():
-                binding = val_str
-            elif "аннотац" in str(attr.get("name", "")).lower() or "описан" in str(attr.get("name", "")).lower():
-                annotation = val_str
-            elif "сохранност" in str(attr.get("name", "")).lower():
-                condition = val_str
+            elif attr_id == 4051:
+                m = re.findall(r"\d+", val_str)
+                if m:
+                    try:
+                        book["pages"] = int(m[0])
+                    except Exception:
+                        pass
+            elif attr_id == 4184:
+                book["isbn"] = val_str
+            elif attr_id == 4191:
+                clean_ant = re.sub(r"<[^>]+>", "", val_str).strip()
+                book["annotation"] = clean_ant
+            elif attr_id == 9356:
+                book["cover_type"] = val_str
+            elif attr_id == 8857:
+                book["condition"] = val_str
+            elif attr_id == 23273:
+                book["genre"] = val_str
+            elif attr_id == 8862:
+                book["age_limit"] = val_str
+            elif attr_id == 22391:
+                book["target_audience"] = val_str
+            elif attr_id == 112:
+                book["translator"] = val_str
+            elif attr_id == 4082:
+                book["dimensions"] = val_str
 
-    if author:
-        book["author"] = author
-        book["author_cover"] = author
-    if year:
-        book["year"] = year
-    if pages:
-        book["pages"] = pages
-    if binding:
-        book["binding"] = binding
-    if annotation:
-        book["annotation"] = annotation
-    if condition:
-        book["condition"] = condition
+    if not book.get("author_cover") and book.get("author"):
+        book["author_cover"] = book["author"]
 
-    # Определяем режим шаблона: до 2011 или после 2011
-    if year and year <= 2011:
+    y = book.get("year")
+    if y and isinstance(y, int) and y <= 2011:
         book["template_mode"] = "pre2011"
     else:
         book["template_mode"] = "post2011"
@@ -289,31 +328,31 @@ def import_all_ozon_cards_to_db(on_progress: Optional[Callable[[int, int], None]
 
     for i in range(0, total_count, batch_size):
         chunk = items[i:i + batch_size]
-        offer_ids = [str(it.get("offer_id", "")).strip() for it in chunk if it.get("offer_id")]
         product_ids = [int(it["product_id"]) for it in chunk if it.get("product_id")]
 
         # 1. Получаем общую инфо (цены, ссылки на фото, штрихкод)
-        info_items = get_products_info_batch(offer_ids=offer_ids)
-        info_map = {str(it.get("offer_id", "")).strip(): it for it in info_items}
+        info_items = get_products_info_batch(product_ids=product_ids)
+        info_map = {int(it["id"]): it for it in info_items if "id" in it}
 
-        # 2. Получаем детальные атрибуты (автор, год, страницы)
-        attr_items = get_products_attributes_batch(offer_ids=offer_ids)
-        attr_map = {str(it.get("offer_id", "")).strip(): it for it in attr_items}
+        # 2. Получаем детальные атрибуты (автор, год, страницы, аннотация)
+        attr_items = get_products_attributes_batch(product_ids=product_ids)
+        attr_map = {int(it["id"]): it for it in attr_items if "id" in it}
 
-        for offer_id in offer_ids:
-            item_info = info_map.get(offer_id) or {"offer_id": offer_id}
-            item_attrs = attr_map.get(offer_id)
+        for pid in product_ids:
+            item_info = info_map.get(pid) or {"id": pid}
+            item_attrs = attr_map.get(pid)
 
             book = parse_ozon_book_to_catalog(item_info, item_attrs)
+            offer_id = book.get("article")
+            if not offer_id:
+                continue
 
             # Проверяем, есть ли уже такая книга в БД
             existing = get_book_from_db(offer_id)
             if existing:
-                # Обновляем ozon_product_id и актуальные цены/статус
-                existing["ozon_product_id"] = book.get("ozon_product_id")
-                existing["status"] = "synced"
-                if book.get("price"):
-                    existing["price"] = book["price"]
+                for k, v in book.items():
+                    if v and (not existing.get(k) or k in ("ozon_product_id", "status", "price", "images")):
+                        existing[k] = v
                 save_book_to_db(existing)
                 skipped += 1
             else:
@@ -321,9 +360,9 @@ def import_all_ozon_cards_to_db(on_progress: Optional[Callable[[int, int], None]
                 imported += 1
 
         if on_progress:
-            on_progress(min(i + batch_size, total_count), total_count)
+            on_progress(min(i + batch_size, total_count), total_count, imported, skipped)
 
-        time.sleep(0.3)  # вежливая пауза
+        time.sleep(0.15)  # вежливая пауза
 
     print(f"✅ [Ozon Import] Завершено! Импортировано новых: {imported}, обновлено существующих: {skipped} из {total_count}.")
     return {
@@ -370,9 +409,11 @@ def start_import_catalog_async() -> Dict[str, Any]:
             "done": False,
         }
         try:
-            def _on_progress(cur, tot):
+            def _on_progress(cur, tot, imp=0, upd=0):
                 _import_status["progress"] = cur
                 _import_status["total"] = tot
+                _import_status["imported"] = imp
+                _import_status["updated"] = upd
 
             res = import_all_ozon_cards_to_db(on_progress=_on_progress)
             _import_status["imported"] = res.get("imported", 0)

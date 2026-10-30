@@ -191,10 +191,16 @@
           <span>QR для телефона</span>
         </button>
 
-        <!-- API КЛЮЧ -->
+        <!-- API КЛЮЧ GEMINI -->
         <button type="button" onclick="openKeyModal()" id="keyBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-medium border border-slate-700 transition">
           <span class="w-2 h-2 rounded-full bg-amber-400" id="keyDot"></span>
           <span id="keyLabel">Gemini Key</span>
+        </button>
+
+        <!-- OZON SELLER API -->
+        <button type="button" onclick="openOzonModal()" id="ozonBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/70 hover:bg-blue-900/80 text-blue-300 text-xs font-semibold border border-blue-700/60 shadow-sm transition">
+          <span class="w-2 h-2 rounded-full bg-emerald-400" id="ozonDot"></span>
+          <span id="ozonLabel">Ozon API</span>
         </button>
 
         <!-- ГОТОВЫЕ EXCEL ТАБЛИЦЫ В ПАПКЕ ПРОЕКТА ready_tables -->
@@ -1113,6 +1119,97 @@
     </div>
   </div>
 
+  <!-- МОДАЛКА OZON SELLER API -->
+  <div id="ozonModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🚀</span>
+          <div>
+            <h3 class="text-sm font-bold text-white">Интеграция с Ozon Seller API</h3>
+            <p class="text-[11px] text-slate-400">Прямое управление каталогом магазина Ozon</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeOzonModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- СТАТУС ПОДКЛЮЧЕНИЯ -->
+      <div id="ozonConnectionCard" class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-slate-400">Статус авторизации:</span>
+          <span id="ozonStatusBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+            🟢 Проверка связи...
+          </span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Client-Id магазина:</span>
+          <span id="ozonClientIdVal" class="text-slate-200 font-mono font-semibold">—</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Товаров в магазине Ozon:</span>
+          <span id="ozonTotalProductsVal" class="text-amber-400 font-mono font-bold">—</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Следующий артикул (авто):</span>
+          <span id="ozonNextArticleVal" class="text-sky-400 font-mono font-bold">—</span>
+        </div>
+      </div>
+
+      <!-- ИМПОРТ КАТАЛОГА -->
+      <div class="p-3.5 rounded-2xl bg-blue-950/30 border border-blue-900/50 space-y-2.5">
+        <h4 class="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+          <span>📥</span> <span>Синхронизация каталога Ozon в локальную базу</span>
+        </h4>
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          Загружает существующие книги (названия, артикулы, цены, ссылки на фото) из Ozon в локальную базу SQLite. Это исключит дублирование артикулов и позволит мгновенно сверять книги при распознавании.
+        </p>
+
+        <!-- ПРОГРЕСС ИМПОРТА -->
+        <div id="ozonImportProgressBox" class="hidden space-y-1.5">
+          <div class="flex justify-between text-[11px] text-slate-300">
+            <span id="ozonImportProgressText">Синхронизация...</span>
+            <span id="ozonImportProgressPct" class="font-mono font-bold text-amber-400">0%</span>
+          </div>
+          <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+            <div id="ozonImportProgressBar" class="bg-gradient-to-r from-amber-500 to-emerald-500 h-2 transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <button type="button" onclick="startOzonCatalogImport()" id="btnStartOzonImport" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
+          <span>📥</span>
+          <span id="btnStartOzonImportText">Запустить импорт каталога Ozon</span>
+        </button>
+      </div>
+
+      <!-- НАСТРОЙКА КЛЮЧЕЙ (ПРИ НЕОБХОДИМОСТИ) -->
+      <details class="text-xs text-slate-400 group">
+        <summary class="cursor-pointer hover:text-slate-200 transition select-none flex items-center gap-1 py-1">
+          <span>⚙️ Сменить ключи доступа Ozon API</span>
+        </summary>
+        <div class="pt-2 space-y-2">
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-0.5">Client-Id:</label>
+            <input type="text" id="ozonClientIdInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none" placeholder="870997">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 mb-0.5">Api-Key (роль 'Товары' / Product):</label>
+            <input type="password" id="ozonApiKeyInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none" placeholder="dce28933-...">
+          </div>
+          <button type="button" onclick="saveOzonKeysFromModal()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-semibold text-xs border border-slate-700 transition">
+            Сохранить ключи
+          </button>
+        </div>
+      </details>
+
+      <div class="flex justify-between items-center pt-2 border-t border-slate-800">
+        <button type="button" onclick="refreshOzonStatus()" class="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
+          <span>🔄</span> <span>Обновить статус</span>
+        </button>
+        <button type="button" onclick="closeOzonModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-xs font-semibold text-slate-300 transition">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <!-- МОДАЛЬНОЕ ОКНО ПРОСМОТРА ИНФО-КАРТОЧКИ -->
   <div id="cardModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closeCardModal()">
     <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-3">
@@ -1937,6 +2034,7 @@
     window.addEventListener('DOMContentLoaded', async () => {
       setTemplateMode('pre2011', false);
       loadSavedKey();
+      loadOzonStatus();
       updateBooksCount();
       refreshPreviewTable('pre2011');
       loadMobileUrl();
@@ -6894,6 +6992,229 @@
         body: JSON.stringify({ key: val })
       });
       closeKeyModal();
+    }
+
+    // =========================================================================
+    // УПРАВЛЕНИЕ ИНТЕГРАЦИЕЙ OZON SELLER API
+    // =========================================================================
+    let ozonImportInterval = null;
+
+    async function loadOzonStatus() {
+      try {
+        const res = await fetch('/api/ozon/status');
+        const data = await res.json();
+        updateOzonUI(data);
+        return data;
+      } catch (e) {
+        console.error('Ошибка проверки Ozon API:', e);
+        updateOzonUI({ configured: false, success: false, message: 'Сервер недоступен' });
+      }
+    }
+
+    function updateOzonUI(data) {
+      const dot = document.getElementById('ozonDot');
+      const label = document.getElementById('ozonLabel');
+      const badge = document.getElementById('ozonStatusBadge');
+      const cidVal = document.getElementById('ozonClientIdVal');
+      const totVal = document.getElementById('ozonTotalProductsVal');
+      const nextArtVal = document.getElementById('ozonNextArticleVal');
+
+      const isOk = data && data.configured && data.success;
+      const isConfigured = data && data.configured;
+
+      if (dot) {
+        if (isOk) {
+          dot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]';
+        } else if (isConfigured) {
+          dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+        }
+      }
+
+      if (label) {
+        if (isOk) {
+          label.textContent = `Ozon API (${data.total_products || 0})`;
+          label.title = `Ozon подключен: ${data.total_products || 0} товаров`;
+        } else if (isConfigured) {
+          label.textContent = 'Ozon: Ошибка';
+          label.title = data.message || 'Ошибка подключения';
+        } else {
+          label.textContent = 'Ozon API';
+          label.title = 'Ozon Seller API не настроен';
+        }
+      }
+
+      if (badge) {
+        if (isOk) {
+          badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-800';
+          badge.textContent = '🟢 Активно (роль: Товары)';
+        } else if (isConfigured) {
+          badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-950 text-rose-400 border border-rose-800';
+          badge.textContent = '🔴 Ошибка: ' + (data.message || 'нет связи');
+        } else {
+          badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700';
+          badge.textContent = '⚪ Не настроен';
+        }
+      }
+
+      if (cidVal) {
+        cidVal.textContent = data.client_id || '—';
+      }
+      if (totVal) {
+        totVal.textContent = (data.total_products !== undefined && data.total_products !== null) ? `${data.total_products} шт.` : '—';
+      }
+      if (nextArtVal) {
+        nextArtVal.textContent = data.next_article || '—';
+      }
+    }
+
+    function openOzonModal() {
+      const modal = document.getElementById('ozonModal');
+      if (modal) modal.classList.remove('hidden');
+      loadOzonStatus();
+      checkOzonImportStatus();
+    }
+
+    function closeOzonModal() {
+      const modal = document.getElementById('ozonModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function refreshOzonStatus() {
+      const data = await loadOzonStatus();
+      if (data && data.success) {
+        alert(`✅ Подключение к Ozon Seller API активно!\nТоваров в магазине: ${data.total_products || 0}\nСледующий артикул: ${data.next_article || '—'}`);
+      } else {
+        alert(`⚠️ Ozon API: ${data ? data.message : 'Ошибка связи'}`);
+      }
+    }
+
+    async function saveOzonKeysFromModal() {
+      const clientId = document.getElementById('ozonClientIdInput')?.value.trim();
+      const apiKey = document.getElementById('ozonApiKeyInput')?.value.trim();
+
+      if (!clientId || !apiKey) {
+        alert('⚠️ Пожалуйста, укажите Client-Id и Api-Key магазина Ozon.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/ozon/save_keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_id: clientId, api_key: apiKey })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ Ключи Ozon сохранены! Проверяем подключение...');
+          await loadOzonStatus();
+        } else {
+          alert('❌ Ошибка сохранения ключей: ' + (data.error || 'Неизвестная ошибка'));
+        }
+      } catch (e) {
+        alert('❌ Сбой запроса сохранения ключей Ozon: ' + e.message);
+      }
+    }
+
+    async function checkOzonImportStatus() {
+      try {
+        const res = await fetch('/api/ozon/import_status');
+        const data = await res.json();
+        if (data.success && data.status) {
+          renderOzonImportProgress(data.status);
+          if (data.status.running && !ozonImportInterval) {
+            pollOzonImportProgress();
+          }
+        }
+      } catch (e) {}
+    }
+
+    function renderOzonImportProgress(st) {
+      const box = document.getElementById('ozonImportProgressBox');
+      const text = document.getElementById('ozonImportProgressText');
+      const pctEl = document.getElementById('ozonImportProgressPct');
+      const bar = document.getElementById('ozonImportProgressBar');
+      const btn = document.getElementById('btnStartOzonImport');
+      const btnText = document.getElementById('btnStartOzonImportText');
+
+      if (!box) return;
+
+      if (st.running || st.progress > 0 || st.done || st.error) {
+        box.classList.remove('hidden');
+      }
+
+      const total = st.total || 0;
+      const cur = st.progress || 0;
+      const pct = total > 0 ? Math.min(100, Math.round((cur / total) * 100)) : (st.running ? 5 : 0);
+
+      if (pctEl) pctEl.textContent = `${pct}%`;
+      if (bar) bar.style.width = `${pct}%`;
+
+      if (st.running) {
+        if (btn) btn.disabled = true;
+        if (btnText) btnText.textContent = '⏳ Идет синхронизация...';
+        if (text) text.textContent = `Загружено ${cur} из ${total} (новых: ${st.imported || 0}, обновлено: ${st.updated || 0})`;
+      } else if (st.done) {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = '📥 Запустить повторную синхронизацию';
+        if (text) text.textContent = `✅ Успешно синхронизировано ${cur} карточек! (Новых: ${st.imported || 0}, в базе: ${st.updated || 0})`;
+      } else if (st.error) {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = '📥 Попробовать снова';
+        if (text) text.textContent = `❌ Ошибка импорта: ${st.error}`;
+      }
+    }
+
+    async function startOzonCatalogImport() {
+      if (!confirm('Запустить полную синхронизацию карточек из Ozon в локальную базу SQLite?\nЭто обновит каталог, цены, фото и рассчитает актуальный следующий артикул.')) {
+        return;
+      }
+
+      const btn = document.getElementById('btnStartOzonImport');
+      const btnText = document.getElementById('btnStartOzonImportText');
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = 'Запуск импорта...';
+
+      try {
+        const res = await fetch('/api/ozon/start_import', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          const box = document.getElementById('ozonImportProgressBox');
+          if (box) box.classList.remove('hidden');
+          pollOzonImportProgress();
+        } else {
+          alert('⚠️ Ошибка: ' + (data.error || 'Не удалось запустить импорт'));
+          if (btn) btn.disabled = false;
+          if (btnText) btnText.textContent = 'Запустить импорт каталога Ozon';
+        }
+      } catch (e) {
+        alert('❌ Ошибка запуска импорта: ' + e.message);
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = 'Запустить импорт каталога Ozon';
+      }
+    }
+
+    function pollOzonImportProgress() {
+      if (ozonImportInterval) clearInterval(ozonImportInterval);
+
+      ozonImportInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/api/ozon/import_status');
+          const data = await res.json();
+          if (data.success && data.status) {
+            renderOzonImportProgress(data.status);
+            if (!data.status.running) {
+              clearInterval(ozonImportInterval);
+              ozonImportInterval = null;
+              loadOzonStatus();
+              updateBooksCount();
+            }
+          }
+        } catch (e) {
+          console.error('Ошибка опроса прогресса импорта:', e);
+        }
+      }, 1200);
     }
   </script>
 </body>

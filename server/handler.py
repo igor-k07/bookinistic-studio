@@ -227,7 +227,7 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             try:
                 cfg = get_ozon_config()
                 if not cfg or not cfg.get("client_id") or not cfg.get("api_key"):
-                    self.send_json({"configured": False, "message": "Ключи Ozon Seller API не настроены"})
+                    self.send_json({"configured": False, "message": "Ключи Ozon Seller API не настроены", "next_article": get_next_article_number()})
                 else:
                     status_res = ozon_service.check_ozon_connection()
                     cid = str(cfg.get("client_id", ""))
@@ -235,6 +235,7 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                     self.send_json({
                         "configured": True,
                         "client_id": masked_cid,
+                        "next_article": get_next_article_number(),
                         **status_res
                     })
             except Exception as e:
