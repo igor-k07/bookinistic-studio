@@ -14,27 +14,47 @@
   <style>
     body { font-family: 'Inter', sans-serif; }
     .mono { font-family: 'JetBrains Mono', monospace; }
-    /* Dark Theme Cropper.js Styling */
+    /* Clean Ultra-Minimalist Cropper.js Styling */
     .cropper-view-box {
-      outline: 2px solid #f59e0b !important;
-      outline-color: rgba(245, 158, 11, 0.9) !important;
+      outline: 1.2px solid rgba(255, 255, 255, 0.95) !important;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4) !important;
     }
     .cropper-line {
-      background-color: #f59e0b !important;
+      background-color: transparent !important;
+    }
+    .cropper-dashed {
+      border: 0 dashed rgba(255, 255, 255, 0.4) !important;
+      opacity: 0.6 !important;
+    }
+    .cropper-dashed.dashed-h {
+      border-top-width: 1px !important;
+      border-bottom-width: 1px !important;
+    }
+    .cropper-dashed.dashed-v {
+      border-left-width: 1px !important;
+      border-right-width: 1px !important;
+    }
+    .cropper-center {
+      display: none !important;
     }
     .cropper-point {
-      background-color: #f59e0b !important;
-      width: 10px !important;
-      height: 10px !important;
-      border-radius: 2px !important;
+      background-color: #ffffff !important;
+      border: 1px solid rgba(0, 0, 0, 0.65) !important;
+      width: 6px !important;
+      height: 6px !important;
+      border-radius: 50% !important;
       opacity: 0.95 !important;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
     }
-    .cropper-point.point-se {
-      width: 12px !important;
-      height: 12px !important;
+    .cropper-point.point-se,
+    .cropper-point.point-sw,
+    .cropper-point.point-ne,
+    .cropper-point.point-nw {
+      width: 7.5px !important;
+      height: 7.5px !important;
     }
     .cropper-modal {
-      background-color: rgba(2, 6, 23, 0.78) !important;
+      background-color: rgba(2, 6, 23, 0.65) !important;
     }
     .cropper-bg {
       background-image: none !important;
@@ -250,9 +270,14 @@
             <button type="button" onclick="setPoolScale('xlarge')" id="scaleBtn_xlarge" class="px-2.5 py-1 text-xs rounded-lg transition font-medium text-slate-400 hover:text-white" title="Экстра-крупный размер (300px)">Экстра</button>
           </div>
 
+          <!-- МАССОВОЕ ИИ-ВЫРЕЗАНИЕ ФОНА -->
+          <button type="button" id="batchAiBtn" onclick="batchAiProcessAllPool()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-violet-700 to-indigo-700 hover:from-violet-600 hover:to-indigo-600 text-white text-xs font-bold border border-violet-500/40 transition flex items-center gap-1.5 shadow-md shadow-violet-700/20" title="Автоматически вырезать фон стола у всех необработанных фото нейросетью rembg на чистый белый (#FFFFFF)">
+            <span>✨ ИИ-вырезать фон пачке</span>
+          </button>
+
           <!-- МАССОВОЕ ОТБЕЛИВАНИЕ -->
           <button type="button" id="batchWhitenBtn" onclick="batchWhitenAllPool()" class="px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold border border-emerald-800 transition flex items-center gap-1.5 shadow-sm" title="Автоматически применить фильтр белого фона Ozon ко всем неотбеленным фото в пуле">
-            <span>✨ Отбелить всю пачку (Ozon)</span>
+            <span>⚪ Отбелить (фильтр)</span>
           </button>
 
           <!-- Выбрать файлы с диска -->
@@ -265,6 +290,50 @@
           <button type="button" onclick="clearPool()" class="px-2.5 py-1.5 rounded-xl hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 text-xs transition border border-transparent hover:border-rose-900">
             Очистить
           </button>
+        </div>
+      </div>
+
+      <!-- ПАНЕЛЬ АВТО-КОНВЕЙЕРА: ПАКЕТНАЯ РАСКЛАДКА ПО КНИГАМ С ЗАДАННОГО НОМЕРА И ПАРАЛЛЕЛЬНЫЙ ИИ-АНАЛИЗ -->
+      <div id="batchPipelineToolbar" class="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-slate-900 via-amber-950/20 to-slate-900 rounded-2xl border border-amber-500/35 text-xs shadow-md">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <div class="flex items-center gap-1.5 font-bold text-amber-400">
+            <span class="text-base">⚡</span>
+            <span>Авто-конвейер:</span>
+          </div>
+
+          <div class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
+            <span class="text-slate-400 font-medium">Старт с номера:</span>
+            <input type="text" id="batchStartArticle" value="" placeholder="DP-B-02743" class="w-28 bg-slate-900 border border-amber-500/50 rounded-lg px-2 py-0.5 text-amber-300 font-mono font-bold text-xs focus:outline-none focus:ring-1 focus:ring-amber-400" title="Начальный номер артикула для авто-раскладки пачки">
+          </div>
+
+          <div class="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
+            <span class="text-slate-400 font-medium">Схема:</span>
+            <select id="batchPhotosPerBook" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5 text-slate-200 text-xs focus:outline-none font-medium">
+              <option value="smart_ai" selected>🤖 Умный ИИ-разделитель (обложки, мульти-титулы, дефекты)</option>
+              <option value="3">по 3 фото (Обложка + Задник + Титул)</option>
+              <option value="4">по 4 фото (+ Иллюстрация)</option>
+              <option value="5">по 5 фото (+ Дефекты)</option>
+              <option value="2">по 2 фото (Обложка + Титул)</option>
+            </select>
+          </div>
+
+          <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 select-none bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800 hover:border-slate-700 transition">
+            <input type="checkbox" id="batchAutoDistributeToggle" checked class="accent-amber-500 rounded">
+            <span>Авто-раскладка и ИИ при загрузке с телефона</span>
+          </label>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="runBatchDistributePipeline()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/25 active:scale-95 transition">
+            <span>📦</span>
+            <span>Раскидать пул и запустить ИИ</span>
+          </button>
+        </div>
+
+        <!-- Полоса статуса конвейера -->
+        <div id="batchPipelineStatus" class="hidden w-full text-xs font-mono text-emerald-300 bg-slate-950/90 border border-emerald-500/40 rounded-xl px-3 py-1.5 flex items-center justify-between">
+          <span id="batchPipelineStatusText">⚡ Конвейер активен</span>
+          <span id="batchPipelineCounter" class="text-amber-400 font-bold"></span>
         </div>
       </div>
 
@@ -1450,7 +1519,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button type="button" onclick="closePhotoStudio()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white flex items-center justify-center transition" title="Закрыть редактор (Esc)">✕</button>
+          <button type="button" onclick="closePhotoStudio(false)" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white flex items-center justify-center transition" title="Закрыть редактор (Esc)">✕</button>
         </div>
       </div>
 
@@ -1474,8 +1543,8 @@
               <button type="button" id="btnModeMove" onclick="setStudioInteractionMode('move')" class="py-1 px-2.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 bg-amber-600 text-white shadow-sm" title="Режим перемещения (клавиша M или V): зажмите мышь и двигайте фото в окне">
                 <span>✋</span> <span>Двигать <kbd class="opacity-75 text-[9px] font-mono bg-black/40 px-1 py-0.5 rounded">M</kbd></span>
               </button>
-              <button type="button" id="btnModeCrop" onclick="setStudioInteractionMode('crop')" class="py-1 px-2.5 rounded-lg text-[11px] font-medium transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300" title="Режим среза (клавиша C): зажмите мышь и выделите область — кадр мгновенно приблизится по контуру">
-                <span>✂️</span> <span>Срез <kbd class="opacity-75 text-[9px] font-mono bg-black/40 px-1 py-0.5 rounded">C</kbd></span>
+              <button type="button" id="btnModeCrop" onclick="toggleStudioCropMode()" class="py-1 px-2.5 rounded-lg text-[11px] font-medium transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300" title="Включить или выключить режим обрезания (клавиша C)">
+                <span>✂️</span> <span id="btnModeCropText">Срез</span> <kbd class="opacity-75 text-[9px] font-mono bg-black/40 px-1 py-0.5 rounded">C</kbd>
               </button>
               <button type="button" id="btnStudioUndo" onclick="undoStudioAction()" class="py-1 px-2 rounded-lg text-[11px] font-medium transition flex items-center gap-1 bg-slate-800 hover:bg-slate-750 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed" title="Отменить последнее действие (клавиша ⌘Z / Ctrl+Z)">
                 <span>↩️</span> <span>Назад <kbd class="opacity-60 text-[9px] font-mono">⌘Z</kbd></span>
@@ -1483,8 +1552,8 @@
               <button type="button" id="btnStudioRedo" onclick="redoStudioAction()" class="py-1 px-2 rounded-lg text-[11px] font-medium transition flex items-center gap-1 bg-slate-800 hover:bg-slate-750 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed" title="Повторить отмененное действие (клавиша ⇧⌘Z / Ctrl+Y)">
                 <span>↪️</span> <span>Вперед</span>
               </button>
-              <button type="button" id="btnResetCrop" onclick="resetCropToOriginal()" class="hidden py-1 px-2 rounded-lg text-[11px] font-medium transition flex items-center gap-1 bg-rose-950/70 hover:bg-rose-900 border border-rose-600/40 text-rose-300" title="Сбросить сделанный срез и вернуть исходный полный кадр">
-                <span>↩️</span> <span>Сбросить срез</span>
+              <button type="button" id="btnResetCrop" onclick="resetCropToOriginal()" class="hidden py-1 px-2 rounded-lg text-[11px] font-medium transition flex items-center gap-1 bg-rose-950/70 hover:bg-rose-900 border border-rose-600/40 text-rose-300" title="Снять рамку кадрирования и вернуть полный кадр">
+                <span>✕</span> <span>Снять рамку</span>
               </button>
             </div>
 
@@ -1541,8 +1610,8 @@
                   <span>↪️</span> <span>Шаг вперед</span>
                 </button>
               </div>
-              <button type="button" onclick="revertStudioToCameraOriginal()" class="w-full py-1.5 px-2 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-[11px] font-semibold text-center transition flex items-center justify-center gap-1 shadow-sm" title="Сбросить все изменения и вернуть сырой снимок с камеры">
-                <span>⏪</span> <span>Вернуть сырой снимок с камеры</span>
+              <button type="button" onclick="revertStudioToCameraOriginal()" class="w-full py-1.5 px-2 rounded-lg bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-[11px] font-semibold text-center transition flex items-center justify-center gap-1 shadow-sm" title="Сбросить все изменения и сразу вернуть сырой снимок с камеры">
+                <span>⏪</span> <span>Вернуть снимок с камеры</span>
               </button>
               <button type="button" id="studioCompareBtn" onmousedown="showStudioOriginal()" onmouseup="hideStudioOriginal()" ontouchstart="showStudioOriginal()" ontouchend="hideStudioOriginal()" class="w-full py-1.5 px-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-300 text-[11px] font-medium text-center select-none transition" title="Зажмите кнопку мыши, чтобы временно увидеть исходное фото">
                 👁️ Зажать: сравнить с оригиналом
@@ -1732,7 +1801,7 @@
           <span>Оригинал защищен</span>
         </div>
         <div class="flex items-center gap-3">
-          <button type="button" onclick="closePhotoStudio()" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5" title="Закрыть редактор без сохранения (клавиша Esc)">
+          <button type="button" onclick="closePhotoStudio(false)" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-xs font-semibold text-slate-300 transition flex items-center gap-1.5" title="Закрыть редактор без сохранения (клавиша Esc)">
             <span>Отмена</span> <kbd class="opacity-60 text-[10px] font-mono bg-black/40 px-1 py-0.5 rounded">Esc</kbd>
           </button>
           <button type="button" id="btnStudioSave" onclick="saveStudioChanges()" class="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-emerald-500/20 flex items-center gap-2" title="Применить все изменения и сохранить (клавиша Enter или Cmd+S)">
@@ -2109,7 +2178,16 @@
         clearForm(initArt);
         autoCalcDimensions();
       }
+      initBatchArticleInput();
     });
+
+    async function initBatchArticleInput() {
+      const el = document.getElementById('batchStartArticle');
+      if (el && !el.value) {
+        const nextArt = await calculateNextArticle(0);
+        el.value = nextArt;
+      }
+    }
 
     // -------------------------------------------------------------
     // РАБОТА С ПУЛОМ ФОТОГРАФИЙ
@@ -2122,9 +2200,10 @@
         const res = await fetch('/api/load_test_batch');
         const data = await res.json();
         if (data.photos && data.photos.length > 0) {
+          const addedPhotos = [];
           data.photos.forEach(p => {
             const prev = 'data:' + p.mime + ';base64,' + p.data;
-            photoPool.push({
+            const photoObj = {
               id: 'photo_' + Math.random().toString(36).substr(2, 9),
               name: p.name,
               mime: p.mime,
@@ -2134,12 +2213,16 @@
               rawOriginal: prev,
               croppedBase: null,
               isCropped: false,
+              isAiProcessed: false,
               assignedBookId: null,
               assignedSlot: null
-            });
+            };
+            photoPool.push(photoObj);
+            addedPhotos.push(photoObj);
           });
           renderPool();
           scheduleAutoSave();
+          addedPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
         }
       } catch (e) {
         alert('Ошибка загрузки теста: ' + e.message);
@@ -2187,9 +2270,10 @@
     async function handlePoolFiles(e) {
       const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
       if (files.length === 0) return;
+      const addedPhotos = [];
       for (const f of files) {
         const res = await resizeImage(f);
-        photoPool.push({
+        const photoObj = {
           id: 'photo_' + Math.random().toString(36).substr(2, 9),
           name: res.name,
           mime: res.mime,
@@ -2199,13 +2283,17 @@
           rawOriginal: res.preview,
           croppedBase: null,
           isCropped: false,
+          isAiProcessed: false,
           assignedBookId: null,
           assignedSlot: null
-        });
+        };
+        photoPool.push(photoObj);
+        addedPhotos.push(photoObj);
       }
       renderPool();
       scheduleAutoSave();
       e.target.value = '';
+      addedPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
     }
 
     function clearPool() {
@@ -2454,7 +2542,7 @@
               <div class="flex items-center gap-0.5 bg-black/90 backdrop-blur-sm p-0.5 rounded-lg shadow border border-slate-700/60 shrink-0">
                 <button type="button" onclick="quickAiProcessPhoto('${p.id}', event)" class="p-1 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-xs transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                 <button type="button" onclick="openPhotoStudio('${p.id}', event)" class="p-1 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-xs transition" title="✏️ Редактор: кадрирование и фильтры">✏️</button>
-                ${(processed || p.isAiProcessed) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-1 rounded hover:bg-rose-900/80 text-rose-400 hover:text-rose-200 text-xs transition" title="Вернуть исходный снимок (сбросить обрезку и фильтры)">↩️</button>` : ''}
+                ${(p.cameraOriginal || p.isAiProcessed || processed || p.isCropped || (p.history && p.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-1 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-xs transition flex items-center justify-center shadow-xs" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
               </div>
 
             </div>
@@ -2989,10 +3077,11 @@
           b.slots.mantra_defects.length
         ].reduce((a, b) => a + b, 0);
 
+        const statusIcon = b.isAiRecognizing ? '⏳' : (b.isAiRecognized ? '✨' : (b.isSavedToExcel ? '✅' : '📖'));
         return `
           <div class="inline-flex items-center rounded-xl overflow-hidden border transition ${isActive ? 'border-amber-500 bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'border-slate-700 bg-slate-800 hover:bg-slate-750 text-slate-300'}">
-            <button type="button" onclick="switchBook(${b.id})" class="px-3 py-1.5 text-xs font-semibold flex items-center gap-2 text-left">
-              <span>${b.isSavedToExcel ? '✅' : '📖'} <span class="font-mono tracking-tight font-bold">${art}</span><span class="opacity-80">${titleSnippet}</span></span>
+            <button type="button" onclick="switchBook(${b.id})" class="px-3 py-1.5 text-xs font-semibold flex items-center gap-2 text-left" title="${b.isAiRecognizing ? 'Книга сейчас анализируется нейросетью Gemini...' : (b.isAiRecognized ? 'Книга успешно распознана нейросетью!' : '')}">
+              <span>${statusIcon} <span class="font-mono tracking-tight font-bold">${art}</span><span class="opacity-80">${titleSnippet}</span></span>
               <span class="px-1.5 py-0.2 rounded-full text-[10px] ${isActive ? 'bg-slate-950 text-amber-300' : 'bg-slate-900 text-slate-400'} font-mono">${count} фото</span>
             </button>
             ${booksSession.length > 1 ? `
@@ -3116,54 +3205,9 @@
       saturation: 0
     };
 
-    let studioAutoCommitTimer = null;
-
     function markStudioChanged(label = 'Изменение', immediate = false) {
-      hasUnsavedStudioChanges = false; // Изменения сразу сохраняются и актуальны
-      if (immediate) {
-        if (studioAutoCommitTimer) clearTimeout(studioAutoCommitTimer);
-        studioAutoCommitTimer = null;
-        autoCommitStudioChanges();
-      } else {
-        if (studioAutoCommitTimer) clearTimeout(studioAutoCommitTimer);
-        studioAutoCommitTimer = setTimeout(() => {
-          studioAutoCommitTimer = null;
-          autoCommitStudioChanges();
-        }, 300);
-      }
+      hasUnsavedStudioChanges = true;
       updateAiBatchBtnState();
-    }
-
-    function autoCommitStudioChanges() {
-      if (studioAutoCommitTimer) {
-        clearTimeout(studioAutoCommitTimer);
-        studioAutoCommitTimer = null;
-      }
-      if (!currentEditingPhoto || !cropperInstance) return;
-      try {
-        const croppedCanvas = cropperInstance.getCroppedCanvas({
-          fillColor: '#ffffff',
-          imageSmoothingEnabled: true,
-          imageSmoothingQuality: 'medium'
-        });
-        if (croppedCanvas) {
-          applyPixelFiltersToCanvas(croppedCanvas, studioState);
-          const dataUrl = croppedCanvas.toDataURL('image/jpeg', 0.90);
-          const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-          currentEditingPhoto.preview = dataUrl;
-          currentEditingPhoto.data = base64Data;
-          currentEditingPhoto.mime = 'image/jpeg';
-          currentEditingPhoto.whiten = studioState.whiten;
-          currentEditingPhoto.brightness = studioState.brightness;
-          currentEditingPhoto.contrast = studioState.contrast;
-          currentEditingPhoto.saturation = studioState.saturation;
-          currentEditingPhoto.isProcessed = true;
-          renderActiveBookSlots();
-          renderPool();
-        }
-      } catch (e) {
-        // Фоновая фиксация
-      }
     }
 
     function updateAiBatchBtnState() {
@@ -3234,6 +3278,7 @@
         croppedBase: currentEditingPhoto.croppedBase,
         rawOriginal: currentEditingPhoto.rawOriginal,
         cameraOriginal: currentEditingPhoto.cameraOriginal,
+        aiWhiteOriginal: currentEditingPhoto.aiWhiteOriginal,
         isCropped: Boolean(currentEditingPhoto.isCropped),
         isAiProcessed: Boolean(currentEditingPhoto.isAiProcessed),
         hasCropBox: Boolean(cropperInstance && cropperInstance.cropped),
@@ -3333,7 +3378,12 @@
 
       // 4. Проверяем, изменился ли сам файл изображения (например, ИИ вырезка фона)
       const currentImgSrc = (cropperInstance && cropperInstance.image) ? (cropperInstance.image.src || '') : '';
-      const targetSrc = targetState.croppedBase || targetState.preview || currentEditingPhoto.cameraOriginal;
+      if (targetState.aiWhiteOriginal !== undefined) {
+        currentEditingPhoto.aiWhiteOriginal = targetState.aiWhiteOriginal;
+      }
+      const targetSrc = (targetState.isCropped && targetState.croppedBase)
+        ? targetState.croppedBase
+        : (currentEditingPhoto.aiWhiteOriginal || currentEditingPhoto.cameraOriginal || targetState.preview);
       const isDifferentImageSrc = !cropperInstance || (currentImgSrc && !currentImgSrc.endsWith(targetSrc) && currentImgSrc !== targetSrc);
 
       if (isDifferentImageSrc) {
@@ -3602,7 +3652,9 @@
       updateStudioPhotoNavUI();
       updateStudioHistoryUI();
 
-      const baseSource = photo.croppedBase || photo.cameraOriginal || photo.rawOriginal || photo.preview;
+      const baseSource = (photo.isCropped && photo.croppedBase)
+        ? photo.croppedBase
+        : (photo.aiWhiteOriginal || photo.cameraOriginal || photo.rawOriginal || photo.preview);
       document.getElementById('photoStudioModal').classList.remove('hidden');
 
       reloadStudioCropper(baseSource, () => {
@@ -3612,6 +3664,32 @@
         fitStudioImageToContainer(false);
         initStudioSmoothZoom();
         resetCropStateUI();
+
+        // Если есть сохраненные относительные координаты контура книги, сразу выставляем рамку (только если фото еще НЕ обрезано)
+        if (!photo.isCropped && photo.aiWhiteOriginal && photo.aiCropRelative) {
+          try {
+            const canvasData = cropperInstance.getCanvasData();
+            const rel = photo.aiCropRelative;
+            const cbLeft = canvasData.left + rel.x * canvasData.width;
+            const cbTop = canvasData.top + rel.y * canvasData.height;
+            const cbWidth = rel.w * canvasData.width;
+            const cbHeight = rel.h * canvasData.height;
+            cropperInstance.crop();
+            isProgrammaticCropBoxUpdate = true;
+            cropperInstance.setCropBoxData({
+              left: cbLeft,
+              top: cbTop,
+              width: cbWidth,
+              height: cbHeight
+            });
+            isProgrammaticCropBoxUpdate = false;
+            captureCropBoxOnOriginal();
+            zoomStudioToCropBox();
+          } catch (err) {
+            console.error('Ошибка выставления авто-рамки книги:', err);
+          }
+        }
+
         if (photo.isCropped) {
           updateCropResetButtonVisibility();
         }
@@ -3675,15 +3753,16 @@
             markStudioChanged();
           },
           cropend() {
-            if (!isProgrammaticCropBoxUpdate) {
+            if (!isProgrammaticCropBoxUpdate && cropperInstance && cropperInstance.cropped) {
+              const cb = cropperInstance.getCropBoxData();
+              if (cb && cb.width > 25 && cb.height > 25) {
+                zoomStudioToCropBox();
+              }
               captureCropBoxOnOriginal();
             }
-            if (cropperInstance && cropperInstance.cropped) {
-              const data = cropperInstance.getData(true);
-              if (data && data.width > 20 && data.height > 20) {
-                applyCropDirectly();
-              }
-            }
+            updateCropResolution();
+            updateCropResetButtonVisibility();
+            markStudioChanged();
           },
           zoom() {
             updateZoomBadge();
@@ -3697,7 +3776,8 @@
     function updateCropResetButtonVisibility() {
       const btn = document.getElementById('btnResetCrop');
       if (!btn) return;
-      if (currentEditingPhoto && (currentEditingPhoto.isCropped || preCropImageSrc)) {
+      const hasCrop = Boolean((cropperInstance && cropperInstance.cropped) || (currentEditingPhoto && (currentEditingPhoto.isCropped || currentEditingPhoto.croppedBase)) || preCropImageSrc);
+      if (hasCrop) {
         btn.classList.remove('hidden');
       } else {
         btn.classList.add('hidden');
@@ -3707,62 +3787,92 @@
     function resetCropToOriginal() {
       if (!cropperInstance) return;
 
-      pushPhotoHistory(currentEditingPhoto, 'Сброс среза');
+      pushPhotoHistory(currentEditingPhoto, 'Сброс рамки');
 
-      if (currentEditingPhoto) {
+      if (currentEditingPhoto && (currentEditingPhoto.croppedBase || currentEditingPhoto.isCropped)) {
+        const origSrc = currentEditingPhoto.aiWhiteOriginal || currentEditingPhoto.cameraOriginal || currentEditingPhoto.rawOriginal || currentEditingPhoto.preview;
         currentEditingPhoto.croppedBase = null;
         currentEditingPhoto.isCropped = false;
+        currentEditingPhoto.isAutoCropped = false;
+        currentEditingPhoto.aiCropRelative = null;
+        currentEditingPhoto.preview = origSrc;
+        currentEditingPhoto.data = origSrc.includes(',') ? origSrc.split(',')[1] : origSrc;
+        preCropImageSrc = null;
+        studioCropBoxOnOriginal = null;
+        reloadStudioCropper(origSrc, () => {
+          if (studioCurrentRotation !== 0) {
+            cropperInstance.rotateTo(studioCurrentRotation);
+          }
+          fitStudioImageToContainer(false);
+          setStudioInteractionMode('move');
+          updateCropRatioButtons(null);
+          updateCropResolution();
+          updateZoomBadge();
+          applyStudioFilterPreview();
+          updateCropResetButtonVisibility();
+          updateStudioHistoryUI();
+          renderPool();
+          renderActiveBookSlots();
+          scheduleAutoSave();
+          markStudioChanged('Сброс рамки', true);
+        });
+      } else {
+        if (currentEditingPhoto) {
+          currentEditingPhoto.isCropped = false;
+          currentEditingPhoto.isAutoCropped = false;
+          currentEditingPhoto.aiCropRelative = null;
+        }
+        studioCropBoxOnOriginal = null;
+        cropperInstance.clear();
+        setStudioInteractionMode('move');
+        updateCropRatioButtons(null);
+        updateCropResolution();
+        updateZoomBadge();
+        updateCropResetButtonVisibility();
+        updateStudioHistoryUI();
+        markStudioChanged('Сброс рамки', true);
       }
-      studioCropBoxOnOriginal = null;
-      cropperInstance.clear();
-      fitStudioImageToContainer(true);
-      setStudioInteractionMode('move');
-      updateCropRatioButtons(null);
-      updateCropResolution();
-      updateZoomBadge();
-      applyStudioFilterPreview();
-      updateCropResetButtonVisibility();
-      updateStudioHistoryUI();
-      markStudioChanged('Сброс среза', true);
-      showToast('↩️ Срез сброшен: возвращен исходный полный кадр');
+      showToast('↩️ Рамка снята: выбран исходный полный кадр');
     }
 
     const cancelCropMode = resetCropToOriginal;
 
-    function zoomToCropBoxSmooth() {
-      if (!cropperInstance || !cropperInstance.cropped || !currentEditingPhoto) return;
+    function zoomStudioToCropBox() {
+      if (!cropperInstance || !cropperInstance.cropped) return;
 
       const container = cropperInstance.getContainerData();
       const canvas = cropperInstance.getCanvasData();
       const cb = cropperInstance.getCropBoxData();
 
-      if (!cb.width || !cb.height || cb.width < 20 || cb.height < 20) return;
+      if (!cb.width || !cb.height || cb.width < 25 || cb.height < 25) return;
 
-      const pad = 24;
-      const targetW = container.width - pad * 2;
-      const targetH = container.height - pad * 2;
+      const padX = 40;
+      const padTop = 32;
+      const padBottom = 135; // Надежный безопасный запас снизу, рамка и маркеры гарантированно не перекрываются нижней панелью управления
+      const targetW = container.width - padX * 2;
+      const targetH = container.height - padTop - padBottom;
       if (targetW <= 0 || targetH <= 0) return;
 
       const scale = Math.min(targetW / cb.width, targetH / cb.height);
       if (!isFinite(scale) || scale <= 0) return;
 
-      pushPhotoHistory(currentEditingPhoto, 'Кадрирование');
+      const clampedScale = Math.min(scale, 6.0);
 
-      const newCanvasW = canvas.width * scale;
-      const newCanvasH = canvas.height * scale;
-      const newCbW = cb.width * scale;
-      const newCbH = cb.height * scale;
+      const newCanvasW = canvas.width * clampedScale;
+      const newCanvasH = canvas.height * clampedScale;
+      const newCbW = cb.width * clampedScale;
+      const newCbH = cb.height * clampedScale;
 
       const newCbLeft = (container.width - newCbW) / 2;
-      const newCbTop = (container.height - newCbH) / 2;
+      const newCbTop = padTop + (targetH - newCbH) / 2;
 
       const offsetInCanvasX = cb.left - canvas.left;
       const offsetInCanvasY = cb.top - canvas.top;
 
-      const newCanvasLeft = newCbLeft - offsetInCanvasX * scale;
-      const newCanvasTop = newCbTop - offsetInCanvasY * scale;
+      const newCanvasLeft = newCbLeft - offsetInCanvasX * clampedScale;
+      const newCanvasTop = newCbTop - offsetInCanvasY * clampedScale;
 
-      // Плавно и мгновенно масштабируем холст под контур среза БЕЗ перезагрузки Cropper
+      isProgrammaticCropBoxUpdate = true;
       cropperInstance.setCanvasData({
         left: newCanvasLeft,
         top: newCanvasTop,
@@ -3775,23 +3885,71 @@
         width: newCbW,
         height: newCbH
       });
+      isProgrammaticCropBoxUpdate = false;
+
       captureCropBoxOnOriginal();
-
-      currentEditingPhoto.isCropped = true;
-      currentEditingPhoto.isProcessed = true;
-      isFreeCroppingActive = false;
-
-      setStudioInteractionMode('move');
       updateCropResolution();
       updateZoomBadge();
       updateCropResetButtonVisibility();
-      updateStudioHistoryUI();
-      markStudioChanged('Кадрирование', true);
-      showToast('✂️ Кадр плавно приближен по контуру среза');
+      markStudioChanged('Приближение среза');
     }
 
-    const applyCropDirectly = zoomToCropBoxSmooth;
-    const confirmAndApplyCrop = zoomToCropBoxSmooth;
+    function commitStudioCrop() {
+      if (!cropperInstance || !currentEditingPhoto) return;
+
+      if (cropperInstance.cropped) {
+        const croppedCanvas = cropperInstance.getCroppedCanvas({
+          fillColor: '#ffffff',
+          imageSmoothingEnabled: true,
+          imageSmoothingQuality: 'high'
+        });
+
+        if (croppedCanvas) {
+          pushPhotoHistory(currentEditingPhoto, 'Обрезка кадра');
+          const cleanCroppedUrl = croppedCanvas.toDataURL('image/jpeg', 0.94);
+
+          // Применяем текущие фильтры студии к превью для пула и слотов
+          const filteredCanvas = document.createElement('canvas');
+          filteredCanvas.width = croppedCanvas.width;
+          filteredCanvas.height = croppedCanvas.height;
+          const fCtx = filteredCanvas.getContext('2d');
+          fCtx.drawImage(croppedCanvas, 0, 0);
+          applyPixelFiltersToCanvas(filteredCanvas, studioState);
+
+          const filteredUrl = filteredCanvas.toDataURL('image/jpeg', 0.92);
+          const base64Data = filteredUrl.split(',')[1];
+
+          currentEditingPhoto.croppedBase = cleanCroppedUrl;
+          currentEditingPhoto.preview = filteredUrl;
+          currentEditingPhoto.data = base64Data;
+          currentEditingPhoto.mime = 'image/jpeg';
+          currentEditingPhoto.isCropped = true;
+          currentEditingPhoto.isProcessed = true;
+          currentEditingPhoto.aiCropRelative = null;
+
+          renderPool();
+          renderActiveBookSlots();
+          scheduleAutoSave();
+
+          reloadStudioCropper(cleanCroppedUrl, () => {
+            fitStudioImageToContainer(false);
+            setStudioInteractionMode('move');
+            updateZoomBadge();
+            updateCropResolution();
+            applyStudioFilterPreview();
+            updateCropResetButtonVisibility();
+            updateStudioHistoryUI();
+            showToast('✂️ Картинка сохранена в области среза!');
+          });
+          return;
+        }
+      }
+
+      setStudioInteractionMode('move');
+    }
+
+    const confirmAndApplyCrop = commitStudioCrop;
+    const applyCropDirectly = commitStudioCrop;
 
     function resetCropSelectionUI() {
       updateCropResetButtonVisibility();
@@ -3829,18 +3987,23 @@
       if (cropperInstance.cropped) {
         const data = cropperInstance.getData(true);
         if (data && data.width && data.height) {
-          resEl.textContent = `${Math.round(data.width)} × ${Math.round(data.height)} px (рамка)`;
+          const w = Math.round(data.width);
+          const h = Math.round(data.height);
+          let ratioLabel = '';
+          if (cropRatio === '3:4') ratioLabel = ' (3:4)';
+          else if (cropRatio === '1:1') ratioLabel = ' (1:1)';
+          resEl.textContent = `✂️ Рамка: ${w} × ${h} px${ratioLabel}`;
         }
       } else {
         const canvasData = cropperInstance.getCanvasData();
         const w = Math.round(canvasData.naturalWidth || canvasData.width || 0);
         const h = Math.round(canvasData.naturalHeight || canvasData.height || 0);
-        resEl.textContent = (w && h) ? `${w} × ${h} px (кадр)` : 'Весь кадр';
+        resEl.textContent = (w && h) ? `🖼️ Кадр: ${w} × ${h} px` : 'Весь кадр';
       }
     }
 
-    function closePhotoStudio(saveBeforeClose = true) {
-      if (saveBeforeClose && currentEditingPhoto && cropperInstance) {
+    function closePhotoStudio(saveBeforeClose = false) {
+      if (saveBeforeClose && currentEditingPhoto && cropperInstance && hasUnsavedStudioChanges) {
         saveStudioChanges(null, false);
         return;
       }
@@ -3894,6 +4057,7 @@
       if (!cropperInstance) return;
       const btnMove = document.getElementById('btnModeMove');
       const btnCrop = document.getElementById('btnModeCrop');
+      const btnCropText = document.getElementById('btnModeCropText');
       const qr = document.getElementById('cropRatioQuickRow');
       const crs = document.getElementById('studioCropRightSection');
       const hint = document.getElementById('studioCropHint');
@@ -3902,16 +4066,24 @@
         isFreeCroppingActive = true;
         cropperInstance.setDragMode('crop');
 
+        // Не навязываем рамку на весь экран: оставляем свободный курсор прицел, чтобы оператор выделил область сам
+        if (!cropperInstance.cropped) {
+          cropperInstance.clear();
+        }
+
         if (btnMove) {
           btnMove.className = 'py-1 px-2.5 rounded-lg text-[11px] font-medium transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300';
         }
         if (btnCrop) {
-          btnCrop.className = 'py-1 px-2.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 bg-amber-600 text-white shadow-sm';
+          btnCrop.className = 'py-1 px-2.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shadow-md ring-1 ring-amber-400/50';
+        }
+        if (btnCropText) {
+          btnCropText.textContent = 'Выйти из среза';
         }
         if (qr) qr.classList.remove('hidden');
         if (crs) crs.classList.remove('hidden');
         if (hint) {
-          hint.innerHTML = '✂️ <b>Режим среза</b>: зажмите мышь на фото и выделите область — кадр мгновенно приблизится по контуру.';
+          hint.innerHTML = '✂️ <b>Режим среза активен</b>: выделите нужную область мышью (прицел). Повторный клик или [C] сохранит изображение в области среза.';
         }
       } else {
         isFreeCroppingActive = false;
@@ -3923,11 +4095,31 @@
         if (btnCrop) {
           btnCrop.className = 'py-1 px-2.5 rounded-lg text-[11px] font-medium transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300';
         }
+        if (btnCropText) {
+          btnCropText.textContent = 'Срез';
+        }
         if (qr) qr.classList.add('hidden');
         if (crs) crs.classList.add('hidden');
         if (hint) {
-          hint.innerHTML = '✋ <b>Режим перемещения</b>: зажмите мышь и двигайте фото в окне. Колесико мыши — плавный зум.';
+          hint.innerHTML = '✋ <b>Режим перемещения</b>: зажмите мышь и двигайте фото в окне. Колесико мыши — плавный зум. Нажмите <b>[C]</b> для обрезания.';
         }
+      }
+      updateCropResolution();
+      updateCropResetButtonVisibility();
+    }
+
+    function toggleStudioCropMode() {
+      if (!cropperInstance) return;
+      if (isFreeCroppingActive) {
+        if (cropperInstance.cropped) {
+          commitStudioCrop();
+        } else {
+          setStudioInteractionMode('move');
+          showToast('✋ Режим перемещения активен');
+        }
+      } else {
+        setStudioInteractionMode('crop');
+        showToast('✂️ Режим среза: выделите область мышью на фото');
       }
     }
 
@@ -4254,17 +4446,7 @@
       const prevCanvas = { ...canvasData };
       const prevBox = cropperInstance.getCropBoxData();
 
-      // 1. Временно уменьшаем рамку в точку в центр холста, чтобы она не блокировала сжатие холста при viewMode: 1
-      isProgrammaticCropBoxUpdate = true;
-      cropperInstance.setCropBoxData({
-        left: fitLeft + fitW / 2 - 10,
-        top: fitTop + fitH / 2 - 10,
-        width: 20,
-        height: 20
-      });
-      isProgrammaticCropBoxUpdate = false;
-
-      // 2. Устанавливаем холст точно по рассчитанным пропорциям, чтобы он на 100% помещался в окно
+      // Устанавливаем холст точно по рассчитанным пропорциям, чтобы он на 100% помещался в окно
       cropperInstance.setCanvasData({
         left: fitLeft,
         top: fitTop,
@@ -4272,64 +4454,22 @@
         height: fitH
       });
 
-      // 3. Вычисляем и устанавливаем рамку кадрирования
-      if (resetCropBox || !prevBox || !prevBox.width || prevBox.width <= 25) {
-        if (cropRatio === '3:4') {
-          const normDeg = ((studioCurrentRotation % 360) + 360) % 360;
-          const nearestCardinal = Math.round(normDeg / 90) * 90 % 360;
-          const isPerp = (nearestCardinal === 90 || nearestCardinal === 270);
-          const targetRatio = isPerp ? 4 / 3 : 3 / 4;
-          let cbW, cbH;
-          if (fitW / fitH > targetRatio) {
-            cbH = fitH * 0.96;
-            cbW = cbH * targetRatio;
-          } else {
-            cbW = fitW * 0.96;
-            cbH = cbW / targetRatio;
-          }
-          isProgrammaticCropBoxUpdate = true;
-          cropperInstance.setCropBoxData({
-            left: fitLeft + (fitW - cbW) / 2,
-            top: fitTop + (fitH - cbH) / 2,
-            width: cbW,
-            height: cbH
-          });
-          isProgrammaticCropBoxUpdate = false;
-        } else if (cropRatio === '1:1') {
-          const cbSize = Math.min(fitW, fitH) * 0.96;
-          isProgrammaticCropBoxUpdate = true;
-          cropperInstance.setCropBoxData({
-            left: fitLeft + (fitW - cbSize) / 2,
-            top: fitTop + (fitH - cbSize) / 2,
-            width: cbSize,
-            height: cbSize
-          });
-          isProgrammaticCropBoxUpdate = false;
-        } else {
-          // 'free' — раскрываем рамку на весь видимый холст
-          isProgrammaticCropBoxUpdate = true;
-          cropperInstance.setCropBoxData({
-            left: fitLeft,
-            top: fitTop,
-            width: fitW,
-            height: fitH
-          });
-          isProgrammaticCropBoxUpdate = false;
-        }
+      // Сохраняем и восстанавливаем рамку по относительным координатам
+      if (!resetCropBox && prevBox && prevBox.width > 20 && prevCanvas.width > 0) {
+        const rx = (prevBox.left - prevCanvas.left) / prevCanvas.width;
+        const ry = (prevBox.top - prevCanvas.top) / prevCanvas.height;
+        const rw = prevBox.width / prevCanvas.width;
+        const rh = prevBox.height / prevCanvas.height;
+
+        isProgrammaticCropBoxUpdate = true;
+        cropperInstance.setCropBoxData({
+          left: fitLeft + rx * fitW,
+          top: fitTop + ry * fitH,
+          width: Math.min(fitW, rw * fitW),
+          height: Math.min(fitH, rh * fitH)
+        });
+        isProgrammaticCropBoxUpdate = false;
         captureCropBoxOnOriginal();
-      } else {
-        const fittedCanvasData = {
-          left: fitLeft,
-          top: fitTop,
-          width: fitW,
-          height: fitH,
-          naturalWidth: rotW,
-          naturalHeight: rotH
-        };
-        if (!studioCropBoxOnOriginal && prevBox && prevCanvas.width > 0) {
-          studioCropBoxOnOriginal = screenToOriginal(prevBox, prevCanvas, cropperInstance.getImageData(), studioCurrentRotation);
-        }
-        updateCropBoxForCurrentRotation(fittedCanvasData);
       }
 
       updateCropResolution();
@@ -4491,9 +4631,33 @@
     }
 
     function rotateStudioStep(direction) {
-      if (cropperInstance && cropperInstance.cropped && !studioCropBoxOnOriginal) {
-        captureCropBoxOnOriginal();
+      let relCrop = null;
+      if (cropperInstance && cropperInstance.cropped) {
+        const c = cropperInstance.getCanvasData();
+        const b = cropperInstance.getCropBoxData();
+        if (c && b && c.width > 0 && c.height > 0) {
+          const rx = (b.left - c.left) / c.width;
+          const ry = (b.top - c.top) / c.height;
+          const rw = b.width / c.width;
+          const rh = b.height / c.height;
+          if (direction > 0) { // Вправо (+90°)
+            relCrop = {
+              x: Math.max(0, 1 - ry - rh),
+              y: Math.max(0, rx),
+              w: Math.min(1, rh),
+              h: Math.min(1, rw)
+            };
+          } else { // Влево (-90°)
+            relCrop = {
+              x: Math.max(0, ry),
+              y: Math.max(0, 1 - rx - rw),
+              w: Math.min(1, rh),
+              h: Math.min(1, rw)
+            };
+          }
+        }
       }
+
       // direction: +1 (Вправо / по часовой) или -1 (Влево / против часовой)
       let newCardinal;
       if (direction > 0) {
@@ -4506,6 +4670,21 @@
 
       // Плавно анимируем вращение до новой кардинальной стороны
       animateStudioRotation(newCardinal, 280, () => {
+        if (relCrop && cropperInstance && cropperInstance.cropped) {
+          const nc = cropperInstance.getCanvasData();
+          if (nc && nc.width > 0 && nc.height > 0) {
+            isProgrammaticCropBoxUpdate = true;
+            cropperInstance.setCropBoxData({
+              left: nc.left + relCrop.x * nc.width,
+              top: nc.top + relCrop.y * nc.height,
+              width: relCrop.w * nc.width,
+              height: relCrop.h * nc.height
+            });
+            isProgrammaticCropBoxUpdate = false;
+            captureCropBoxOnOriginal();
+            updateCropResolution();
+          }
+        }
         markStudioChanged(`Поворот на ${newCardinal}°`, true);
       });
     }
@@ -4655,11 +4834,38 @@
 
       if (!cropperInstance.cropped) {
         cropperInstance.crop();
-        fitStudioImageToContainer(true);
+      }
+
+      const cData = cropperInstance.getCanvasData();
+      if (cData && cData.width && cData.height) {
+        let cbW, cbH;
+        const targetRatio = (mode === '3:4') ? (isPerp ? 4 / 3 : 3 / 4) : (mode === '1:1' ? 1 : null);
+        if (targetRatio) {
+          if (cData.width / cData.height > targetRatio) {
+            cbH = cData.height * 0.90;
+            cbW = cbH * targetRatio;
+          } else {
+            cbW = cData.width * 0.90;
+            cbH = cbW / targetRatio;
+          }
+        } else {
+          cbW = cData.width * 0.90;
+          cbH = cData.height * 0.90;
+        }
+        isProgrammaticCropBoxUpdate = true;
+        cropperInstance.setCropBoxData({
+          left: cData.left + (cData.width - cbW) / 2,
+          top: cData.top + (cData.height - cbH) / 2,
+          width: cbW,
+          height: cbH
+        });
+        isProgrammaticCropBoxUpdate = false;
       }
 
       setStudioInteractionMode('crop');
       captureCropBoxOnOriginal();
+      updateCropResolution();
+      updateCropResetButtonVisibility();
       markStudioChanged();
     }
 
@@ -4668,18 +4874,25 @@
       if (!cropperInstance.cropped) {
         cropperInstance.crop();
       }
-      const canvasData = cropperInstance.getCanvasData();
-      const p = percent / 100.0;
-      const marginX = canvasData.width * p;
-      const marginY = canvasData.height * p;
+      const cb = cropperInstance.getCropBoxData();
+      const p = (percent / 100.0) / 2.0;
+      const marginX = cb.width * p;
+      const marginY = cb.height * p;
+
+      isProgrammaticCropBoxUpdate = true;
       cropperInstance.setCropBoxData({
-        left: canvasData.left + marginX,
-        top: canvasData.top + marginY,
-        width: Math.max(50, canvasData.width - marginX * 2),
-        height: Math.max(50, canvasData.height - marginY * 2)
+        left: cb.left + marginX,
+        top: cb.top + marginY,
+        width: Math.max(50, cb.width - marginX * 2),
+        height: Math.max(50, cb.height - marginY * 2)
       });
+      isProgrammaticCropBoxUpdate = false;
+
       captureCropBoxOnOriginal();
-      applyCropDirectly();
+      updateCropResolution();
+      updateCropResetButtonVisibility();
+      markStudioChanged();
+      showToast(`✂️ Поля сужены на ${percent}%`);
     }
 
     function resetCropBox() {
@@ -4801,6 +5014,11 @@
           throw new Error('Не удалось получить изображение из редактора');
         }
 
+        let cleanCroppedUrl = null;
+        if (isCroppedActive) {
+          cleanCroppedUrl = croppedCanvas.toDataURL('image/jpeg', 0.94);
+        }
+
         applyPixelFiltersToCanvas(croppedCanvas, studioState);
 
         const dataUrl = croppedCanvas.toDataURL('image/jpeg', 0.92);
@@ -4809,14 +5027,25 @@
         currentEditingPhoto.preview = dataUrl;
         currentEditingPhoto.data = base64Data;
         currentEditingPhoto.mime = 'image/jpeg';
-        currentEditingPhoto.croppedBase = dataUrl;
         currentEditingPhoto.isCropped = isCroppedActive;
+        currentEditingPhoto.croppedBase = isCroppedActive ? cleanCroppedUrl : null;
+        if (isCroppedActive) {
+          currentEditingPhoto.aiCropRelative = null;
+        }
         currentEditingPhoto.whiten = studioState.whiten;
         currentEditingPhoto.brightness = studioState.brightness;
         currentEditingPhoto.contrast = studioState.contrast;
         currentEditingPhoto.saturation = studioState.saturation;
-        currentEditingPhoto.rotation = 0;
-        currentEditingPhoto.isProcessed = true;
+        currentEditingPhoto.rotation = isCroppedActive ? 0 : studioCurrentRotation;
+        currentEditingPhoto.isProcessed = Boolean(
+          isCroppedActive ||
+          studioState.whiten > 0 ||
+          studioState.brightness !== 0 ||
+          studioState.contrast !== 0 ||
+          studioState.saturation !== 0 ||
+          studioCurrentRotation !== 0 ||
+          currentEditingPhoto.isAiProcessed
+        );
 
         hasUnsavedStudioChanges = false;
         updateAiBatchBtnState();
@@ -4858,7 +5087,9 @@
       return new Promise((resolve) => {
         if (!photo.cameraOriginal) photo.cameraOriginal = photo.rawOriginal || photo.preview;
         if (!photo.rawOriginal) photo.rawOriginal = photo.cameraOriginal;
-        const baseSrc = photo.croppedBase || photo.cameraOriginal || photo.rawOriginal || photo.preview;
+        const baseSrc = (photo.isCropped && photo.croppedBase)
+          ? photo.croppedBase
+          : (photo.aiWhiteOriginal || photo.cameraOriginal || photo.rawOriginal || photo.preview);
         const img = new Image();
         img.onload = () => {
           const rot = (photo.rotation || 0) % 360;
@@ -4952,7 +5183,7 @@
 
       const origSrc = photo.cameraOriginal || photo.rawOriginal;
       if (!origSrc) {
-        alert('Исходный снимок не найден.');
+        showToast('ℹ️ Фото уже в исходном состоянии');
         return;
       }
 
@@ -4960,17 +5191,23 @@
       photo.data = origSrc.includes(',') ? origSrc.split(',')[1] : origSrc;
       photo.rawOriginal = origSrc;
       photo.croppedBase = null;
+      photo.aiWhiteOriginal = null;
+      photo.aiCropRelative = null;
       photo.isCropped = false;
+      photo.isAutoCropped = false;
+      photo.isAiProcessed = false;
+      photo.isProcessed = false;
       photo.whiten = 0;
       photo.brightness = 0;
       photo.contrast = 0;
       photo.saturation = 0;
       photo.rotation = 0;
-      photo.isProcessed = false;
+      initPhotoHistory(photo);
 
       renderPool();
       renderActiveBookSlots();
       scheduleAutoSave();
+      showToast('↩️ Исходное фото с камеры восстановлено (1 шаг)');
     }
 
     function revertSelectedPhoto() {
@@ -4980,6 +5217,7 @@
 
     function revertStudioToCameraOriginal() {
       if (!currentEditingPhoto) return;
+
       const origSrc = currentEditingPhoto.cameraOriginal || currentEditingPhoto.rawOriginal;
       if (!origSrc) {
         alert('Исходный снимок не найден.');
@@ -4987,7 +5225,10 @@
       }
 
       currentEditingPhoto.croppedBase = null;
+      currentEditingPhoto.aiWhiteOriginal = null;
+      currentEditingPhoto.aiCropRelative = null;
       currentEditingPhoto.isCropped = false;
+      currentEditingPhoto.isAutoCropped = false;
       currentEditingPhoto.whiten = 0;
       currentEditingPhoto.brightness = 0;
       currentEditingPhoto.contrast = 0;
@@ -4995,6 +5236,8 @@
       currentEditingPhoto.rotation = 0;
       currentEditingPhoto.isProcessed = false;
       currentEditingPhoto.isAiProcessed = false;
+      currentEditingPhoto.preview = origSrc;
+      currentEditingPhoto.data = origSrc.includes(',') ? origSrc.split(',')[1] : origSrc;
 
       studioState.whiten = 0;
       studioState.brightness = 0;
@@ -5015,16 +5258,23 @@
       updateCropRatioButtons(null);
       resetCropStateUI();
 
+      recordStudioStep('Сброс к снимку с камеры');
+
       reloadStudioCropper(origSrc, () => {
         fitStudioImageToContainer(false);
         setStudioInteractionMode('move');
         updateZoomBadge();
         updateCropResolution();
         applyStudioFilterPreview();
+        updateCropResetButtonVisibility();
+        updateStudioHistoryUI();
       });
 
       applyStudioFilterPreview();
       markStudioChanged();
+      renderPool();
+      renderActiveBookSlots();
+      scheduleAutoSave();
       showToast('↩️ Исходное фото с камеры восстановлено в редакторе');
     }
 
@@ -5095,9 +5345,12 @@
         if (!currentEditingPhoto.cameraOriginal) {
           currentEditingPhoto.cameraOriginal = currentEditingPhoto.rawOriginal || currentEditingPhoto.preview;
         }
-        currentEditingPhoto.croppedBase = data.image;
+        currentEditingPhoto.aiWhiteOriginal = data.image;
+        currentEditingPhoto.croppedBase = null;
+        currentEditingPhoto.isCropped = false;
         currentEditingPhoto.preview = data.image;
         currentEditingPhoto.data = (typeof data.image === 'string' && data.image.includes(',')) ? data.image.split(',')[1] : data.image;
+        currentEditingPhoto.aiCropRelative = data.crop_relative || null;
         currentEditingPhoto.whiten = 0;
         currentEditingPhoto.isProcessed = true;
         currentEditingPhoto.isAiProcessed = true;
@@ -5120,8 +5373,26 @@
         reloadStudioCropper(data.image, () => {
           fitStudioImageToContainer(false);
           setStudioInteractionMode('move');
+          if (data.crop_relative) {
+            try {
+              const canvasData = cropperInstance.getCanvasData();
+              const rel = data.crop_relative;
+              cropperInstance.crop();
+              isProgrammaticCropBoxUpdate = true;
+              cropperInstance.setCropBoxData({
+                left: canvasData.left + rel.x * canvasData.width,
+                top: canvasData.top + rel.y * canvasData.height,
+                width: rel.w * canvasData.width,
+                height: rel.h * canvasData.height
+              });
+              isProgrammaticCropBoxUpdate = false;
+              captureCropBoxOnOriginal();
+              zoomStudioToCropBox();
+            } catch (err) {}
+          }
           updateZoomBadge();
           updateCropResolution();
+          updateCropResetButtonVisibility();
           updateStudioHistoryUI();
         });
         markStudioChanged('ИИ белый фон (rembg)');
@@ -5140,7 +5411,68 @@
       }
     }
 
-    async function quickAiProcessPhoto(photoId, e) {
+    const aiProcessQueue = [];
+    let activeAiWorkers = 0;
+    const MAX_CONCURRENT_AI = 4;
+
+    function queueAiBackgroundRemoval(photoId) {
+      const photo = findPhotoById(photoId);
+      if (!photo || photo.isAiProcessed || photo.isAiProcessing) return;
+      if (!aiProcessQueue.includes(photoId)) {
+        aiProcessQueue.push(photoId);
+      }
+      processNextInAiQueue();
+    }
+
+    async function processNextInAiQueue() {
+      if (activeAiWorkers >= MAX_CONCURRENT_AI || aiProcessQueue.length === 0) return;
+
+      const photoId = aiProcessQueue.shift();
+      const photo = findPhotoById(photoId);
+      if (!photo || photo.isAiProcessed) {
+        processNextInAiQueue();
+        return;
+      }
+
+      activeAiWorkers++;
+      try {
+        await quickAiProcessPhoto(photoId, null, true);
+      } catch (e) {
+        console.error('Ошибка фонового вырезания фона для', photoId, e);
+      } finally {
+        activeAiWorkers--;
+        processNextInAiQueue();
+      }
+    }
+
+    function batchAiProcessAllPool() {
+      const allPhotos = [];
+      photoPool.forEach(p => { if (!p.isAiProcessed) allPhotos.push(p); });
+      booksSession.forEach(b => {
+        ['cover_front', 'cover_back'].forEach(s => {
+          if (b.slots[s] && !b.slots[s].isAiProcessed && !allPhotos.some(p => p.id === b.slots[s].id)) {
+            allPhotos.push(b.slots[s]);
+          }
+        });
+        ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+          (b.slots[s] || []).forEach(p => {
+            if (!p.isAiProcessed && !allPhotos.some(item => item.id === p.id)) {
+              allPhotos.push(p);
+            }
+          });
+        });
+      });
+
+      if (allPhotos.length === 0) {
+        showToast('✨ Все фотографии уже обработаны нейросетью!');
+        return;
+      }
+
+      showToast(`✨ Запущено фоновое вырезание фона для ${allPhotos.length} фото...`);
+      allPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
+    }
+
+    async function quickAiProcessPhoto(photoId, e, silent = false) {
       if (e) e.stopPropagation();
       const photo = findPhotoById(photoId);
       if (!photo || photo.isAiProcessing) return;
@@ -5148,10 +5480,18 @@
       photo.isAiProcessing = true;
       renderPool();
       renderActiveBookSlots();
-      showToast(`⏳ ИИ начал обработку "${photo.name}" в фоне...`);
+      if (!silent) {
+        showToast(`⏳ ИИ начал вырезание фона "${photo.name}"...`);
+      }
 
       try {
-        const baseSrc = photo.croppedBase || photo.cameraOriginal || photo.rawOriginal || photo.preview;
+        if (!photo.cameraOriginal) {
+          photo.cameraOriginal = photo.rawOriginal || photo.preview;
+        }
+        if (!photo.rawOriginal) {
+          photo.rawOriginal = photo.cameraOriginal;
+        }
+        const baseSrc = photo.cameraOriginal || photo.rawOriginal || photo.preview;
         const res = await fetch('/api/ai_process_photo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -5162,23 +5502,99 @@
           throw new Error(data.error || 'Ошибка ИИ-обработки');
         }
 
-        if (!photo.cameraOriginal) {
-          photo.cameraOriginal = photo.rawOriginal || photo.preview;
-        }
         photo.preview = data.image;
         photo.data = data.image.includes(',') ? data.image.split(',')[1] : data.image;
-        photo.croppedBase = data.image;
+        photo.preview = data.image;
+        photo.data = data.image.includes(',') ? data.image.split(',')[1] : data.image;
+        photo.croppedBase = null; // Не сохраняем обрезанное изображение, оставляем полный красивый кадр!
+        photo.isCropped = false;
+        photo.isAutoCropped = false;
+        photo.aiWhiteOriginal = data.image;
+        photo.aiCropRelative = data.crop_relative || null;
+        photo.rotation = 0;
         photo.whiten = 0;
         photo.isProcessed = true;
         photo.isAiProcessed = true;
-        initPhotoHistory(photo);
-        pushPhotoHistory(photo, 'ИИ белый фон (rembg)');
-        if (currentEditingPhoto && currentEditingPhoto.id === photo.id) {
-          updateStudioHistoryUI();
+
+        // Всего 1 шаг истории: возврат фона в 1 клик
+        photo.history = [
+          {
+            label: 'Снимок с камеры',
+            timestamp: Date.now() - 1000,
+            preview: photo.cameraOriginal,
+            data: photo.cameraOriginal.includes(',') ? photo.cameraOriginal.split(',')[1] : photo.cameraOriginal,
+            croppedBase: null,
+            rawOriginal: photo.cameraOriginal,
+            cameraOriginal: photo.cameraOriginal,
+            isCropped: false,
+            isAiProcessed: false,
+            hasCropBox: false,
+            cropBoxOnOriginal: null,
+            cropRatio: 'none',
+            whiten: 0,
+            brightness: 0,
+            contrast: 0,
+            saturation: 0,
+            rotation: 0,
+            cardinal: 0
+          },
+          {
+            label: 'ИИ белый фон',
+            timestamp: Date.now(),
+            preview: data.image,
+            data: data.image.includes(',') ? data.image.split(',')[1] : data.image,
+            croppedBase: null,
+            rawOriginal: photo.cameraOriginal,
+            cameraOriginal: photo.cameraOriginal,
+            isCropped: false,
+            isAiProcessed: true,
+            hasCropBox: Boolean(data.crop_relative),
+            cropBoxOnOriginal: null,
+            cropRatio: 'none',
+            whiten: 0,
+            brightness: 0,
+            contrast: 0,
+            saturation: 0,
+            rotation: 0,
+            cardinal: 0
+          }
+        ];
+        photo.historyIndex = 1;
+
+        if (currentEditingPhoto && currentEditingPhoto.id === photo.id && isStudioOpen) {
+          reloadStudioCropper(data.image, () => {
+            fitStudioImageToContainer(false);
+            if (photo.aiCropRelative) {
+              try {
+                const canvasData = cropperInstance.getCanvasData();
+                const rel = photo.aiCropRelative;
+                cropperInstance.crop();
+                isProgrammaticCropBoxUpdate = true;
+                cropperInstance.setCropBoxData({
+                  left: canvasData.left + rel.x * canvasData.width,
+                  top: canvasData.top + rel.y * canvasData.height,
+                  width: rel.w * canvasData.width,
+                  height: rel.h * canvasData.height
+                });
+                isProgrammaticCropBoxUpdate = false;
+                captureCropBoxOnOriginal();
+                zoomStudioToCropBox();
+              } catch (err) {}
+            }
+            setStudioInteractionMode('move');
+            updateZoomBadge();
+            updateCropResolution();
+            updateStudioHistoryUI();
+          });
         }
-        showToast(`✨ Кадр "${photo.name}" готов на чистом белом фоне!`);
+
+        if (!silent) {
+          showToast(`✨ Кадр "${photo.name}": фон вырезан, рамка готова!`);
+        }
       } catch (err) {
-        showToast(`❌ Ошибка ИИ: ${err.message}`, 4000);
+        if (!silent) {
+          showToast(`❌ Ошибка ИИ: ${err.message}`, 4000);
+        }
       } finally {
         photo.isAiProcessing = false;
         renderPool();
@@ -5224,7 +5640,7 @@
               <div class="flex items-center gap-0.5 bg-black/90 p-0.5 rounded-lg shadow backdrop-blur-xs border border-slate-700/60">
                 <button type="button" onclick="quickAiProcessPhoto('${photo.id}', event)" class="p-1 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-xs transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                 <button type="button" onclick="openPhotoStudio('${photo.id}', event)" class="p-1 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-xs transition" title="✏️ Редактор (кадрирование, фильтры)">✏️</button>
-                ${(processed || photo.isAiProcessed) ? `<button type="button" onclick="revertPhotoToOriginal('${photo.id}', event)" class="p-1 rounded hover:bg-rose-900/80 text-rose-400 hover:text-rose-200 text-xs transition" title="Вернуть к исходному снимку (сбросить обрезку и фильтры)">↩️</button>` : ''}
+                ${(photo.cameraOriginal || photo.isAiProcessed || processed || photo.isCropped || (photo.history && photo.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${photo.id}', event)" class="p-1 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-xs transition flex items-center justify-center shadow-xs" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
                 <button type="button" onclick="unassignPhoto('${photo.id}', event)" class="p-1 rounded hover:bg-rose-600 hover:text-white text-rose-400 text-xs transition" title="Убрать из книги в общий пул">✕</button>
               </div>
             </div>
@@ -5296,7 +5712,7 @@
                 <div class="flex items-center gap-0.5 bg-black/85 p-0.5 rounded shadow border border-slate-700/60">
                   <button type="button" onclick="quickAiProcessPhoto('${p.id}', event)" class="p-0.5 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-[10px] transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                   <button type="button" onclick="openPhotoStudio('${p.id}', event)" class="p-0.5 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-[10px] transition" title="Редактор">✏️</button>
-                  ${(processed || p.isAiProcessed) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-0.5 rounded hover:bg-rose-900/80 text-rose-400 hover:text-rose-200 text-[10px] transition" title="Вернуть к исходнику">↩️</button>` : ''}
+                  ${(p.cameraOriginal || p.isAiProcessed || processed || p.isCropped || (p.history && p.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-0.5 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-[10px] transition" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
                   <button type="button" onclick="unassignPhoto('${p.id}', event)" class="p-0.5 rounded hover:bg-rose-600 hover:text-white text-rose-400 text-[10px] transition" title="Убрать в пул">✕</button>
                 </div>
               </div>
@@ -5472,17 +5888,47 @@
     }
 
     // -------------------------------------------------------------
-    // ВЫЗОВ GEMINI VISION С РОЛЯМИ КАТЕГОРИЙ
+    // ПАРАЛЛЕЛЬНЫЙ АВТО-КОНВЕЙЕР И ОЧЕРЕДЬ РАСПОЗНАВАНИЯ GEMINI VISION
     // -------------------------------------------------------------
-    async function runAiForActiveBook() {
-      if (isStudioOpen && currentEditingPhoto && cropperInstance) {
-        autoCommitStudioChanges();
+    const bookAiQueue = [];
+    let activeBookAiWorkers = 0;
+    const MAX_CONCURRENT_BOOK_AI = 2;
+
+    function queueBookAiRecognition(bookId) {
+      const book = booksSession.find(b => b.id === bookId);
+      if (!book || book.isAiRecognizing || book.isAiRecognized) return;
+      if (!bookAiQueue.includes(bookId)) {
+        bookAiQueue.push(bookId);
+      }
+      processNextBookInAiQueue();
+    }
+
+    async function processNextBookInAiQueue() {
+      if (activeBookAiWorkers >= MAX_CONCURRENT_BOOK_AI || bookAiQueue.length === 0) return;
+
+      const bookId = bookAiQueue.shift();
+      const book = booksSession.find(b => b.id === bookId);
+      if (!book || book.isAiRecognized) {
+        processNextBookInAiQueue();
+        return;
       }
 
-      const book = getActiveBook();
-      const targetBookId = book ? book.id : null;
-      const sendImages = [];
+      activeBookAiWorkers++;
+      try {
+        await runAiForBook(bookId, true);
+      } catch (e) {
+        console.error('Ошибка фонового распознавания книги', bookId, e);
+      } finally {
+        activeBookAiWorkers--;
+        processNextBookInAiQueue();
+      }
+    }
 
+    async function runAiForBook(targetBookId, silent = false) {
+      const book = booksSession.find(b => b.id === targetBookId);
+      if (!book || book.isAiRecognizing) return;
+
+      const sendImages = [];
       const addCleanImg = (role, photo) => {
         if (!photo) return;
         let d = photo.data || photo.preview || photo.croppedBase || photo.cameraOriginal;
@@ -5496,42 +5942,28 @@
       if (book.slots.cover_front) addCleanImg("Передняя часть обложки", book.slots.cover_front);
       if (book.slots.cover_back) addCleanImg("Вид обложки сзади", book.slots.cover_back);
       book.slots.info_pages.forEach((p, idx) => addCleanImg(`Лист с информацией и описанием (титул/оборот #${idx+1})`, p));
+      book.slots.illustrations.forEach((p, idx) => addCleanImg(`Иллюстрации книги #${idx+1}`, p));
       book.slots.mantra_defects.forEach((p, idx) => addCleanImg(`Фото мантры и дефектов книги #${idx+1}`, p));
 
-      // SMART AUTO-ASSIGN: Если слоты пустые, берем выбранное фото или первое фото из пула
       if (sendImages.length === 0) {
-        let photoToUse = null;
-        if (selectedPoolPhotoId) {
-          photoToUse = findPhotoById(selectedPoolPhotoId);
-        }
-        if (!photoToUse) {
-          photoToUse = photoPool.find(p => !p.assignedBookId) || photoPool[0];
-        }
-
-        if (photoToUse) {
-          assignPhotoToSlot(photoToUse.id, 'cover_front');
-          addCleanImg("Передняя часть обложки", photoToUse);
-        } else {
-          alert('⚠️ В слотах и в общем пуле нет фотографий для распознавания!\\nСначала добавьте фото (или нажмите «Загрузить 20 тестовых фото Ozon»).');
-          return;
-        }
+        if (!silent) alert('⚠️ В слотах этой книги нет фото для распознавания!');
+        return;
       }
 
       if (!currentApiKey) {
         await loadSavedKey();
       }
       if (!currentApiKey) {
-        openKeyModal();
+        if (!silent) openKeyModal();
         return;
       }
 
-      const btn = document.getElementById('aiBatchBtn');
-      const btnText = document.getElementById('aiBatchBtnText');
-      if (btn) btn.disabled = true;
-      if (btnText) btnText.textContent = 'Анализ книги через Gemini...';
-
-      isBookAiRecognizing = true;
-      renderActiveBookSlots();
+      book.isAiRecognizing = true;
+      renderBooksTabs();
+      if (book.id === activeBookId) {
+        isBookAiRecognizing = true;
+        renderActiveBookSlots();
+      }
 
       try {
         const res = await fetch('/api/ai_recognize_book', {
@@ -5546,36 +5978,279 @@
         const result = await res.json();
         if (!result.success) throw new Error(result.error || 'Ошибка распознавания');
 
-        const bookToPopulate = (targetBookId ? booksSession.find(b => b.id === targetBookId) : null) || getActiveBook();
-        populateFields(result.data, bookToPopulate);
-
-        // Визуальное подтверждение успешного распознавания
-        if (btnText) btnText.textContent = '✓ Успешно распознано!';
-        const fs = document.getElementById('formStatus');
-        if (fs) {
-          const verifiedBadge = result.data?.verified_by ? ` (🌐 ${result.data.verified_by})` : '';
-          fs.textContent = `✓ Данные книги «${result.data?.title || 'Без названия'}» успешно внесены в форму!${verifiedBadge}`;
-          fs.className = 'text-center text-xs text-emerald-400 font-semibold';
-        }
-      } catch (err) {
-        console.error('Ошибка в runAiForActiveBook:', err);
-        const msg = err.message || '';
-        if (msg.includes('503') || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
-          alert('⚠️ Сервера Google Gemini сейчас испытывают пик нагрузки. Нажмите кнопку еще раз через несколько секунд.');
-        } else if (msg.includes('429')) {
-          alert('⚠️ Превышен лимит запросов Gemini API в минуту. Подождите 20-30 секунд и повторите.');
+        const recognizedData = result.data || {};
+        if (book.id === activeBookId) {
+          populateFields(recognizedData, book);
+          const fs = document.getElementById('formStatus');
+          if (fs) {
+            const verifiedBadge = recognizedData.verified_by ? ` (🌐 ${recognizedData.verified_by})` : '';
+            fs.textContent = `✓ Данные книги «${recognizedData.title || 'Без названия'}» успешно внесены в форму!${verifiedBadge}`;
+            fs.className = 'text-center text-xs text-emerald-400 font-semibold';
+          }
         } else {
-          alert('Ошибка при распознавании:\n' + msg);
+          // Фоновое заполнение для неактивной книги
+          if (!book.formData) book.formData = {};
+          Object.keys(recognizedData).forEach(k => {
+            if (recognizedData[k] !== undefined && recognizedData[k] !== null && recognizedData[k] !== '') {
+              book.formData[k] = recognizedData[k];
+            }
+          });
+          if (recognizedData.title) {
+            book.title = recognizedData.title;
+          }
+        }
+
+        book.isAiRecognized = true;
+        const art = (book.formData && book.formData.article) || book.article || `Книга #${book.id}`;
+        showToast(`✨ ИИ заполнил данные книги [${art}] «${recognizedData.title || 'Книга'}»!`);
+        updatePipelineStatus(`✓ Книга [${art}] «${(recognizedData.title || '').substring(0, 30)}» заполнена ИИ`);
+      } catch (err) {
+        console.error(`Ошибка ИИ для книги ${book.id}:`, err);
+        if (!silent) {
+          const msg = err.message || '';
+          if (msg.includes('503') || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
+            alert('⚠️ Сервера Google Gemini сейчас испытывают пик нагрузки. Нажмите кнопку еще раз через несколько секунд.');
+          } else if (msg.includes('429')) {
+            alert('⚠️ Превышен лимит запросов Gemini API в минуту. Подождите 20-30 секунд и повторите.');
+          } else {
+            alert('Ошибка при распознавании:\n' + msg);
+          }
         }
       } finally {
-        isBookAiRecognizing = false;
-        renderActiveBookSlots();
-        if (btn) btn.disabled = false;
-        setTimeout(() => {
-          if (btnText && btnText.textContent === '✓ Успешно распознано!') {
-            btnText.textContent = 'Распознать эту книгу через Gemini 3.5';
+        book.isAiRecognizing = false;
+        if (book.id === activeBookId) {
+          isBookAiRecognizing = false;
+          renderActiveBookSlots();
+        }
+        renderBooksTabs();
+        scheduleAutoSave();
+      }
+    }
+
+    async function runAiForActiveBook() {
+      if (isStudioOpen && currentEditingPhoto && cropperInstance) {
+        saveStudioChanges(null, true);
+      }
+      const cur = getActiveBook();
+      if (!cur) return;
+      await runAiForBook(cur.id, false);
+    }
+
+    async function runBatchDistributePipeline(silent = false) {
+      const unassigned = photoPool.filter(p => !p.assignedBookId);
+      if (unassigned.length === 0) {
+        if (!silent) showToast('ℹ️ В пуле нет свободных фотографий для раскладки');
+        return;
+      }
+
+      const perBookSelect = document.getElementById('batchPhotosPerBook');
+      const schemeVal = perBookSelect ? perBookSelect.value : 'smart_ai';
+
+      const startArtInput = document.getElementById('batchStartArticle');
+      let startArtVal = startArtInput ? startArtInput.value.trim() : '';
+      if (!startArtVal) {
+        startArtVal = await calculateNextArticle(0);
+        if (startArtInput) startArtInput.value = startArtVal;
+      }
+
+      const matchNum = startArtVal.match(/\d+/);
+      let currentNum = matchNum ? parseInt(matchNum[0], 10) : 1;
+
+      const statusBox = document.getElementById('batchPipelineStatus');
+      const statusText = document.getElementById('batchPipelineStatusText');
+      const statusCounter = document.getElementById('batchPipelineCounter');
+      if (statusBox) statusBox.classList.remove('hidden');
+      if (statusText) statusText.textContent = '⏳ Анализ пачки и распределение по книгам...';
+
+      // 1. Проверяем, есть ли явная разметка по книгам со смартфона (Вариант 1)
+      const uniqueMobileBooks = new Set(unassigned.map(p => p.bookIndex).filter(Boolean));
+      let bookGroups = []; // Массив массивов объектов { photo, role }
+
+      if (uniqueMobileBooks.size > 1) {
+        // Оператор разделял книги на телефоне кнопкой «+ След. книга»!
+        const groupedByMobile = {};
+        unassigned.forEach(p => {
+          const bIdx = p.bookIndex || 1;
+          if (!groupedByMobile[bIdx]) groupedByMobile[bIdx] = [];
+          groupedByMobile[bIdx].push(p);
+        });
+        const sortedKeys = Object.keys(groupedByMobile).map(Number).sort((a, b) => a - b);
+        sortedKeys.forEach(k => {
+          const list = groupedByMobile[k];
+          const groupItems = list.map((photo, idx) => {
+            let role = 'info_pages';
+            if (idx === 0) role = 'cover_front';
+            else if (idx === 1 && list.length > 2) role = 'cover_back';
+            else if (idx === 1 && list.length === 2) role = 'info_pages';
+            else role = 'info_pages';
+            return { photo, role };
+          });
+          bookGroups.push(groupItems);
+        });
+      } else if (schemeVal === 'smart_ai' && unassigned.length >= 2) {
+        // Вариант 2: Интеллектуальный ИИ-классификатор Gemini Vision (авто-поиск обложек, мульти-титулы, дефекты)
+        if (statusText) statusText.textContent = '🤖 ИИ Gemini определяет границы книг, титулы, иллюстрации и дефекты...';
+        try {
+          if (!currentApiKey) await loadSavedKey();
+          const reqPhotos = unassigned.map((p, idx) => ({
+            data: p.data || p.preview || p.cameraOriginal,
+            mime: p.mime || 'image/jpeg',
+            name: p.name || `photo_${idx}`
+          }));
+
+          const res = await fetch('/api/ai_classify_batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              api_key: currentApiKey,
+              photos: reqPhotos
+            })
+          });
+          const data = await res.json();
+          if (data.success && Array.isArray(data.items) && data.items.length > 0) {
+            const aiItems = data.items;
+            const booksMap = {};
+            aiItems.forEach(item => {
+              const photo = unassigned[item.index];
+              if (!photo) return;
+              const bNum = item.book_num || 1;
+              if (!booksMap[bNum]) booksMap[bNum] = [];
+              booksMap[bNum].push({
+                photo: photo,
+                role: item.role || 'info_pages'
+              });
+            });
+            const bKeys = Object.keys(booksMap).map(Number).sort((a, b) => a - b);
+            bKeys.forEach(k => bookGroups.push(booksMap[k]));
           }
-        }, 3500);
+        } catch (e) {
+          console.error('Ошибка ИИ классификатора:', e);
+        }
+      }
+
+      // Fallback если ИИ не вернул группы или выбрана фиксированная схема по N фото
+      if (bookGroups.length === 0) {
+        const perBook = parseInt(schemeVal, 10) || 3;
+        for (let i = 0; i < unassigned.length; i += perBook) {
+          const slice = unassigned.slice(i, i + perBook);
+          const groupItems = slice.map((photo, pIdx) => {
+            let role = 'info_pages';
+            if (pIdx === 0) role = 'cover_front';
+            else if (pIdx === 1 && perBook > 2) role = 'cover_back';
+            else if (pIdx === 1 && perBook === 2) role = 'info_pages';
+            else if (pIdx === 2) role = 'info_pages';
+            else if (pIdx === 3) role = 'illustrations';
+            else if (pIdx >= 4) role = 'mantra_defects';
+            return { photo, role };
+          });
+          bookGroups.push(groupItems);
+        }
+      }
+
+      let createdCount = 0;
+
+      bookGroups.forEach((group, chunkIdx) => {
+        const bookArtNum = currentNum + chunkIdx;
+        const bookArtStr = `DP-B-${String(bookArtNum).padStart(5, '0')}`;
+        const bookBarcode = generateEan13FromArticle(bookArtStr);
+
+        let targetBook = null;
+        if (chunkIdx === 0 && booksSession.length > 0) {
+          const first = booksSession[0];
+          const hasAnyPhoto = Boolean(first.slots.cover_front || first.slots.cover_back || (first.slots.info_pages && first.slots.info_pages.length > 0));
+          if (!hasAnyPhoto) {
+            targetBook = first;
+            targetBook.article = bookArtStr;
+            if (!targetBook.formData) targetBook.formData = {};
+            targetBook.formData.article = bookArtStr;
+            targetBook.formData.article_number = String(bookArtNum).padStart(5, '0');
+            targetBook.formData.barcode = bookBarcode;
+          }
+        }
+
+        if (!targetBook) {
+          const nextId = booksSession.length > 0 ? Math.max(...booksSession.map(b => b.id)) + 1 : 1;
+          targetBook = {
+            id: nextId,
+            article: bookArtStr,
+            title: `Книга #${nextId}`,
+            slots: {
+              cover_front: null,
+              cover_back: null,
+              info_pages: [],
+              illustrations: [],
+              mantra_defects: []
+            },
+            formData: {
+              article: bookArtStr,
+              article_number: String(bookArtNum).padStart(5, '0'),
+              barcode: bookBarcode,
+              auto_package_adder: true
+            }
+          };
+          booksSession.push(targetBook);
+        }
+
+        // Раскладываем фото группы по слотам
+        group.forEach(({ photo, role }) => {
+          let slot = role || 'info_pages';
+          if (!['cover_front', 'cover_back', 'info_pages', 'illustrations', 'mantra_defects'].includes(slot)) {
+            slot = 'info_pages';
+          }
+
+          photo.assignedBookId = targetBook.id;
+          photo.assignedSlot = slot;
+
+          if (['info_pages', 'illustrations', 'mantra_defects'].includes(slot)) {
+            if (!targetBook.slots[slot].some(p => p.id === photo.id)) {
+              targetBook.slots[slot].push(photo);
+            }
+          } else {
+            // Одиночные слоты: если уже занят, отправляем в info_pages
+            if (targetBook.slots[slot]) {
+              slot = 'info_pages';
+              photo.assignedSlot = slot;
+              if (!targetBook.slots[slot].some(p => p.id === photo.id)) {
+                targetBook.slots[slot].push(photo);
+              }
+            } else {
+              targetBook.slots[slot] = photo;
+            }
+          }
+
+          // Запускаем параллельное вырезание фона и авто-поворот
+          queueAiBackgroundRemoval(photo.id);
+        });
+
+        // Запускаем фоновое распознавание книги Gemini
+        queueBookAiRecognition(targetBook.id);
+        createdCount++;
+      });
+
+      // Обновляем начальный артикул для следующей пачки
+      const nextFutureArt = `DP-B-${String(currentNum + bookGroups.length).padStart(5, '0')}`;
+      if (startArtInput) startArtInput.value = nextFutureArt;
+
+      renderPool();
+      renderBooksTabs();
+      renderActiveBookSlots();
+      scheduleAutoSave();
+
+      if (statusText) {
+        statusText.textContent = `⚡ Конвейер: ${unassigned.length} фото распределено по ${createdCount} книгам (${startArtVal} ... DP-B-${String(currentNum + bookGroups.length - 1).padStart(5, '0')}). Идет параллельная обработка и ИИ-анализ!`;
+      }
+      if (statusCounter) {
+        statusCounter.textContent = `${createdCount} книг в работе`;
+      }
+      showToast(`🚀 Распределено ${unassigned.length} фото по ${createdCount} книгам! Запущен параллельный ИИ-анализ.`);
+    }
+
+    function updatePipelineStatus(msg) {
+      const statusBox = document.getElementById('batchPipelineStatus');
+      const statusText = document.getElementById('batchPipelineStatusText');
+      if (statusBox && statusText) {
+        statusBox.classList.remove('hidden');
+        statusText.textContent = `⚡ ${msg}`;
       }
     }
 
@@ -6520,12 +7195,12 @@
       const isInputFocused = ['input', 'textarea', 'select'].includes(activeTag);
 
       if (isStudioOpen) {
-        // Esc: если активна рамка — сбросить её, иначе закрыть студию
+        // Esc: если активна рамка — снять рамку, иначе закрыть студию без сохранения
         if (e.key === 'Escape') {
           if (cropperInstance && cropperInstance.cropped) {
-            cancelCropSelection();
+            resetCropToOriginal();
           } else {
-            closePhotoStudio();
+            closePhotoStudio(false);
           }
           e.preventDefault();
           return;
@@ -6552,14 +7227,10 @@
           return;
         }
 
-        // Enter: если рамка нарисована — применить срез, иначе сохранить фото
+        // Enter: сохранить все изменения студии
         if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          if (cropperInstance && cropperInstance.cropped) {
-            confirmAndApplyCrop();
-          } else {
-            saveStudioChanges();
-          }
+          saveStudioChanges();
           return;
         }
 
@@ -6588,11 +7259,10 @@
             return;
           }
 
-          // C: переключить на режим среза
+          // C: тогл режима обрезания (вход / выход)
           if (e.key.toLowerCase() === 'c') {
             e.preventDefault();
-            setStudioInteractionMode('crop');
-            showToast('✂️ Режим среза (выделите область мышью)');
+            toggleStudioCropMode();
             return;
           }
 
@@ -6645,7 +7315,7 @@
 
       // Глобальные горячие клавиши (когда студия закрыта)
       if (e.key === 'Escape') {
-        closePhotoStudio();
+        closePhotoStudio(false);
         closeQrModal();
         closeKeyModal();
         closeCardModal();
@@ -7268,27 +7938,38 @@
           if (data.has_new && data.event_id > lastMobileEventId) {
             lastMobileEventId = data.event_id;
             if (data.images && data.images.length > 0) {
+              const addedPhotos = [];
               data.images.forEach(img => {
                 const prev = 'data:image/jpeg;base64,' + img.data;
-                photoPool.push({
+                const photoObj = {
                   id: 'photo_' + Math.random().toString(36).substr(2, 9),
                   name: img.name || 'mobile_photo.jpg',
                   mime: img.mime || 'image/jpeg',
                   data: img.data,
+                  bookIndex: img.book_index || null,
                   preview: prev,
                   cameraOriginal: prev,
                   rawOriginal: prev,
                   croppedBase: null,
                   isCropped: false,
+                  isAiProcessed: false,
                   assignedBookId: null,
                   assignedSlot: null
-                });
+                };
+                photoPool.push(photoObj);
+                addedPhotos.push(photoObj);
               });
               renderPool();
               scheduleAutoSave();
               closeQrModal();
               playNotificationSound();
-              alert(`📱 Со смартфона получено ${data.images.length} фото! Они добавлены в пул.`);
+              showToast(`📱 Со смартфона получено ${data.images.length} фото! ИИ начал вырезание фона...`);
+              addedPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
+              if (document.getElementById('batchAutoDistributeToggle')?.checked) {
+                setTimeout(() => {
+                  runBatchDistributePipeline(true);
+                }, 350);
+              }
             }
           }
         } catch (e) {}
