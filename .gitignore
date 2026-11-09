@@ -46,6 +46,9 @@ storage/card.png
 storage/inbox/*
 !storage/inbox/.gitkeep
 
+storage/session_photos/*
+!storage/session_photos/.gitkeep
+
 storage/books_vault/*
 !storage/books_vault/.gitkeep
 

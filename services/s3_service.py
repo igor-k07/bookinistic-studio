@@ -102,15 +102,10 @@ def upload_book_photos(
     add_photo_urls: List[str] = []
 
     def _decode_photo(photo_obj) -> Optional[bytes]:
-        if not photo_obj or not photo_obj.get("data"):
+        if not photo_obj:
             return None
-        raw_b64 = photo_obj["data"]
-        if "," in raw_b64:
-            raw_b64 = raw_b64.split(",", 1)[1]
-        try:
-            return base64.b64decode(raw_b64)
-        except Exception:
-            return None
+        from services.vault_service import resolve_photo_bytes
+        return resolve_photo_bytes(photo_obj)
 
     if slots_photos:
         # 1. Главная передняя обложка

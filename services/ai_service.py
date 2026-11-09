@@ -174,11 +174,11 @@ def call_gemini_vision(categorized_images: List[Dict[str, Any]], api_key: str) -
     for item in categorized_images:
         role_desc = item.get("role_name", "Фото книги")
         parts.append({"text": f"--- Категория фото: {role_desc} ---"})
-        img_data = item.get("data") or ""
-        # Очищаем data URL префикс, если присутствует (например: data:image/jpeg;base64,...)
-        if img_data.startswith("data:") and "," in img_data:
-            img_data = img_data.split(",", 1)[1]
-        img_data = img_data.strip()
+        from services.vault_service import resolve_photo_bytes
+        img_bytes = resolve_photo_bytes(item)
+        if not img_bytes:
+            continue
+        img_data = base64.b64encode(img_bytes).decode("ascii")
 
         mime = item.get("mime") or "image/jpeg"
         if not mime or mime == "image":
@@ -333,23 +333,20 @@ def classify_and_group_book_photos(photos: List[Dict[str, Any]], api_key: str) -
     }]
 
     for idx, item in enumerate(photos):
-        raw_b64 = item.get("data") or item.get("preview") or ""
-        if "," in raw_b64:
-            raw_b64 = raw_b64.split(",", 1)[1]
-        raw_b64 = raw_b64.strip()
-        if not raw_b64:
+        from services.vault_service import resolve_photo_bytes
+        img_b = resolve_photo_bytes(item)
+        if not img_b:
             continue
 
         # Создаем сверхкомпактный thumbnail (до 300px), чтобы запрос летал за 1-2 секунды
         try:
-            img_b = base64.b64decode(raw_b64)
             im = Image.open(io.BytesIO(img_b))
             im.thumbnail((300, 300))
             buf = io.BytesIO()
             im.convert("RGB").save(buf, format="JPEG", quality=68)
             thumb_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
         except Exception:
-            thumb_b64 = raw_b64
+            thumb_b64 = base64.b64encode(img_b).decode("ascii")
 
         parts.append({"text": f"--- Фото #{idx} ---"})
         parts.append({

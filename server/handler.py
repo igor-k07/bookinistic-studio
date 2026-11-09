@@ -22,6 +22,7 @@ from config import (
     READY_TABLES_DIR,
     READY_TABLES_PRE2011_DIR,
     READY_TABLES_POST2011_DIR,
+    SESSION_PHOTOS_DIR,
     TEMPLATES_DIR,
     VAULT_DIR,
     get_card_image_path,
@@ -54,7 +55,13 @@ from services.db_service import (
 )
 import services.ozon_service as ozon_service
 import services.tunnel_service as tunnel_service
-from services.vault_service import create_photos_zip, save_book_vault_photos
+from services.vault_service import (
+    clear_session_draft_storage,
+    create_photos_zip,
+    resolve_photo_bytes,
+    save_book_vault_photos,
+    save_session_draft_file,
+)
 from services.s3_service import upload_book_photos as s3_upload_book_photos
 from services.image_service import process_image_ai
 from services.enrichment_service import enrich_book_metadata
@@ -126,6 +133,46 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             with open(tpl_path, "rb") as f:
                 self.wfile.write(f.read())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _serve_file_stream(self, full_file_path: str, tag: str = "STATIC", rel_label: str = ""):
+        """Потоковая отдача статического медиафайла (картинки) с авто-определением mime-типа."""
+        if os.path.exists(full_file_path) and os.path.isfile(full_file_path):
+            try:
+                with open(full_file_path, "rb") as f_chk:
+                    magic = f_chk.read(16)
+                if magic.startswith(b"\xff\xd8\xff"):
+                    content_type = "image/jpeg"
+                elif magic.startswith(b"\x89PNG\r\n\x1a\n"):
+                    content_type = "image/png"
+                elif magic.startswith(b"RIFF") and b"WEBP" in magic:
+                    content_type = "image/webp"
+                else:
+                    ext = os.path.splitext(full_file_path)[1].lower()
+                    content_type = "image/jpeg" if ext in (".jpg", ".jpeg") else ("image/png" if ext == ".png" else "application/octet-stream")
+            except Exception:
+                content_type = "image/jpeg"
+
+            file_size = os.path.getsize(full_file_path)
+            t0_req = time.time()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(file_size))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            if self.command != "HEAD":
+                with open(full_file_path, "rb") as f:
+                    while True:
+                        chunk = f.read(262144)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            t_spent = time.time() - t0_req
+            if t_spent > 0.5:
+                print(f"📸 [{tag}] 200 OK ({file_size // 1024} KB in {t_spent:.2f}s) -> {rel_label}", flush=True)
         else:
             self.send_response(404)
             self.end_headers()
@@ -508,44 +555,27 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                                 full_file_path = cand
                                 break
 
-            if os.path.exists(full_file_path) and os.path.isfile(full_file_path):
-                # Определяем реальный mime-тип по сигнатуре файла
-                try:
-                    with open(full_file_path, "rb") as f_chk:
-                        magic = f_chk.read(16)
-                    if magic.startswith(b"\xff\xd8\xff"):
-                        content_type = "image/jpeg"
-                    elif magic.startswith(b"\x89PNG\r\n\x1a\n"):
-                        content_type = "image/png"
-                    elif magic.startswith(b"RIFF") and b"WEBP" in magic:
-                        content_type = "image/webp"
-                    else:
-                        ext = os.path.splitext(full_file_path)[1].lower()
-                        content_type = "image/jpeg" if ext in (".jpg", ".jpeg") else ("image/png" if ext == ".png" else "application/octet-stream")
-                except Exception:
-                    content_type = "image/jpeg"
+            self._serve_file_stream(full_file_path, tag="VAULT", rel_label=safe_rel_path)
 
-                file_size = os.path.getsize(full_file_path)
-                t0_req = time.time()
-                self.send_response(200)
-                self.send_header("Content-Type", content_type)
-                self.send_header("Content-Length", str(file_size))
-                self.send_header("Cache-Control", "public, max-age=86400")
-                self.send_header("Access-Control-Allow-Origin", "*")
+        elif parsed.path.startswith("/session_photos/"):
+            rel_path = urllib.parse.unquote(parsed.path[len("/session_photos/"):])
+            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
+            if safe_rel_path.startswith(".."):
+                self.send_response(403)
                 self.end_headers()
-                if self.command != "HEAD":
-                    with open(full_file_path, "rb") as f:
-                        while True:
-                            chunk = f.read(262144)
-                            if not chunk:
-                                break
-                            self.wfile.write(chunk)
-                t_spent = time.time() - t0_req
-                ua = self.headers.get("User-Agent", "Unknown")[:40]
-                print(f"📸 [VAULT] 200 OK ({file_size // 1024} KB in {t_spent:.2f}s) -> {safe_rel_path} [{ua}]", flush=True)
-            else:
-                self.send_response(404)
+                return
+            full_file_path = os.path.join(SESSION_PHOTOS_DIR, safe_rel_path)
+            self._serve_file_stream(full_file_path, tag="SESSION_PHOTO", rel_label=safe_rel_path)
+
+        elif parsed.path.startswith("/inbox/"):
+            rel_path = urllib.parse.unquote(parsed.path[len("/inbox/"):])
+            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
+            if safe_rel_path.startswith(".."):
+                self.send_response(403)
                 self.end_headers()
+                return
+            full_file_path = os.path.join(INBOX_DIR, safe_rel_path)
+            self._serve_file_stream(full_file_path, tag="INBOX", rel_label=safe_rel_path)
 
         elif parsed.path == "/api/download_photos_zip":
             qs = urllib.parse.parse_qs(parsed.query)
@@ -730,12 +760,12 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
         elif parsed.path == "/api/ai_process_photo":
             try:
                 body = json.loads(post_data.decode("utf-8"))
-                raw_b64 = body.get("image", "")
-                if not raw_b64:
+                img_val = body.get("image", "")
+                if not img_val:
                     raise Exception("Нет изображения для обработки")
-                if "," in raw_b64:
-                    raw_b64 = raw_b64.split(",", 1)[1]
-                img_bytes = base64.b64decode(raw_b64)
+                img_bytes = resolve_photo_bytes(img_val)
+                if not img_bytes:
+                    raise Exception("Не удалось прочитать байты изображения")
                 result = process_image_ai(img_bytes)
                 if isinstance(result, dict):
                     full_img_bytes = result.get("image_bytes") or result.get("full_bytes")
@@ -763,19 +793,17 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error_json(e)
 
-
         elif parsed.path == "/api/save_session_draft":
             try:
-                with open(DRAFT_FILE, "wb") as f:
-                    f.write(post_data)
-                self.send_json({"success": True})
+                draft_data = json.loads(post_data.decode("utf-8"))
+                updated_urls = save_session_draft_file(draft_data)
+                self.send_json({"success": True, "updated_urls": updated_urls})
             except Exception as e:
                 self.send_json({"success": False, "error": str(e)})
 
         elif parsed.path == "/api/clear_session_draft":
             try:
-                if os.path.exists(DRAFT_FILE):
-                    os.remove(DRAFT_FILE)
+                clear_session_draft_storage()
                 self.send_json({"success": True})
             except Exception as e:
                 self.send_json({"success": False, "error": str(e)})

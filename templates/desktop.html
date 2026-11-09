@@ -1996,19 +1996,81 @@
     async function performAutoSave() {
       saveCurrentFormToActiveBook();
       try {
+        // Компактный photoPool без раздутой истории undo и дубликатов data
+        const cleanPool = photoPool.map(p => {
+          const item = {
+            id: p.id,
+            name: p.name || 'photo.jpg',
+            mime: p.mime || 'image/jpeg',
+            preview: p.preview || p.cameraOriginal,
+            cameraOriginal: p.cameraOriginal || p.rawOriginal || p.preview,
+            rawOriginal: p.cameraOriginal || p.rawOriginal || p.preview,
+            croppedBase: p.croppedBase || null,
+            aiWhiteOriginal: p.aiWhiteOriginal || null,
+            isCropped: Boolean(p.isCropped),
+            isAiProcessed: Boolean(p.isAiProcessed),
+            whiten: p.whiten || 0,
+            brightness: p.brightness || 0,
+            contrast: p.contrast || 0,
+            saturation: p.saturation || 0,
+            rotation: p.rotation || 0,
+            assignedBookId: p.assignedBookId || null,
+            assignedSlot: p.assignedSlot || null
+          };
+          if (p.aiCropRelative) item.aiCropRelative = p.aiCropRelative;
+          return item;
+        });
+
+        // Де-дуплицированные слоты книг (только id)
+        const cleanBooks = booksSession.map(b => {
+          const slots = b.slots || {};
+          return {
+            ...b,
+            slots: {
+              cover_front: (slots.cover_front && slots.cover_front.id) ? { id: slots.cover_front.id } : null,
+              cover_back: (slots.cover_back && slots.cover_back.id) ? { id: slots.cover_back.id } : null,
+              info_pages: (slots.info_pages || []).filter(p => p && p.id).map(p => ({ id: p.id })),
+              illustrations: (slots.illustrations || []).filter(p => p && p.id).map(p => ({ id: p.id })),
+              mantra_defects: (slots.mantra_defects || []).filter(p => p && p.id).map(p => ({ id: p.id }))
+            }
+          };
+        });
+
         const payload = {
           has_draft: true,
           activeBookId: activeBookId,
-          booksSession: booksSession,
-          photoPool: photoPool,
+          booksSession: cleanBooks,
+          photoPool: cleanPool,
           timestamp: Date.now()
         };
-        await fetch('/api/save_session_draft', {
+
+        const res = await fetch('/api/save_session_draft', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        updateAutoSaveStatus('saved');
+
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.updated_urls) {
+            // Освобождаем память в браузере, заменяя base64 на легкие локальные URL
+            Object.keys(resData.updated_urls).forEach(pid => {
+              const p = findPhotoById(pid);
+              if (p) {
+                const urls = resData.updated_urls[pid];
+                if (urls.preview) p.preview = urls.preview;
+                if (urls.cameraOriginal) p.cameraOriginal = urls.cameraOriginal;
+                if (urls.rawOriginal) p.rawOriginal = urls.rawOriginal;
+                if (urls.croppedBase) p.croppedBase = urls.croppedBase;
+                if (urls.aiWhiteOriginal) p.aiWhiteOriginal = urls.aiWhiteOriginal;
+                delete p.data;
+              }
+            });
+          }
+          updateAutoSaveStatus('saved');
+        } else {
+          updateAutoSaveStatus('error');
+        }
       } catch (err) {
         console.warn('Auto-save error:', err);
         updateAutoSaveStatus('error');
@@ -2072,24 +2134,32 @@
       });
 
       booksSession.forEach(b => {
+        if (!b.slots) b.slots = {};
         ['cover_front', 'cover_back'].forEach(s => {
           if (b.slots[s] && b.slots[s].id) {
             if (map.has(b.slots[s].id)) {
               b.slots[s] = map.get(b.slots[s].id);
-            } else {
+            } else if (b.slots[s].preview) {
               photoPool.push(b.slots[s]);
               map.set(b.slots[s].id, b.slots[s]);
+            } else {
+              b.slots[s] = null;
             }
           }
         });
         ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
           if (Array.isArray(b.slots[s])) {
             b.slots[s] = b.slots[s].map(p => {
-              if (map.has(p.id)) return map.get(p.id);
-              photoPool.push(p);
-              map.set(p.id, p);
-              return p;
-            });
+              if (p && p.id && map.has(p.id)) return map.get(p.id);
+              if (p && p.preview) {
+                photoPool.push(p);
+                map.set(p.id, p);
+                return p;
+              }
+              return null;
+            }).filter(Boolean);
+          } else {
+            b.slots[s] = [];
           }
         });
       });
