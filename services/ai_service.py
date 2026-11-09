@@ -288,3 +288,118 @@ def call_gemini_vision(categorized_images: List[Dict[str, Any]], api_key: str) -
 
     raise Exception(last_error or "Не удалось получить ответ от Gemini API после перебора всех моделей")
 
+
+def classify_and_group_book_photos(photos: List[Dict[str, Any]], api_key: str) -> List[Dict[str, Any]]:
+    """
+    Интеллектуальная ИИ-классификация пачки фотографий:
+    1. Находит границы книг (каждая новая книга обычно начинается с Лицевой обложки).
+    2. Присваивает роль каждому кадру:
+       - 'cover_front': Лицевая обложка
+       - 'cover_back': Оборот переплета / штрихкод
+       - 'info_pages': Титульный лист, оборот титула, форзац с выходными данными (может быть несколько!)
+       - 'illustrations': Иллюстрации, гравюры, цветные вклейки (может быть несколько или 0)
+       - 'mantra_defects': Дефекты, повреждения, пятна, пометки (может быть несколько или 0)
+    Возвращает список классифицированных кадров с полями 'index', 'book_num', 'role'.
+    """
+    import io
+    from PIL import Image
+
+    if not photos:
+        return []
+
+    parts = [{
+        "text": (
+            "Ты эксперт-букинист и каталогизатор антикварных и советских книг для маркетплейса.\n"
+            "Перед тобой упорядоченная последовательность фотографий одной или нескольких книг.\n"
+            "Твоя задача:\n"
+            "1. Понять, сколько здесь разных книг и где границы каждой книги (каждая новая книга начинается с лицевой обложки 'cover_front').\n"
+            "2. Для каждого кадра определить его точную роль в книге:\n"
+            "   - 'cover_front': Лицевая сторона переплета / обложки книги (ровно 1 на книгу)\n"
+            "   - 'cover_back': Задняя сторона переплета / задник со штрихкодом (ровно 1 на книгу)\n"
+            "   - 'info_pages': Титульный лист, оборот титула, форзац с выходными данными, колофон (может быть несколько кадров!)\n"
+            "   - 'illustrations': Художественные иллюстрации, цветные вкладки, гравюры, карты, развороты (может быть несколько или 0)\n"
+            "   - 'mantra_defects': Фото повреждений: надрывы, лисьи пятна, пометки, штампы, сбитые углы (может быть несколько или 0)\n\n"
+            "Верни строгий JSON в формате:\n"
+            "{\n"
+            '  "items": [\n'
+            '    {"index": 0, "book_num": 1, "role": "cover_front"},\n'
+            '    {"index": 1, "book_num": 1, "role": "cover_back"},\n'
+            '    {"index": 2, "book_num": 1, "role": "info_pages"},\n'
+            '    {"index": 3, "book_num": 1, "role": "info_pages"},\n'
+            '    {"index": 4, "book_num": 2, "role": "cover_front"}\n'
+            "  ]\n"
+            "}"
+        )
+    }]
+
+    for idx, item in enumerate(photos):
+        raw_b64 = item.get("data") or item.get("preview") or ""
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        raw_b64 = raw_b64.strip()
+        if not raw_b64:
+            continue
+
+        # Создаем сверхкомпактный thumbnail (до 300px), чтобы запрос летал за 1-2 секунды
+        try:
+            img_b = base64.b64decode(raw_b64)
+            im = Image.open(io.BytesIO(img_b))
+            im.thumbnail((300, 300))
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, format="JPEG", quality=68)
+            thumb_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        except Exception:
+            thumb_b64 = raw_b64
+
+        parts.append({"text": f"--- Фото #{idx} ---"})
+        parts.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": thumb_b64
+            }
+        })
+
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "response_mime_type": "application/json",
+            "temperature": 0.0
+        }
+    }
+
+    models = [
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-2.5-pro"
+    ]
+
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=18) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                cands = res_data.get("candidates", [])
+                if cands:
+                    t = cands[0]["content"]["parts"][0]["text"]
+                    parsed = extract_json_safely(t)
+                    items = parsed.get("items", [])
+                    if isinstance(items, list) and items:
+                        print(f"[{model}] Успешно классифицирована пачка из {len(items)} фото!", flush=True)
+                        return items
+        except Exception as e:
+            print(f"[classify_and_group] Ошибка модели {model}: {e}", flush=True)
+            continue
+
+    # Fallback если ИИ недоступен
+    fallback = []
+    for i in range(len(photos)):
+        role = "cover_front" if i == 0 else ("cover_back" if i == 1 else "info_pages")
+        fallback.append({"index": i, "book_num": 1, "role": role})
+    return fallback
+

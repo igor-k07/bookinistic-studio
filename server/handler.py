@@ -32,7 +32,7 @@ from config import (
     save_ozon_config,
 )
 from server.state import check_mobile_events, record_mobile_upload
-from services.ai_service import call_gemini_vision
+from services.ai_service import call_gemini_vision, classify_and_group_book_photos
 from services.excel_service import (
     append_book_to_excel,
     clear_excel_table,
@@ -632,6 +632,20 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error_json(e)
 
+        elif parsed.path == "/api/ai_classify_batch":
+            try:
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
+                api_key = (body.get("api_key") or "").strip() or get_saved_api_key()
+                if not api_key:
+                    raise Exception("API ключ Gemini не введен!")
+                photos = body.get("photos", [])
+                if not photos:
+                    raise Exception("Нет фотографий для классификации")
+                items = classify_and_group_book_photos(photos, api_key)
+                self.send_json({"success": True, "items": items})
+            except Exception as e:
+                self.send_error_json(e)
+
         elif parsed.path == "/api/save_book":
             try:
                 book_data = json.loads(post_data.decode("utf-8"))
@@ -722,9 +736,22 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 if "," in raw_b64:
                     raw_b64 = raw_b64.split(",", 1)[1]
                 img_bytes = base64.b64decode(raw_b64)
-                processed_bytes = process_image_ai(img_bytes)
-                out_b64 = "data:image/jpeg;base64," + base64.b64encode(processed_bytes).decode("ascii")
-                self.send_json({"success": True, "image": out_b64})
+                result = process_image_ai(img_bytes)
+                if isinstance(result, dict):
+                    full_img_bytes = result.get("image_bytes") or result.get("full_bytes")
+                    out_b64 = "data:image/jpeg;base64," + base64.b64encode(full_img_bytes).decode("ascii")
+                    crop_rel = result.get("crop_relative")
+                    rot = result.get("rotation", 0)
+                else:
+                    out_b64 = "data:image/jpeg;base64," + base64.b64encode(result).decode("ascii")
+                    crop_rel = None
+                    rot = 0
+                self.send_json({
+                    "success": True,
+                    "image": out_b64,
+                    "crop_relative": crop_rel,
+                    "rotation": rot
+                })
             except Exception as e:
                 self.send_error_json(e)
 
