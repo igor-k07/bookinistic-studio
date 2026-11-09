@@ -3,9 +3,11 @@ excel_service.py: Управление таблицами Excel (OpenXML) для
 """
 
 from datetime import datetime
+from functools import wraps
 import os
 import re
 import shutil
+import threading
 import xml.etree.ElementTree as ET
 import xml.sax.saxutils as saxutils
 import zipfile
@@ -25,6 +27,20 @@ from core.barcode import generate_ean13_from_article
 import tunnel_manager
 
 
+# Межпоточный реентерабельный мьютекс для защиты целостности таблиц Excel Ozon
+EXCEL_LOCK = threading.RLock()
+
+
+def with_excel_lock(func):
+    """Декоратор для безопасной многопоточной записи/чтения таблиц Excel Ozon."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with EXCEL_LOCK:
+            return func(*args, **kwargs)
+    return wrapper
+
+
+@with_excel_lock
 def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
     """Считывает все добавленные книги из таблицы (pre2011 или post2011)."""
     target_file = get_target_excel_file(mode)
@@ -160,6 +176,7 @@ def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
         return []
 
 
+@with_excel_lock
 def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
     """Записывает книгу в соответствующий шаблон Ozon (до 2011 или после 2011 года)."""
     mode = b.get("template_mode")
@@ -548,6 +565,7 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@with_excel_lock
 def clear_excel_table(mode: str = "pre2011") -> dict:
     """
     Очищает выбранную таблицу Excel Ozon (pre2011, post2011 или all),
@@ -597,6 +615,7 @@ def clear_excel_table(mode: str = "pre2011") -> dict:
     }
 
 
+@with_excel_lock
 def delete_book_from_excel(article: str, mode: str = "pre2011") -> dict:
     """
     Удаляет конкретную строку книги по артикулу из таблицы Excel Ozon.
