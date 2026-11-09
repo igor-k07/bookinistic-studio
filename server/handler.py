@@ -493,44 +493,49 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
 
-        elif parsed.path in ("/qrcode.min.js", "/static/qrcode.min.js"):
-            qr_file = os.path.join(TEMPLATES_DIR, "qrcode.min.js")
-            if os.path.exists(qr_file):
-                self.send_response(200)
-                self.send_header("Content-Type", "application/javascript; charset=utf-8")
-                self.send_header("Cache-Control", "public, max-age=86400")
-                self.end_headers()
-                with open(qr_file, "rb") as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_response(404)
-                self.end_headers()
+        elif parsed.path.startswith("/static/") or parsed.path.endswith((".js", ".css", ".svg", ".png", ".jpg")):
+            clean_rel = urllib.parse.unquote(parsed.path.lstrip("/"))
+            candidates = [
+                os.path.join(TEMPLATES_DIR, clean_rel),
+                os.path.join(TEMPLATES_DIR, os.path.basename(clean_rel)),
+                os.path.join(TEMPLATES_DIR, "static", os.path.basename(clean_rel)),
+                os.path.join(BASE_DIR, clean_rel),
+            ]
+            full_file_path = None
+            for cand in candidates:
+                if os.path.exists(cand) and os.path.isfile(cand):
+                    full_file_path = cand
+                    break
 
-        elif parsed.path in ("/cropper.min.js", "/static/cropper.min.js"):
-            cropper_js = os.path.join(TEMPLATES_DIR, "cropper.min.js")
-            if os.path.exists(cropper_js):
+            if full_file_path:
+                ext = os.path.splitext(full_file_path)[1].lower()
+                mime_map = {
+                    ".js": "application/javascript; charset=utf-8",
+                    ".css": "text/css; charset=utf-8",
+                    ".svg": "image/svg+xml",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".json": "application/json; charset=utf-8",
+                }
+                content_type = mime_map.get(ext, "application/octet-stream")
                 self.send_response(200)
-                self.send_header("Content-Type", "application/javascript; charset=utf-8")
-                self.send_header("Cache-Control", "public, max-age=86400")
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
-                with open(cropper_js, "rb") as f:
-                    self.wfile.write(f.read())
+                if self.command != "HEAD":
+                    with open(full_file_path, "rb") as f:
+                        while True:
+                            chunk = f.read(262144)
+                            if not chunk:
+                                break
+                            self.wfile.write(chunk)
+                return
             else:
                 self.send_response(404)
                 self.end_headers()
-
-        elif parsed.path in ("/cropper.min.css", "/static/cropper.min.css"):
-            cropper_css = os.path.join(TEMPLATES_DIR, "cropper.min.css")
-            if os.path.exists(cropper_css):
-                self.send_response(200)
-                self.send_header("Content-Type", "text/css; charset=utf-8")
-                self.send_header("Cache-Control", "public, max-age=86400")
-                self.end_headers()
-                with open(cropper_css, "rb") as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_response(404)
-                self.end_headers()
+                return
 
         elif parsed.path.startswith("/vault/"):
             rel_path = urllib.parse.unquote(parsed.path[len("/vault/"):])
