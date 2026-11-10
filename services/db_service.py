@@ -569,9 +569,8 @@ def get_catalog_references(force_reload: bool = False) -> Dict[str, List[str]]:
 def _match_person(name: str, known_list: List[str]) -> str:
     """
     Сверяет имя персоны (автор/переводчик/иллюстратор) со списком из базы.
-    Поддерживает: точное совпадение, нечувствительность к регистру,
-    сопоставление инициалов с полным ФИО (например, Толстой Л. Н. -> Толстой Лев Николаевич).
-    Если совпадение не найдено, возвращает исходное имя.
+    Поддерживает: точное совпадение без учета регистра.
+    НЕ подменяет автора автоматически на похожих кандидатов по фамилии/инициалам.
     """
     clean = name.strip()
     if not clean or clean.lower() in ("не указан", "нет автора", "—", "-"):
@@ -580,25 +579,6 @@ def _match_person(name: str, known_list: List[str]) -> str:
     lower_map = {p.lower(): p for p in known_list}
     if clean.lower() in lower_map:
         return lower_map[clean.lower()]
-
-    parts = clean.replace(".", ". ").split()
-    if not parts:
-        return clean
-    surname = parts[0].lower()
-
-    candidates = [p for p in known_list if p.lower().startswith(surname + " ")]
-    if len(candidates) == 1:
-        return candidates[0]
-    elif len(candidates) > 1 and len(parts) >= 2:
-        # Сверяем первую букву имени
-        first_init = parts[1][0].lower()
-        sub_cands = []
-        for c in candidates:
-            c_parts = c.split()
-            if len(c_parts) >= 2 and c_parts[1][0].lower() == first_init:
-                sub_cands.append(c)
-        if len(sub_cands) == 1:
-            return sub_cands[0]
 
     return clean
 

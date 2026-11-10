@@ -201,6 +201,13 @@ function snapToCanonical(inputEl, categoryKey) {
   if (!inputEl || !window.CATALOG_REFERENCES) return;
   const raw = (inputEl.value || '').trim();
   if (!raw) return;
+
+  // Для авторов (как на обложке, так и официального): не подставляем автора автоматически при вводе,
+  // если есть похожий. Варианты предлагаются в выпадающем меню, но сам скрипт не выбирает.
+  if (categoryKey === 'authors' || inputEl.id === 'author' || inputEl.id === 'author_cover') {
+    return;
+  }
+
   const list = window.CATALOG_REFERENCES[categoryKey] || [];
   const rawLower = raw.toLowerCase();
 
@@ -213,28 +220,7 @@ function snapToCanonical(inputEl, categoryKey) {
     matched = list.find(item => item.toLowerCase().replace(/["'«»]/g, '').trim() === cleanLower);
   }
 
-  // 3. Сопоставление авторов/персон по фамилии и инициалам
-  if (!matched && (categoryKey === 'authors' || categoryKey === 'translators' || categoryKey === 'illustrators')) {
-    const parts = raw.replace(/\./g, '. ').split(/\s+/).filter(Boolean);
-    if (parts.length >= 1) {
-      const surname = parts[0].toLowerCase();
-      const cands = list.filter(item => item.toLowerCase().startsWith(surname + ' '));
-      if (cands.length === 1) {
-        matched = cands[0];
-      } else if (cands.length > 1 && parts.length >= 2) {
-        const firstInit = parts[1][0].toLowerCase();
-        const subCands = cands.filter(c => {
-          const cp = c.split(/\s+/);
-          return cp.length >= 2 && cp[1][0].toLowerCase() === firstInit;
-        });
-        if (subCands.length === 1) {
-          matched = subCands[0];
-        }
-      }
-    }
-  }
-
-  // 4. Для бренда: автоматическая нормализация "нет бренда"
+  // 3. Для бренда: автоматическая нормализация "нет бренда"
   if (categoryKey === 'brands' && (rawLower === 'нет бренда' || rawLower === 'нет' || rawLower === 'без бренда' || rawLower === 'не указан')) {
     matched = 'Нет бренда';
   }
@@ -245,7 +231,7 @@ function snapToCanonical(inputEl, categoryKey) {
     setTimeout(() => inputEl.classList.remove('field-updated'), 800);
   }
 
-  // 5. Если изменилось издательство — синхронизируем бренд с базой брендов Ozon
+  // 4. Если изменилось издательство — синхронизируем бренд с базой брендов Ozon
   if (categoryKey === 'publishers' || inputEl.id === 'publisher') {
     syncBrandWithPublisher(inputEl.value);
   }
