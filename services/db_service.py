@@ -13,6 +13,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from config import DB_PATH, READY_TABLES_DIR
+from core.constants import normalize_genre
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -90,6 +91,10 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     raw_age = str(clean.get("age_limit") or "").strip()
     if raw_age not in ("0+", "6+", "12+", "16+", "18+"):
         clean["age_limit"] = ""
+
+    # Санитизация направления/жанра Ozon: исключаем 'Детская литература'
+    raw_genre = str(clean.get("genre") or "").strip()
+    clean["genre"] = normalize_genre(raw_genre, str(clean.get("title") or ""), str(clean.get("annotation") or ""))
 
     # Если в slots_photos были base64-данные, сохраняем только имена файлов
     if "slots_photos" in clean and isinstance(clean["slots_photos"], dict):
@@ -708,7 +713,13 @@ def reconcile_with_references(book_data: Dict[str, Any]) -> Dict[str, Any]:
     else:
         book_data["brand"] = _match_brand_from_publisher(pub_cand, brands_ref)
 
-    return book_data
+    # 7. Направление / Жанр: исключаем несуществующий жанр 'Детская литература'
+    raw_genre = str(book_data.get("genre") or "").strip()
+    book_data["genre"] = normalize_genre(
+        raw_genre,
+        str(book_data.get("title") or ""),
+        str(book_data.get("annotation") or "")
+    )
 
     return book_data
 

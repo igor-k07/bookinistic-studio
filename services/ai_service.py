@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List
 
-from core.constants import OZON_PAPERS, SYSTEM_PROMPT
+from core.constants import OZON_PAPERS, SYSTEM_PROMPT, normalize_genre
 from services.db_service import reconcile_with_references
 from services.enrichment_service import calculate_dimensions_and_weight, parse_book_format_code
 
@@ -112,6 +112,10 @@ def sanitize_ai_book_data(parsed: Dict[str, Any]) -> Dict[str, Any]:
         parsed["paper_type"] = ""
     else:
         parsed["paper_type"] = paper_raw
+
+    # Санитизация направления/жанра Ozon: исключаем несуществующий жанр 'Детская литература'
+    raw_genre = str(parsed.get("genre") or "").strip()
+    parsed["genre"] = normalize_genre(raw_genre, str(parsed.get("title") or ""), str(parsed.get("annotation") or ""))
 
     # Санитизация аннотации: убираем любые случайные предупреждения или дисклеймеры от ИИ
     if parsed.get("annotation"):

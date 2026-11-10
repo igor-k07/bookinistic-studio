@@ -24,6 +24,7 @@ from config import (
     get_target_excel_file,
 )
 from core.barcode import generate_ean13_from_article
+from core.constants import normalize_genre
 import tunnel_manager
 
 
@@ -316,7 +317,7 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
     if age_lim not in ("0+", "6+", "12+", "16+", "18+"):
         age_lim = ""
     is_18_plus = "Да" if age_lim == "18+" else ""
-    genre = b.get("genre", "Проза")
+    genre = normalize_genre(b.get("genre", "Проза"), str(b.get("title") or ""), str(b.get("annotation") or ""))
     publisher = b.get("publisher", "").strip()
 
     brand_raw = str(b.get("brand") or "").strip()
@@ -446,6 +447,8 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             col_map["BB"] = ("str", "История России до XIX века")
         elif genre == "Научная и научно-популярная литература":
             col_map["AX"] = ("str", "Естественные науки")
+        elif genre == "Эпос и фольклор":
+            col_map["BS"] = ("str", "Сказки")
 
         col_order = [
             "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
@@ -522,6 +525,8 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             col_map["BA"] = ("str", "История России до XIX века")
         elif genre == "Научная и научно-популярная литература":
             col_map["AW"] = ("str", "Естественные науки")
+        elif genre == "Эпос и фольклор":
+            col_map["BR"] = ("str", "Сказки")
 
         col_order = [
             "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",

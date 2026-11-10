@@ -794,6 +794,14 @@
       if (document.getElementById('autoPackageAdder')) {
         document.getElementById('autoPackageAdder').checked = (book.formData.auto_package_adder !== false);
       }
+      // Нормализация жанра: исключаем 'Детская литература' из черновиков
+      if (book.formData['genre'] === 'Детская литература' || (book.formData['genre'] && String(book.formData['genre']).toLowerCase().includes('детск'))) {
+        book.formData['genre'] = (typeof resolveOzonGenre === 'function')
+          ? resolveOzonGenre(book.formData['genre'], book.formData['title'], book.formData['annotation'])
+          : 'Проза';
+        const gEl = document.getElementById('genre');
+        if (gEl) gEl.value = book.formData['genre'];
+      }
       // Распаковка габаритов для старых черновиков если width/length отсутствуют
       const wEl = document.getElementById('width');
       const lEl = document.getElementById('length');
@@ -1095,24 +1103,32 @@
         if (data.cover_type) fill('cover_type', data.cover_type);
 
         if (data.genre) {
-          fill('genre', data.genre);
+          const rawG = String(data.genre).trim();
+          const curTitle = data.title || (curBookObj.formData && curBookObj.formData.title) || '';
+          const curAnnot = data.annotation || (curBookObj.formData && curBookObj.formData.annotation) || '';
+          const resolvedGenre = (typeof resolveOzonGenre === 'function')
+            ? resolveOzonGenre(rawG, curTitle, curAnnot)
+            : rawG;
+          fill('genre', resolvedGenre);
           if (isCurrentActive) {
             const genreEl = document.getElementById('genre');
             if (genreEl) {
               let matched = false;
               for (let opt of genreEl.options) {
-                if (opt.value === data.genre || opt.text === data.genre) {
+                if (opt.value === resolvedGenre || opt.text === resolvedGenre) {
                   genreEl.value = opt.value;
                   matched = true;
                   break;
                 }
               }
-              if (!matched && typeof data.genre === 'string' && data.genre.trim()) {
+              if (!matched && typeof resolvedGenre === 'string' && resolvedGenre.trim() && resolvedGenre !== 'Детская литература') {
                 const opt = document.createElement('option');
-                opt.value = data.genre;
-                opt.textContent = data.genre;
+                opt.value = resolvedGenre;
+                opt.textContent = resolvedGenre;
                 genreEl.appendChild(opt);
-                genreEl.value = data.genre;
+                genreEl.value = resolvedGenre;
+              } else if (!matched) {
+                genreEl.value = 'Проза';
               }
               try { handleGenreChange(); } catch (e) { console.warn('handleGenreChange error', e); }
             }
