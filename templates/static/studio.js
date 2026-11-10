@@ -326,10 +326,11 @@
       let photo = photoPool.find(p => p.id === photoId);
       if (photo) return photo;
       for (const b of booksSession) {
+        if (!b || !b.slots) continue;
         if (b.slots.cover_front && b.slots.cover_front.id === photoId) return b.slots.cover_front;
-        if (b.slots.cover_back && b.slots.cover_back.id === photoId) return b.slots.cover_back;
-        for (const s of ['info_pages', 'illustrations', 'mantra_defects']) {
-          const found = (b.slots[s] || []).find(p => p.id === photoId);
+        for (const s of ['cover_back', 'info_pages', 'illustrations', 'mantra_defects']) {
+          const list = Array.isArray(b.slots[s]) ? b.slots[s] : (b.slots[s] ? [b.slots[s]] : []);
+          const found = list.find(p => p && p.id === photoId);
           if (found) return found;
         }
       }
@@ -342,7 +343,8 @@
       if (book && book.slots) {
         const bookPhotos = [];
         if (book.slots.cover_front) bookPhotos.push(book.slots.cover_front);
-        if (book.slots.cover_back) bookPhotos.push(book.slots.cover_back);
+        const backList = Array.isArray(book.slots.cover_back) ? book.slots.cover_back : (book.slots.cover_back ? [book.slots.cover_back] : []);
+        backList.forEach(p => bookPhotos.push(p));
         (book.slots.info_pages || []).forEach(p => bookPhotos.push(p));
         (book.slots.illustrations || []).forEach(p => bookPhotos.push(p));
         (book.slots.mantra_defects || []).forEach(p => bookPhotos.push(p));

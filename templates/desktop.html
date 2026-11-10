@@ -386,7 +386,7 @@
               <span class="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono font-bold">1</span>
               <span>🌟 1. Обложка (перед)</span>
             </button>
-            <button type="button" onclick="assignSelectedToSlot('cover_back')" class="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-sky-400/40" title="Оборотная сторона переплета, штрихкод (1 фото)">
+            <button type="button" onclick="assignSelectedToSlot('cover_back')" class="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow transition flex items-center justify-center gap-1.5 border border-sky-400/40" title="Оборотная сторона переплета, штрихкод (1 фото или несколько для комплектов)">
               <span class="px-1.5 py-0.2 rounded bg-black/40 text-[10px] font-mono font-bold">2</span>
               <span>🔄 2. Обложка (зад)</span>
             </button>
@@ -483,7 +483,7 @@
           </div>
         </div>
 
-        <!-- СЛОТ 2: ЗАДНЯЯ ОБЛОЖКА (СТРОГО 1 ФОТО) -->
+        <!-- СЛОТ 2: ЗАДНЯЯ ОБЛОЖКА (МУЛЬТИ) -->
         <div class="slot-card bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between min-h-[280px] relative group hover:border-sky-500/60 transition shadow-lg"
              ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event, 'cover_back')">
           <div class="flex flex-col gap-1 mb-2.5">
@@ -491,14 +491,14 @@
               <span class="text-xs font-bold text-sky-400 flex items-center gap-1.5">
                 <span>🔄 2. Задняя обложка</span>
               </span>
-              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-950/90 text-sky-300 border border-sky-800/80 font-bold">1 фото [2]</span>
+              <span class="text-[10px] font-mono text-slate-400 font-bold">Мульти [2]</span>
             </div>
-            <span class="text-[10px] text-slate-400">Оборот переплёта, аннотация, штрихкод</span>
+            <span class="text-[10px] text-slate-400">Оборот переплёта, штрихкод (для комплектов — задники всех книг)</span>
           </div>
-          <div id="slot_cover_back" class="flex-1 flex items-center justify-center border-2 border-dashed border-slate-800/90 rounded-xl overflow-hidden bg-slate-900/40 min-h-[190px] p-1.5">
-            <span class="text-xs text-slate-500 text-center px-3 leading-relaxed">
+          <div id="slot_cover_back" class="flex-1 grid grid-cols-2 gap-2 border-2 border-dashed border-slate-800/90 rounded-xl p-2 overflow-y-auto max-h-[300px] bg-slate-900/40 min-h-[190px] items-center">
+            <span class="col-span-full text-xs text-slate-500 text-center px-2 leading-relaxed">
               <span class="block text-xl mb-1 opacity-60">🔄</span>
-              Перетащите сюда заднюю сторону или нажмите <span class="text-sky-400 font-mono font-bold">[2]</span>
+              Перетащите задник книги (или нескольких) или нажмите <span class="text-sky-400 font-mono font-bold">[2]</span>
             </span>
           </div>
         </div>

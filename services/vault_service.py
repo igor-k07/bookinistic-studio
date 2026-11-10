@@ -103,14 +103,17 @@ def save_book_vault_photos(
             write_photo(f"02_defect_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
             cur_ozon_idx += 1
 
-        # 3. Фото иллюстраций
-        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
-            write_photo(f"03_illustration_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
+        # 3. Фото задников книги (для комплектов — задники всех книг)
+        cb_raw = slots_photos.get("cover_back")
+        cb_list = cb_raw if isinstance(cb_raw, list) else ([cb_raw] if cb_raw else [])
+        for idx, p in enumerate(cb_list, 1):
+            fname = f"03_cover_back_{idx}.jpg" if len(cb_list) > 1 else "03_cover_back.jpg"
+            write_photo(fname, p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
             cur_ozon_idx += 1
 
-        # 4. Фото задней части книги
-        if slots_photos.get("cover_back"):
-            write_photo("04_cover_back.jpg", slots_photos["cover_back"], f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
+        # 4. Фото иллюстраций
+        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
+            write_photo(f"04_illustration_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
             cur_ozon_idx += 1
 
         # Инфо-страницы (титул, оборот) — сохраняем ТОЛЬКО локально для архива и ИИ, НЕ передаем в Ozon!
@@ -231,18 +234,20 @@ def save_session_draft_file(draft_data: Dict[str, Any]) -> Dict[str, Dict[str, s
         slots = book.get("slots")
         if not isinstance(slots, dict):
             continue
-        for s in ("cover_front", "cover_back"):
-            item = slots.get(s)
-            if isinstance(item, dict) and "id" in item and item["id"] not in existing_ids:
-                photo_pool.append(item)
-                existing_ids.add(item["id"])
-        for s in ("info_pages", "illustrations", "mantra_defects"):
+        item = slots.get("cover_front")
+        if isinstance(item, dict) and "id" in item and item["id"] not in existing_ids:
+            photo_pool.append(item)
+            existing_ids.add(item["id"])
+        for s in ("cover_back", "info_pages", "illustrations", "mantra_defects"):
             items = slots.get(s)
             if isinstance(items, list):
-                for item in items:
-                    if isinstance(item, dict) and "id" in item and item["id"] not in existing_ids:
-                        photo_pool.append(item)
-                        existing_ids.add(item["id"])
+                for it in items:
+                    if isinstance(it, dict) and "id" in it and it["id"] not in existing_ids:
+                        photo_pool.append(it)
+                        existing_ids.add(it["id"])
+            elif isinstance(items, dict) and "id" in items and items["id"] not in existing_ids:
+                photo_pool.append(items)
+                existing_ids.add(items["id"])
 
     # 1. Сохраняем фото на диск и обновляем ссылки
     for photo in photo_pool:
@@ -300,16 +305,22 @@ def save_session_draft_file(draft_data: Dict[str, Any]) -> Dict[str, Dict[str, s
         slots = book.get("slots")
         if not isinstance(slots, dict):
             continue
-        for s in ("cover_front", "cover_back"):
-            val = slots.get(s)
-            if isinstance(val, dict) and "id" in val:
-                slots[s] = {"id": val["id"]}
-            elif val:
-                slots[s] = None
-        for s in ("info_pages", "illustrations", "mantra_defects"):
+        # Одиночный слот: только cover_front
+        val = slots.get("cover_front")
+        if isinstance(val, dict) and "id" in val:
+            slots["cover_front"] = {"id": val["id"]}
+        elif val:
+            slots["cover_front"] = None
+
+        # Множественные слоты: cover_back, info_pages, illustrations, mantra_defects
+        for s in ("cover_back", "info_pages", "illustrations", "mantra_defects"):
             val = slots.get(s)
             if isinstance(val, list):
                 slots[s] = [{"id": item["id"]} for item in val if isinstance(item, dict) and "id" in item]
+            elif isinstance(val, dict) and "id" in val:
+                slots[s] = [{"id": val["id"]}]
+            else:
+                slots[s] = []
 
     # 3. Атомарно сохраняем ультра-компактный JSON на диск
     temp_draft = DRAFT_FILE + ".tmp"

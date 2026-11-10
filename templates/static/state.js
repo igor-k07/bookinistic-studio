@@ -72,7 +72,7 @@ var booksSession = [
     title: "Книга #1",
     slots: {
       cover_front: null,
-      cover_back: null,
+      cover_back: [],
       info_pages: [],
       illustrations: [],
       mantra_defects: []
@@ -142,9 +142,9 @@ function findPhotoById(photoId) {
   for (const b of booksSession) {
     if (!b || !b.slots) continue;
     if (b.slots.cover_front && b.slots.cover_front.id === photoId) return b.slots.cover_front;
-    if (b.slots.cover_back && b.slots.cover_back.id === photoId) return b.slots.cover_back;
-    for (const s of ['info_pages', 'illustrations', 'mantra_defects']) {
-      const found = (b.slots[s] || []).find(p => p && p.id === photoId);
+    for (const s of ['cover_back', 'info_pages', 'illustrations', 'mantra_defects']) {
+      const list = Array.isArray(b.slots[s]) ? b.slots[s] : (b.slots[s] ? [b.slots[s]] : []);
+      const found = list.find(p => p && p.id === photoId);
       if (found) return found;
     }
   }

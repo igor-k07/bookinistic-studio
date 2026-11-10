@@ -449,13 +449,16 @@
       photo.assignedBookId = book.id;
       photo.assignedSlot = slotName;
 
-      if (['info_pages', 'illustrations', 'mantra_defects'].includes(slotName)) {
+      if (['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].includes(slotName)) {
+        if (!Array.isArray(book.slots[slotName])) {
+          book.slots[slotName] = book.slots[slotName] ? [book.slots[slotName]] : [];
+        }
         // Множественный слот: добавляем фото в массив если его там еще нет
         if (!book.slots[slotName].some(p => p.id === photo.id)) {
           book.slots[slotName].push(photo);
         }
       } else {
-        // Одиночный слот (передняя/задняя обложка): заменяем и возвращаем старое в пул
+        // Одиночный слот (только передняя обложка): заменяем и возвращаем старое в пул
         if (book.slots[slotName]) {
           book.slots[slotName].assignedBookId = null;
           book.slots[slotName].assignedSlot = null;
@@ -492,26 +495,27 @@
 
     function removePhotoFromSlots(photoId) {
       booksSession.forEach(b => {
-        ['cover_front', 'cover_back'].forEach(s => {
-          if (b.slots[s] && b.slots[s].id === photoId) b.slots[s] = null;
-        });
-        ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
-          b.slots[s] = b.slots[s].filter(p => p.id !== photoId);
+        if (b.slots.cover_front && b.slots.cover_front.id === photoId) b.slots.cover_front = null;
+        ['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+          if (Array.isArray(b.slots[s])) {
+            b.slots[s] = b.slots[s].filter(p => p && p.id !== photoId);
+          } else if (b.slots[s] && b.slots[s].id === photoId) {
+            b.slots[s] = [];
+          }
         });
       });
     }
 
     function clearCurrentBookSlots() {
       const book = getActiveBook();
-      ['cover_front', 'cover_back'].forEach(s => {
-        if (book.slots[s]) {
-          book.slots[s].assignedBookId = null;
-          book.slots[s].assignedSlot = null;
-          book.slots[s] = null;
-        }
-      });
-      ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
-        book.slots[s].forEach(p => { p.assignedBookId = null; p.assignedSlot = null; });
+      if (book.slots.cover_front) {
+        book.slots.cover_front.assignedBookId = null;
+        book.slots.cover_front.assignedSlot = null;
+        book.slots.cover_front = null;
+      }
+      ['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+        const list = Array.isArray(book.slots[s]) ? book.slots[s] : (book.slots[s] ? [book.slots[s]] : []);
+        list.forEach(p => { p.assignedBookId = null; p.assignedSlot = null; });
         book.slots[s] = [];
       });
       renderPool();
@@ -563,13 +567,12 @@
       const allPhotos = [];
       photoPool.forEach(p => { if (!p.isAiProcessed) allPhotos.push(p); });
       booksSession.forEach(b => {
-        ['cover_front', 'cover_back'].forEach(s => {
-          if (b.slots[s] && !b.slots[s].isAiProcessed && !allPhotos.some(p => p.id === b.slots[s].id)) {
-            allPhotos.push(b.slots[s]);
-          }
-        });
-        ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
-          (b.slots[s] || []).forEach(p => {
+        if (b.slots.cover_front && !b.slots.cover_front.isAiProcessed && !allPhotos.some(p => p.id === b.slots.cover_front.id)) {
+          allPhotos.push(b.slots.cover_front);
+        }
+        ['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+          const list = Array.isArray(b.slots[s]) ? b.slots[s] : (b.slots[s] ? [b.slots[s]] : []);
+          list.forEach(p => {
             if (!p.isAiProcessed && !allPhotos.some(item => item.id === p.id)) {
               allPhotos.push(p);
             }
@@ -788,15 +791,15 @@
       };
 
       renderSingle('slot_cover_front', book.slots.cover_front, 'Перетащите сюда фото обложки или нажмите [1]');
-      renderSingle('slot_cover_back', book.slots.cover_back, 'Перетащите сюда заднюю сторону или нажмите [2]');
 
-      // Множественные слоты (Титул, Иллюстрации, Дефекты)
+      // Множественные слоты (Задник, Титул, Иллюстрации, Дефекты)
       const renderMulti = (slotId, photos, placeholderText) => {
         const el = document.getElementById(slotId);
         if (!photos || photos.length === 0) {
+          const icon = slotId === 'slot_info_pages' ? '📄' : (slotId === 'slot_illustrations' ? '🎨' : (slotId === 'slot_cover_back' ? '🔄' : '⚠️'));
           el.innerHTML = `
             <div class="col-span-full flex flex-col items-center justify-center text-center p-4 min-h-[190px] w-full text-slate-500">
-              <span class="text-2xl mb-1.5 opacity-50">${slotId === 'slot_info_pages' ? '📄' : (slotId === 'slot_illustrations' ? '🎨' : '⚠️')}</span>
+              <span class="text-2xl mb-1.5 opacity-50">${icon}</span>
               <span class="text-xs font-medium leading-relaxed">${placeholderText}</span>
             </div>
           `;
@@ -861,6 +864,8 @@
         }).join('');
       };
 
+      const backPhotos = Array.isArray(book.slots.cover_back) ? book.slots.cover_back : (book.slots.cover_back ? [book.slots.cover_back] : []);
+      renderMulti('slot_cover_back', backPhotos, 'Перетащите задник книги (или нескольких) или нажмите [2]');
       renderMulti('slot_info_pages', book.slots.info_pages, 'Перетащите титул / оборот / колофон (ИИ считает данные) или нажмите [3]');
       renderMulti('slot_illustrations', book.slots.illustrations, 'Перетащите иллюстрации и развороты сюда или нажмите [4]');
       renderMulti('slot_mantra_defects', book.slots.mantra_defects, 'Только фото повреждений (надрывы, пометки) или нажмите [5]');
@@ -1072,7 +1077,8 @@
       };
 
       if (book.slots.cover_front) addCleanImg("Передняя часть обложки", book.slots.cover_front);
-      if (book.slots.cover_back) addCleanImg("Вид обложки сзади", book.slots.cover_back);
+      const backList = Array.isArray(book.slots.cover_back) ? book.slots.cover_back : (book.slots.cover_back ? [book.slots.cover_back] : []);
+      backList.forEach((p, idx) => addCleanImg(backList.length > 1 ? `Вид обложки сзади #${idx+1}` : "Вид обложки сзади", p));
       book.slots.info_pages.forEach((p, idx) => addCleanImg(`Лист с информацией и описанием (титул/оборот #${idx+1})`, p));
       book.slots.illustrations.forEach((p, idx) => addCleanImg(`Иллюстрации книги #${idx+1}`, p));
       book.slots.mantra_defects.forEach((p, idx) => addCleanImg(`Фото мантры и дефектов книги #${idx+1}`, p));
@@ -1289,7 +1295,7 @@
         let targetBook = null;
         if (chunkIdx === 0 && booksSession.length > 0) {
           const first = booksSession[0];
-          const hasAnyPhoto = Boolean(first.slots.cover_front || first.slots.cover_back || (first.slots.info_pages && first.slots.info_pages.length > 0));
+          const hasAnyPhoto = Boolean(first.slots.cover_front || (first.slots.cover_back && (Array.isArray(first.slots.cover_back) ? first.slots.cover_back.length > 0 : true)) || (first.slots.info_pages && first.slots.info_pages.length > 0));
           if (!hasAnyPhoto) {
             targetBook = first;
             targetBook.article = bookArtStr;
@@ -1308,7 +1314,7 @@
             title: `Книга #${nextId}`,
             slots: {
               cover_front: null,
-              cover_back: null,
+              cover_back: [],
               info_pages: [],
               illustrations: [],
               mantra_defects: []
@@ -1333,7 +1339,10 @@
           photo.assignedBookId = targetBook.id;
           photo.assignedSlot = slot;
 
-          if (['info_pages', 'illustrations', 'mantra_defects'].includes(slot)) {
+          if (['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].includes(slot)) {
+            if (!Array.isArray(targetBook.slots[slot])) {
+              targetBook.slots[slot] = targetBook.slots[slot] ? [targetBook.slots[slot]] : [];
+            }
             if (!targetBook.slots[slot].some(p => p.id === photo.id)) {
               targetBook.slots[slot].push(photo);
             }

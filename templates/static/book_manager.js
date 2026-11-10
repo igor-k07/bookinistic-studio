@@ -147,7 +147,9 @@
             ...b,
             slots: {
               cover_front: (slots.cover_front && slots.cover_front.id) ? { id: slots.cover_front.id } : null,
-              cover_back: (slots.cover_back && slots.cover_back.id) ? { id: slots.cover_back.id } : null,
+              cover_back: Array.isArray(slots.cover_back)
+                ? slots.cover_back.filter(p => p && p.id).map(p => ({ id: p.id }))
+                : ((slots.cover_back && slots.cover_back.id) ? [{ id: slots.cover_back.id }] : []),
               info_pages: (slots.info_pages || []).filter(p => p && p.id).map(p => ({ id: p.id })),
               illustrations: (slots.illustrations || []).filter(p => p && p.id).map(p => ({ id: p.id })),
               mantra_defects: (slots.mantra_defects || []).filter(p => p && p.id).map(p => ({ id: p.id }))
@@ -254,32 +256,30 @@
 
       booksSession.forEach(b => {
         if (!b.slots) b.slots = {};
-        ['cover_front', 'cover_back'].forEach(s => {
-          if (b.slots[s] && b.slots[s].id) {
-            if (map.has(b.slots[s].id)) {
-              b.slots[s] = map.get(b.slots[s].id);
-            } else if (b.slots[s].preview) {
-              photoPool.push(b.slots[s]);
-              map.set(b.slots[s].id, b.slots[s]);
-            } else {
-              b.slots[s] = null;
-            }
-          }
-        });
-        ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
-          if (Array.isArray(b.slots[s])) {
-            b.slots[s] = b.slots[s].map(p => {
-              if (p && p.id && map.has(p.id)) return map.get(p.id);
-              if (p && p.preview) {
-                photoPool.push(p);
-                map.set(p.id, p);
-                return p;
-              }
-              return null;
-            }).filter(Boolean);
+        if (b.slots.cover_front && b.slots.cover_front.id) {
+          if (map.has(b.slots.cover_front.id)) {
+            b.slots.cover_front = map.get(b.slots.cover_front.id);
+          } else if (b.slots.cover_front.preview) {
+            photoPool.push(b.slots.cover_front);
+            map.set(b.slots.cover_front.id, b.slots.cover_front);
           } else {
-            b.slots[s] = [];
+            b.slots.cover_front = null;
           }
+        }
+        ['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+          let list = b.slots[s];
+          if (!Array.isArray(list)) {
+            list = (list && list.id) ? [list] : [];
+          }
+          b.slots[s] = list.map(p => {
+            if (p && p.id && map.has(p.id)) return map.get(p.id);
+            if (p && p.preview) {
+              photoPool.push(p);
+              map.set(p.id, p);
+              return p;
+            }
+            return null;
+          }).filter(Boolean);
         });
       });
     }
@@ -294,15 +294,14 @@
       }
 
       // 1. Освобождаем все фото текущей книги обратно в свободный пул
-      ['cover_front', 'cover_back'].forEach(s => {
-        if (book.slots[s]) {
-          book.slots[s].assignedBookId = null;
-          book.slots[s].assignedSlot = null;
-          book.slots[s] = null;
-        }
-      });
-      ['info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
-        (book.slots[s] || []).forEach(p => {
+      if (book.slots.cover_front) {
+        book.slots.cover_front.assignedBookId = null;
+        book.slots.cover_front.assignedSlot = null;
+        book.slots.cover_front = null;
+      }
+      ['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+        const list = Array.isArray(book.slots[s]) ? book.slots[s] : (book.slots[s] ? [book.slots[s]] : []);
+        list.forEach(p => {
           p.assignedBookId = null;
           p.assignedSlot = null;
         });
@@ -605,7 +604,7 @@
         title: `Книга #${nextId}`,
         slots: {
           cover_front: null,
-          cover_back: null,
+          cover_back: [],
           info_pages: [],
           illustrations: [],
           mantra_defects: []
@@ -849,10 +848,10 @@
         const titleSnippet = (b.formData && b.formData.title) ? ` • ${b.formData.title.substring(0, 16)}` : '';
         const count = [
           b.slots.cover_front ? 1 : 0,
-          b.slots.cover_back ? 1 : 0,
-          b.slots.info_pages.length,
-          b.slots.illustrations.length,
-          b.slots.mantra_defects.length
+          Array.isArray(b.slots.cover_back) ? b.slots.cover_back.length : (b.slots.cover_back ? 1 : 0),
+          (b.slots.info_pages || []).length,
+          (b.slots.illustrations || []).length,
+          (b.slots.mantra_defects || []).length
         ].reduce((a, b) => a + b, 0);
 
         const statusIcon = b.isAiRecognizing ? '⏳' : (b.isAiRecognized ? '✨' : (b.isSavedToExcel ? '✅' : '📖'));
@@ -1624,9 +1623,13 @@
       };
 
       const book = getActiveBook();
+      const cbPayload = Array.isArray(book.slots.cover_back)
+        ? book.slots.cover_back.map(extractPhotoPayload).filter(Boolean)
+        : (book.slots.cover_back ? [extractPhotoPayload(book.slots.cover_back)].filter(Boolean) : []);
+
       const slots_photos = {
         cover_front: extractPhotoPayload(book.slots.cover_front),
-        cover_back: extractPhotoPayload(book.slots.cover_back),
+        cover_back: cbPayload,
         info_pages: (book.slots.info_pages || []).map(extractPhotoPayload).filter(Boolean),
         illustrations: (book.slots.illustrations || []).map(extractPhotoPayload).filter(Boolean),
         mantra_defects: (book.slots.mantra_defects || []).map(extractPhotoPayload).filter(Boolean)

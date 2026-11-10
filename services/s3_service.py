@@ -124,19 +124,22 @@ def upload_book_photos(
                 if url:
                     add_photo_urls.append(url)
 
-        # 3. Фото иллюстраций
-        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
+        # 3. Фото задников книги (для комплектов — задник каждой книги)
+        cb_raw = slots_photos.get("cover_back")
+        cb_list = cb_raw if isinstance(cb_raw, list) else ([cb_raw] if cb_raw else [])
+        for idx, p in enumerate(cb_list, 1):
             data = _decode_photo(p)
             if data:
-                url = upload_bytes(f"{folder}/03_illustration_{idx}.jpg", data)
+                suffix = f"_{idx}" if len(cb_list) > 1 else ""
+                url = upload_bytes(f"{folder}/03_cover_back{suffix}.jpg", data)
                 if url:
                     add_photo_urls.append(url)
 
-        # 4. Фото задней части книги
-        if slots_photos.get("cover_back"):
-            data = _decode_photo(slots_photos["cover_back"])
+        # 4. Фото иллюстраций
+        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
+            data = _decode_photo(p)
             if data:
-                url = upload_bytes(f"{folder}/04_cover_back.jpg", data)
+                url = upload_bytes(f"{folder}/04_illustration_{idx}.jpg", data)
                 if url:
                     add_photo_urls.append(url)
 
