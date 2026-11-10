@@ -66,6 +66,15 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
         ant = (warning_prefix + "\n\n" + ant).strip()
     clean["annotation"] = ant
 
+    # Санитизация сохранности книги по регламенту Ozon
+    cond_raw = str(clean.get("condition") or "").strip().lower()
+    if not has_mantra_defects:
+        clean["condition"] = "Очень хорошая"
+    elif "удовл" in cond_raw:
+        clean["condition"] = "Удовлетворительная"
+    else:
+        clean["condition"] = "Хорошая"
+
     # Санитизация возрастного ценза: только строго допустимые значения, иначе пустая строка
     raw_age = str(clean.get("age_limit") or "").strip()
     if raw_age not in ("0+", "6+", "12+", "16+", "18+"):

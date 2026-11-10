@@ -894,11 +894,10 @@
 
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1.5">Сохранность экземпляра (Ozon):</label>
-              <div class="grid grid-cols-4 gap-1.5" id="condBtns">
-                <button type="button" onclick="setCondition('Очень хорошая')" data-val="Очень хорошая" class="cond-btn py-1.5 rounded-xl border border-emerald-500 bg-emerald-950/40 text-emerald-300 text-xs font-semibold transition text-center">Очень хор.</button>
-                <button type="button" onclick="setCondition('Хорошая')" data-val="Хорошая" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Хорошая</button>
-                <button type="button" onclick="setCondition('Удовлетворительная')" data-val="Удовлетворительная" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Удовл.</button>
-                <button type="button" onclick="setCondition('Плохая')" data-val="Плохая" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Плохая</button>
+              <div class="grid grid-cols-3 gap-1.5" id="condBtns">
+                <button type="button" onclick="setCondition('Очень хорошая', true)" data-val="Очень хорошая" class="cond-btn py-1.5 rounded-xl border border-emerald-500 bg-emerald-950/40 text-emerald-300 text-xs font-semibold transition text-center shadow-xs">Очень хор.</button>
+                <button type="button" onclick="setCondition('Хорошая', true)" data-val="Хорошая" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Хорошее</button>
+                <button type="button" onclick="setCondition('Удовлетворительная', true)" data-val="Удовлетворительная" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Удовл.</button>
               </div>
               <input type="hidden" id="condition" value="Очень хорошая">
             </div>

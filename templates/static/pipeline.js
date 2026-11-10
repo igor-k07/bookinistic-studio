@@ -898,13 +898,31 @@
       }
       book.formData.annotation = finalValue;
 
+      // Авто-синхронизация сохранности книги по регламенту:
+      // 1. «Очень хорошее» — когда нет фото дефектов ВСЕГДА.
+      // 2. Если есть хотя бы 1 дефект — состояние «Хорошее», но не меньше.
+      // 3. «Удовлетворительное» можно поставить ТОЛЬКО вручную.
+      if (typeof setCondition === 'function') {
+        const currentCond = book.formData.condition || (document.getElementById('condition')?.value) || 'Очень хорошая';
+        if (!hasMantraDefects) {
+          setCondition('Очень хорошая', false);
+        } else {
+          if (currentCond === 'Удовлетворительная') {
+            setCondition('Удовлетворительная', false);
+          } else {
+            setCondition('Хорошая', false);
+          }
+        }
+      }
+
       if (hintEl) {
         if (hasMantraDefects) {
+          const condName = (book.formData && book.formData.condition === 'Удовлетворительная') ? 'Удовлетворительное' : 'Хорошее';
           hintEl.className = 'text-xs text-amber-400 mt-1.5 font-medium flex items-center gap-1.5';
-          hintEl.innerHTML = `<span>⚠️</span> <span>В слоте [5. Дефекты] фото (${defectCount} шт.). Предупреждение добавлено в аннотацию Ozon.</span>`;
+          hintEl.innerHTML = `<span>⚠️</span> <span>В слоте [5. Дефекты] фото (${defectCount} шт.). Предупреждение добавлено в аннотацию, сохранность: <b>${condName}</b>.</span>`;
         } else {
           hintEl.className = 'text-xs text-emerald-400 mt-1.5 font-medium flex items-center gap-1.5';
-          hintEl.innerHTML = `<span>✓</span> <span>Слот [5. Дефекты] пуст. Плашка предупреждения отключена (чистая аннотация).</span>`;
+          hintEl.innerHTML = `<span>✓</span> <span>Слот [5. Дефекты] пуст. Плашка предупреждения отключена, сохранность: <b>Очень хорошее</b>.</span>`;
         }
       }
     }

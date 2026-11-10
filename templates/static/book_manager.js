@@ -808,10 +808,13 @@
       }
       const art = (book.formData && book.formData.article) || book.article || 'DP-B-00001';
       syncArticleInputs(art);
-      if (book.formData.condition) {
-        setCondition(book.formData.condition);
+      const defectCount = (book.slots && book.slots.mantra_defects) ? book.slots.mantra_defects.length : 0;
+      if (defectCount === 0) {
+        setCondition('Очень хорошая', false);
+      } else if (book.formData && book.formData.condition === 'Удовлетворительная') {
+        setCondition('Удовлетворительная', false);
       } else {
-        setCondition('Очень хорошая');
+        setCondition('Хорошая', false);
       }
       const mode = book.formData.template_mode || (parseInt(book.formData.year) > 2011 ? 'post2011' : 'pre2011');
       setTemplateMode(mode, false);
@@ -1107,9 +1110,16 @@
 
         if (data.paper_type) fill('paper_type', data.paper_type);
         if (data.condition) {
-          curBookObj.formData.condition = data.condition;
+          const defectCount = (curBookObj.slots && curBookObj.slots.mantra_defects) ? curBookObj.slots.mantra_defects.length : 0;
+          let condToSet = data.condition;
+          if (defectCount === 0) {
+            condToSet = 'Очень хорошая';
+          } else if (condToSet !== 'Удовлетворительная') {
+            condToSet = 'Хорошая';
+          }
+          curBookObj.formData.condition = condToSet;
           if (isCurrentActive) {
-            try { setCondition(data.condition); } catch (e) { console.warn('setCondition error', e); }
+            try { setCondition(condToSet, false); } catch (e) { console.warn('setCondition error', e); }
           }
         }
         if (data.suggested_price) {
@@ -1166,13 +1176,59 @@
       if (oldPriceEl) oldPriceEl.value = Math.max(old, p + 50);
     }
 
-    function setCondition(cond) {
-      if (cond === 'Отличная') cond = 'Очень хорошая';
+    function setCondition(cond, isUserManual = false) {
+      const curBook = getActiveBook();
+      const defectCount = (curBook && curBook.slots && curBook.slots.mantra_defects) ? curBook.slots.mantra_defects.length : 0;
+      const hasDefects = defectCount > 0;
+
+      let normalized = cond || 'Очень хорошая';
+      if (normalized === 'Отличная' || normalized === 'Очень хорошее') normalized = 'Очень хорошая';
+      if (normalized === 'Хорошее') normalized = 'Хорошая';
+      if (normalized === 'Удовлетворительное') normalized = 'Удовлетворительная';
+      if (normalized === 'Плохая' || normalized === 'Плохое') normalized = 'Хорошая';
+
+      // Правило регламента:
+      // 1. «Очень хорошее» — когда нет фото дефектов ВСЕГДА.
+      if (!hasDefects) {
+        if (isUserManual && (normalized === 'Хорошая' || normalized === 'Удовлетворительная')) {
+          showToast('💡 В слоте [5. Дефекты] нет фото — для книги всегда действует «Очень хорошее».');
+        }
+        normalized = 'Очень хорошая';
+      } else {
+        // 2. Если есть хотя бы 1 дефект — состояние «Хорошее», но не меньше.
+        // 3. «Удовлетворительное» можно поставить ТОЛЬКО вручную.
+        if (normalized === 'Очень хорошая') {
+          if (isUserManual) {
+            showToast('⚠️ В слоте [5. Дефекты] есть фото: сохранность не может быть «Очень хорошее».');
+          }
+          normalized = 'Хорошая';
+        }
+        // Автоматика никогда не ставит Удовлетворительное сама — только если пользователь уже выставил его вручную:
+        if (!isUserManual && normalized === 'Удовлетворительная') {
+          const prevSaved = curBook && curBook.formData && curBook.formData.condition;
+          if (prevSaved !== 'Удовлетворительная') {
+            normalized = 'Хорошая';
+          }
+        }
+      }
+
       const condEl = document.getElementById('condition');
-      if (condEl) condEl.value = cond;
+      if (condEl) condEl.value = normalized;
+      if (curBook) {
+        if (!curBook.formData) curBook.formData = {};
+        curBook.formData.condition = normalized;
+      }
+
       document.querySelectorAll('#condBtns .cond-btn').forEach(btn => {
-        if (btn.getAttribute('data-val') === cond) {
-          btn.className = 'cond-btn py-1.5 rounded-xl border border-amber-500 bg-amber-950/40 text-amber-300 text-xs font-semibold transition text-center';
+        const bVal = btn.getAttribute('data-val');
+        if (bVal === normalized) {
+          if (normalized === 'Очень хорошая') {
+            btn.className = 'cond-btn py-1.5 rounded-xl border border-emerald-500 bg-emerald-950/40 text-emerald-300 text-xs font-semibold transition text-center shadow-xs';
+          } else if (normalized === 'Хорошая') {
+            btn.className = 'cond-btn py-1.5 rounded-xl border border-amber-500 bg-amber-950/40 text-amber-300 text-xs font-semibold transition text-center shadow-xs';
+          } else {
+            btn.className = 'cond-btn py-1.5 rounded-xl border border-rose-500 bg-rose-950/40 text-rose-300 text-xs font-semibold transition text-center shadow-xs';
+          }
         } else {
           btn.className = 'cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center';
         }

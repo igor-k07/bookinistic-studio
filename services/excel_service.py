@@ -40,6 +40,20 @@ def with_excel_lock(func):
     return wrapper
 
 
+def normalize_condition(raw_cond: Any, has_defects: bool) -> str:
+    """
+    Приводит сохранность книги к регламенту Ozon:
+    - Без фото дефектов -> ВСЕГДА 'Очень хорошая'
+    - При наличии дефектов -> 'Хорошая', либо 'Удовлетворительная' (если выставлена вручную)
+    """
+    if not has_defects:
+        return "Очень хорошая"
+    c = str(raw_cond or "").strip().lower()
+    if "удовл" in c:
+        return "Удовлетворительная"
+    return "Хорошая"
+
+
 @with_excel_lock
 def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
     """Считывает все добавленные книги из таблицы (pre2011 или post2011)."""
@@ -387,7 +401,7 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             "AP": ("empty", ""),
             "AQ": ("empty", ""),
             "AR": ("str", isbn_val),
-            "AS": ("str", b.get("condition", "Очень хорошая")),
+            "AS": ("str", normalize_condition(b.get("condition"), has_mantra_defects)),
             "AT": ("str", age_lim),
             "AU": ("str", is_18_plus),
             "BZ": ("str", country),
@@ -464,7 +478,7 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             "AM": ("num", b.get("pages")) if str(b.get("pages", "")).isdigit() else ("empty", ""),
             "AO": ("empty", ""),
             "AP": ("empty", ""),
-            "AQ": ("str", b.get("condition", "Очень хорошая")),
+            "AQ": ("str", normalize_condition(b.get("condition"), has_mantra_defects)),
             "AR": ("str", age_lim),
             "AT": ("str", is_18_plus),
             "CE": ("str", country),
