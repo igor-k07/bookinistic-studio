@@ -2,6 +2,7 @@
 ai_service.py: Взаимодействие с Google Gemini Vision AI для каталогизации книг.
 """
 
+import base64
 import json
 import re
 import urllib.error

@@ -363,7 +363,7 @@
             <!-- БОЛЬШАЯ КАРТИНКА ПРЕВЬЮ -->
             <div class="relative w-full ${curScale.imgH} rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-slate-700 transition cursor-pointer"
                  ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${p.preview}" class="w-full h-full object-cover pointer-events-none" loading="lazy">
+              <img src="${p.preview || p.cameraOriginal || p.rawOriginal || ''}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
@@ -765,7 +765,7 @@
             <!-- БОЛЬШАЯ КАРТИНКА КНИГИ (ВЫСОТА 176px) -->
             <div class="relative w-full h-44 rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
                  ondblclick="openPhotoStudio('${photo.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${photo.preview}" class="w-full h-full object-cover pointer-events-none" loading="lazy">
+              <img src="${photo.preview || photo.cameraOriginal || photo.rawOriginal || ''}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${photo.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
@@ -838,7 +838,7 @@
               <!-- КАРТИНКА (ВЫСОТА 144px) -->
               <div class="relative w-full h-36 rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
                    ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-                <img src="${p.preview}" class="w-full h-full object-cover pointer-events-none" loading="lazy">
+                <img src="${p.preview || p.cameraOriginal || p.rawOriginal || ''}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
                 <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
                 <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>

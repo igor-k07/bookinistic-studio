@@ -248,6 +248,7 @@
       photoPool.forEach(p => {
         if (!p.cameraOriginal) p.cameraOriginal = p.rawOriginal || p.preview;
         if (!p.rawOriginal) p.rawOriginal = p.cameraOriginal;
+        if (!p.preview) p.preview = p.cameraOriginal || p.rawOriginal || (p.data ? ('data:' + (p.mime || 'image/jpeg') + ';base64,' + p.data) : '');
         if (p.isCropped === undefined) p.isCropped = Boolean(p.croppedBase);
         if (p.croppedBase === undefined) p.croppedBase = null;
         p.isProcessed = isPhotoProcessed(p);

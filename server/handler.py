@@ -493,7 +493,52 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
 
-        elif parsed.path.startswith("/static/") or parsed.path.endswith((".js", ".css", ".svg", ".png", ".jpg")):
+        elif parsed.path.startswith("/session_photos/"):
+            rel_path = urllib.parse.unquote(parsed.path[len("/session_photos/"):])
+            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
+            if safe_rel_path.startswith(".."):
+                self.send_response(403)
+                self.end_headers()
+                return
+            full_file_path = os.path.join(SESSION_PHOTOS_DIR, safe_rel_path)
+            self._serve_file_stream(full_file_path, tag="SESSION_PHOTO", rel_label=safe_rel_path)
+
+        elif parsed.path.startswith("/vault/"):
+            rel_path = urllib.parse.unquote(parsed.path[len("/vault/"):])
+            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
+            if safe_rel_path.startswith(".."):
+                self.send_response(403)
+                self.end_headers()
+                return
+
+            full_file_path = os.path.join(VAULT_DIR, safe_rel_path)
+
+            # Если путь не найден напрямую, ищем по артикулу: /vault/{article}/{filename}
+            if not (os.path.exists(full_file_path) and os.path.isfile(full_file_path)) and "/" in safe_rel_path:
+                parts = safe_rel_path.split("/", 1)
+                art_prefix = parts[0]
+                inner_file = parts[1]
+                if os.path.exists(VAULT_DIR):
+                    for d in os.listdir(VAULT_DIR):
+                        if d == art_prefix or d.startswith(f"{art_prefix}_"):
+                            cand = os.path.join(VAULT_DIR, d, inner_file)
+                            if os.path.exists(cand) and os.path.isfile(cand):
+                                full_file_path = cand
+                                break
+
+            self._serve_file_stream(full_file_path, tag="VAULT", rel_label=safe_rel_path)
+
+        elif parsed.path.startswith("/inbox/"):
+            rel_path = urllib.parse.unquote(parsed.path[len("/inbox/"):])
+            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
+            if safe_rel_path.startswith(".."):
+                self.send_response(403)
+                self.end_headers()
+                return
+            full_file_path = os.path.join(INBOX_DIR, safe_rel_path)
+            self._serve_file_stream(full_file_path, tag="INBOX", rel_label=safe_rel_path)
+
+        elif (parsed.path.startswith("/static/") or parsed.path.endswith((".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".ico", ".webp"))) and not parsed.path.startswith(("/session_photos/", "/vault/", "/inbox/")):
             clean_rel = urllib.parse.unquote(parsed.path.lstrip("/"))
             candidates = [
                 os.path.join(TEMPLATES_DIR, clean_rel),
@@ -536,51 +581,6 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
                 return
-
-        elif parsed.path.startswith("/vault/"):
-            rel_path = urllib.parse.unquote(parsed.path[len("/vault/"):])
-            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
-            if safe_rel_path.startswith(".."):
-                self.send_response(403)
-                self.end_headers()
-                return
-
-            full_file_path = os.path.join(VAULT_DIR, safe_rel_path)
-
-            # Если путь не найден напрямую, ищем по артикулу: /vault/{article}/{filename}
-            if not (os.path.exists(full_file_path) and os.path.isfile(full_file_path)) and "/" in safe_rel_path:
-                parts = safe_rel_path.split("/", 1)
-                art_prefix = parts[0]
-                inner_file = parts[1]
-                if os.path.exists(VAULT_DIR):
-                    for d in os.listdir(VAULT_DIR):
-                        if d == art_prefix or d.startswith(f"{art_prefix}_"):
-                            cand = os.path.join(VAULT_DIR, d, inner_file)
-                            if os.path.exists(cand) and os.path.isfile(cand):
-                                full_file_path = cand
-                                break
-
-            self._serve_file_stream(full_file_path, tag="VAULT", rel_label=safe_rel_path)
-
-        elif parsed.path.startswith("/session_photos/"):
-            rel_path = urllib.parse.unquote(parsed.path[len("/session_photos/"):])
-            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
-            if safe_rel_path.startswith(".."):
-                self.send_response(403)
-                self.end_headers()
-                return
-            full_file_path = os.path.join(SESSION_PHOTOS_DIR, safe_rel_path)
-            self._serve_file_stream(full_file_path, tag="SESSION_PHOTO", rel_label=safe_rel_path)
-
-        elif parsed.path.startswith("/inbox/"):
-            rel_path = urllib.parse.unquote(parsed.path[len("/inbox/"):])
-            safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
-            if safe_rel_path.startswith(".."):
-                self.send_response(403)
-                self.end_headers()
-                return
-            full_file_path = os.path.join(INBOX_DIR, safe_rel_path)
-            self._serve_file_stream(full_file_path, tag="INBOX", rel_label=safe_rel_path)
 
         elif parsed.path == "/api/download_photos_zip":
             qs = urllib.parse.parse_qs(parsed.query)
