@@ -487,7 +487,12 @@ def enrich_book_metadata(
                 fl_pub = _clean_fantlab_text(fl_match.get("publisher"))
             if fl_pub:
                 res["publisher"] = fl_pub
-                res["brand"] = fl_pub
+                try:
+                    from services.db_service import get_catalog_references, _match_brand_from_publisher
+                    refs = get_catalog_references()
+                    res["brand"] = _match_brand_from_publisher(fl_pub, refs.get("brands", []))
+                except Exception:
+                    res["brand"] = fl_pub
 
             # Год издания
             fl_year = fl_match.get("year") or details.get("year")

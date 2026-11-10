@@ -95,6 +95,10 @@ function selectAutocompleteItem(val) {
     currentAutocompleteInput.dispatchEvent(new Event('change', { bubbles: true }));
     currentAutocompleteInput.classList.add('field-updated');
     setTimeout(() => currentAutocompleteInput && currentAutocompleteInput.classList.remove('field-updated'), 800);
+
+    if (currentAutocompleteCategory === 'publishers' || currentAutocompleteInput.id === 'publisher') {
+      syncBrandWithPublisher(val);
+    }
   }
   hideCustomAutocomplete();
 }
@@ -150,6 +154,13 @@ function initCustomAutocomplete() {
     if (el._hasAutoInit) return;
     el._hasAutoInit = true;
     const cat = el.getAttribute('data-autocomplete');
+
+    if (el.id === 'publisher') {
+      el.addEventListener('input', () => {
+        clearTimeout(el._brandSyncTimer);
+        el._brandSyncTimer = setTimeout(() => syncBrandWithPublisher(el.value), 300);
+      });
+    }
 
     el.addEventListener('focus', () => showCustomAutocomplete(el, cat));
     el.addEventListener('input', () => showCustomAutocomplete(el, cat));
@@ -224,7 +235,7 @@ function snapToCanonical(inputEl, categoryKey) {
   }
 
   // 4. Для бренда: автоматическая нормализация "нет бренда"
-  if (categoryKey === 'brands' && (rawLower === 'нет бренда' || rawLower === 'нет' || rawLower === 'без бренда')) {
+  if (categoryKey === 'brands' && (rawLower === 'нет бренда' || rawLower === 'нет' || rawLower === 'без бренда' || rawLower === 'не указан')) {
     matched = 'Нет бренда';
   }
 
@@ -233,4 +244,59 @@ function snapToCanonical(inputEl, categoryKey) {
     inputEl.classList.add('field-updated');
     setTimeout(() => inputEl.classList.remove('field-updated'), 800);
   }
+
+  // 5. Если изменилось издательство — синхронизируем бренд с базой брендов Ozon
+  if (categoryKey === 'publishers' || inputEl.id === 'publisher') {
+    syncBrandWithPublisher(inputEl.value);
+  }
+}
+
+// Функция сопоставления издательства с базой брендов Ozon:
+// Пытается найти издательство в справочнике брендов Ozon.
+// Если найдено — возвращает официальное имя бренда Ozon, иначе 'Нет бренда'.
+function resolveBrandFromPublisher(publisherStr) {
+  if (!publisherStr) return 'Нет бренда';
+  const brandList = (window.CATALOG_REFERENCES && window.CATALOG_REFERENCES.brands) || [];
+  if (!brandList.length) return 'Нет бренда';
+
+  const clean = publisherStr.trim().replace(/^["'«»]+|["'«»]+$/g, '');
+  if (!clean || clean.toLowerCase() === 'нет бренда' || clean.toLowerCase() === 'не указан') {
+    return 'Нет бренда';
+  }
+
+  // Карта брендов: без кавычек и регистра
+  const brandMap = {};
+  for (const b of brandList) {
+    if (b === 'Нет бренда') continue;
+    const key = b.trim().replace(/^["'«»]+|["'«»]+$/g, '').toLowerCase();
+    if (key) brandMap[key] = b;
+  }
+
+  // 1. Прямое совпадение
+  const cleanLower = clean.toLowerCase();
+  if (brandMap[cleanLower]) return brandMap[cleanLower];
+
+  // 2. Очищенное от юридических префиксов (Издательство, Изд-во, ООО, и т.д.)
+  const cand = clean.replace(/\b(?:издательство|изд-во|изд|ооо|зао|оао|ип|издательская\s+группа|издательский\s+дом)\b/gi, '')
+                    .replace(/["'«».,]/g, ' ')
+                    .trim()
+                    .replace(/\s+/g, ' ');
+  const candLower = cand.toLowerCase();
+  if (candLower && brandMap[candLower]) return brandMap[candLower];
+
+  return 'Нет бренда';
+}
+
+function syncBrandWithPublisher(pubVal) {
+  const brandEl = document.getElementById('brand');
+  if (!brandEl) return;
+  const matchedBrand = resolveBrandFromPublisher(pubVal);
+  brandEl.value = matchedBrand;
+  const curBook = (typeof getActiveBook === 'function') ? getActiveBook() : null;
+  if (curBook) {
+    if (!curBook.formData) curBook.formData = {};
+    curBook.formData.brand = matchedBrand;
+  }
+  brandEl.classList.add('field-updated');
+  setTimeout(() => brandEl && brandEl.classList.remove('field-updated'), 800);
 }

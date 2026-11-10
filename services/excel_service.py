@@ -317,8 +317,24 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
         age_lim = ""
     is_18_plus = "Да" if age_lim == "18+" else ""
     genre = b.get("genre", "Проза")
-    brand = b.get("brand") or "Нет бренда"
     publisher = b.get("publisher", "").strip()
+
+    brand_raw = str(b.get("brand") or "").strip()
+    if not brand_raw or brand_raw.lower() in ("нет бренда", "нет", "не указан", "без бренда"):
+        try:
+            from services.db_service import get_catalog_references, _match_brand_from_publisher
+            refs = get_catalog_references()
+            brand = _match_brand_from_publisher(publisher, refs.get("brands", []))
+        except Exception:
+            brand = "Нет бренда"
+    else:
+        try:
+            from services.db_service import get_catalog_references, _match_brand_from_publisher
+            refs = get_catalog_references()
+            matched = _match_brand_from_publisher(brand_raw, refs.get("brands", []))
+            brand = matched if matched != "Нет бренда" else _match_brand_from_publisher(publisher, refs.get("brands", []))
+        except Exception:
+            brand = brand_raw
 
     article = str(b.get("article") or "").strip() or f"DP-B-{item_num:05d}"
     raw_barcode = str(b.get("barcode") or "").strip()

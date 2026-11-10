@@ -75,6 +75,17 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     else:
         clean["condition"] = "Хорошая"
 
+    # Санитизация бренда: сверка с базой брендов Ozon по названию издательства
+    brand_raw = str(clean.get("brand") or "").strip()
+    pub_raw = str(clean.get("publisher") or "").strip()
+    refs = get_catalog_references()
+    brands_ref = refs.get("brands", [])
+    if brand_raw and brand_raw.lower() not in ("нет бренда", "нет", "не указан", "без бренда"):
+        matched_b = _match_brand_from_publisher(brand_raw, brands_ref)
+        clean["brand"] = matched_b if matched_b != "Нет бренда" else _match_brand_from_publisher(pub_raw, brands_ref)
+    else:
+        clean["brand"] = _match_brand_from_publisher(pub_raw, brands_ref)
+
     # Санитизация возрастного ценза: только строго допустимые значения, иначе пустая строка
     raw_age = str(clean.get("age_limit") or "").strip()
     if raw_age not in ("0+", "6+", "12+", "16+", "18+"):
@@ -602,6 +613,34 @@ def _match_title_or_org(val: str, known_list: List[str]) -> str:
     return val
 
 
+def _match_brand_from_publisher(publisher_name: str, brand_list: List[str]) -> str:
+    """
+    Пытается сопоставить название издательства со справочником брендов Ozon.
+    Если совпадение найдено — возвращает официальное имя бренда.
+    Если совпадение не найдено — возвращает 'Нет бренда'.
+    """
+    if not publisher_name:
+        return "Нет бренда"
+    clean = publisher_name.strip().strip('"\'«»')
+    if not clean or clean.lower() in ("нет бренда", "не указан", "нет", "без бренда"):
+        return "Нет бренда"
+
+    lower_map = {b.strip().strip('"\'«»').lower(): b for b in brand_list if b != "Нет бренда"}
+
+    # 1. Прямое совпадение
+    if clean.lower() in lower_map:
+        return lower_map[clean.lower()]
+
+    # 2. Очищенное от юридических префиксов (издательство, изд-во, ооо, etc.)
+    cand = re.sub(r"\b(?:издательство|изд-во|изд|ооо|зао|оао|ип|издательская\s+группа|издательский\s+дом)\b", "", clean, flags=re.I)
+    cand = re.sub(r"[\"'«».,]", " ", cand).strip()
+    cand = re.sub(r"\s+", " ", cand)
+    if cand.lower() in lower_map:
+        return lower_map[cand.lower()]
+
+    return "Нет бренда"
+
+
 def reconcile_with_references(book_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Канонизирует распознанные ИИ поля на основе накопленной базы данных магазина (catalog.db):
@@ -656,25 +695,20 @@ def reconcile_with_references(book_data: Dict[str, Any]) -> Dict[str, Any]:
     if raw_ser:
         book_data["series"] = _match_title_or_org(raw_ser, series_ref)
 
-    # 6. Бренд (brand)
+    # 6. Бренд (brand): всегда пытаемся взять из издательства и проверить в базе брендов
     raw_brand = str(book_data.get("brand") or "").strip()
-    if raw_brand:
-        canon_brand = _match_title_or_org(raw_brand, brands_ref)
-        # Если бренд найден в Ozon-справочнике — ставим его
-        brands_lower = {b.lower(): b for b in brands_ref}
-        if canon_brand.lower() in brands_lower:
-            book_data["brand"] = brands_lower[canon_brand.lower()]
+    pub_cand = str(book_data.get("publisher") or "").strip()
+
+    if raw_brand and raw_brand.lower() not in ("нет бренда", "нет", "не указан", "без бренда"):
+        matched_brand = _match_brand_from_publisher(raw_brand, brands_ref)
+        if matched_brand != "Нет бренда":
+            book_data["brand"] = matched_brand
         else:
-            # Если бренд не распознан среди официальных — ставим "Нет бренда"
-            book_data["brand"] = "Нет бренда"
+            book_data["brand"] = _match_brand_from_publisher(pub_cand, brands_ref)
     else:
-        # Проверяем, может ли издательство книги быть брендом
-        pub_cand = str(book_data.get("publisher") or "").strip()
-        brands_lower = {b.lower(): b for b in brands_ref}
-        if pub_cand.lower() in brands_lower:
-            book_data["brand"] = brands_lower[pub_cand.lower()]
-        else:
-            book_data["brand"] = "Нет бренда"
+        book_data["brand"] = _match_brand_from_publisher(pub_cand, brands_ref)
+
+    return book_data
 
     return book_data
 

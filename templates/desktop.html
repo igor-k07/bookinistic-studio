@@ -743,7 +743,7 @@
               <div>
                 <div class="flex items-center justify-between mb-1">
                   <label class="text-xs font-medium text-slate-300">Издательство:</label>
-                  <button type="button" onclick="document.getElementById('publisher').value='Художественная литература'" class="text-[10px] text-amber-400 hover:text-amber-300">«Худлит»</button>
+                  <button type="button" onclick="document.getElementById('publisher').value='Художественная литература'; syncBrandWithPublisher('Художественная литература');" class="text-[10px] text-amber-400 hover:text-amber-300">«Худлит»</button>
                 </div>
                 <input type="text" id="publisher" data-autocomplete="publishers" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
               </div>

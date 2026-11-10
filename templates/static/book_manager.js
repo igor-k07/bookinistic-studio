@@ -988,7 +988,18 @@
         if (data.author_cover) fill('author_cover', data.author_cover);
         if (data.author || data.author_cover) fill('author', data.author || data.author_cover);
         if (data.publisher) fill('publisher', data.publisher);
-        if (data.brand) fill('brand', data.brand);
+
+        // Бренд Ozon: всегда пытаемся скопировать название издательства в бренд,
+        // сверяем с базой брендов, и только если в базе нет — ставим "Нет бренда"
+        const pubForBrand = data.publisher || (isCurrentActive ? document.getElementById('publisher')?.value : (curBookObj.formData && curBookObj.formData.publisher)) || '';
+        let targetBrand = data.brand;
+        if (!targetBrand || targetBrand === 'Нет бренда' || targetBrand.toLowerCase() === 'не указан') {
+          targetBrand = (typeof resolveBrandFromPublisher === 'function') ? resolveBrandFromPublisher(pubForBrand) : 'Нет бренда';
+        } else {
+          const verified = (typeof resolveBrandFromPublisher === 'function') ? resolveBrandFromPublisher(targetBrand) : targetBrand;
+          targetBrand = (verified !== 'Нет бренда') ? verified : ((typeof resolveBrandFromPublisher === 'function') ? resolveBrandFromPublisher(pubForBrand) : 'Нет бренда');
+        }
+        fill('brand', targetBrand || 'Нет бренда');
         const recognizedYear = data.year ? parseInt(data.year, 10) : 0;
         if (data.year) {
           fill('year', data.year);
