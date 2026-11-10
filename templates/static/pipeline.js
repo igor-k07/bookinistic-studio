@@ -304,22 +304,7 @@
       }
 
       if (photoPool.length === 0) {
-        container.innerHTML = `
-          <div class="text-center py-12 w-full text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 flex flex-col items-center justify-center gap-3">
-            <span class="text-3xl">📸</span>
-            <span class="text-slate-400">Пул пуст. Загрузите пачку фото со смартфона или выберите файлы с диска</span>
-            <div class="flex items-center gap-2.5 mt-1">
-              <button type="button" onclick="openQrModal()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/25 active:scale-95 transition">
-                <span>📱</span>
-                <span>Загрузить со смартфона (QR)</span>
-              </button>
-              <button type="button" onclick="document.getElementById('poolFileInput').click()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center gap-1.5">
-                <span>📁</span>
-                <span>Выбрать с диска</span>
-              </button>
-            </div>
-          </div>
-        `;
+        container.innerHTML = '<div class="text-center py-12 w-full text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 flex flex-col items-center justify-center gap-2"><span class="text-2xl">📸</span><span>Пул пуст. Снимите пачку книг на телефон через QR-код или нажмите «📁 С диска»</span></div>';
         updateSelectedToolbar();
         return;
       }
@@ -1423,7 +1408,8 @@
     let cachedLocalIp = '';
     let isVpnActiveOnMac = false;
     let hasUserSelectedTab = false;
-    let activeQrTab = 'cloudflare'; // По умолчанию Cloudflare для 100% совместимости с любым VPN!
+    let activeQrTab = 'wifi'; // По умолчанию Wi-Fi: локально, мгновенно, без блокировок операторов!
+    let currentRenderedQrUrl = '';
 
     async function loadMobileUrl() {
       try {
@@ -1434,12 +1420,12 @@
         if (data.local_ip) cachedLocalIp = data.local_ip;
         if (data.has_vpn) {
           isVpnActiveOnMac = true;
-          if (!hasUserSelectedTab) {
-            activeQrTab = 'cloudflare';
-          }
         }
 
-        updateQrModalView();
+        const qrModalEl = document.getElementById('qrModal');
+        if (qrModalEl && !qrModalEl.classList.contains('hidden')) {
+          updateQrModalView();
+        }
 
         if (cachedTunnelUrl) {
           if (tunnelPollTimer) { clearInterval(tunnelPollTimer); tunnelPollTimer = null; }
@@ -1463,6 +1449,7 @@
         if (btnWifi) btnWifi.className = 'flex-1 py-1.5 px-2 rounded-lg font-bold transition bg-amber-500 text-slate-950 shadow';
         if (btnCloudflare) btnCloudflare.className = 'flex-1 py-1.5 px-2 rounded-lg font-medium transition text-slate-400 hover:text-white';
       }
+      currentRenderedQrUrl = '';
       updateQrModalView();
     }
 
@@ -1512,6 +1499,11 @@
     }
 
     function renderQrCode(url, isWarmingUp = false) {
+      if (currentRenderedQrUrl === url && document.getElementById('qrcodeCanvas')?.hasChildNodes()) {
+        return; // НЕ перерисовываем и не мерцаем, если этот URL уже отображен!
+      }
+      currentRenderedQrUrl = url;
+
       const container = document.getElementById('qrcodeCanvas');
       if (!container) return;
       container.innerHTML = '';
@@ -1519,17 +1511,24 @@
         if (typeof QRCode !== 'undefined') {
           new QRCode(container, {
             text: url,
-            width: 180,
-            height: 180,
+            width: 190,
+            height: 190,
             colorDark: "#0f172a",
             colorLight: "#ffffff",
             correctLevel: QRCode.CorrectLevel.M
           });
+          setTimeout(() => {
+            const cvs = container.querySelector('canvas');
+            const img = container.querySelector('img');
+            if (cvs && (!img || !img.src || img.src.length < 50)) {
+              cvs.style.display = 'block';
+            }
+          }, 40);
         } else {
-          container.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}" alt="QR Code" class="w-[180px] h-[180px] mx-auto rounded-lg">`;
+          container.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodeURIComponent(url)}" alt="QR Code" class="w-[190px] h-[190px] mx-auto rounded-lg">`;
         }
       } catch (err) {
-        container.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}" alt="QR Code" class="w-[180px] h-[180px] mx-auto rounded-lg">`;
+        container.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodeURIComponent(url)}" alt="QR Code" class="w-[190px] h-[190px] mx-auto rounded-lg">`;
       }
 
       const urlText = document.getElementById('mobileUrlText');
@@ -1560,13 +1559,23 @@
 
     function openQrModal() {
       const modal = document.getElementById('qrModal');
-      if (modal) modal.classList.remove('hidden');
-      loadMobileUrl();
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
+      currentRenderedQrUrl = ''; // Сброс для гарантированной перерисовки при открытии
+      updateQrModalView(); // Мгновенная отрисовка из кэша без задержек
+      loadMobileUrl(); // Фоновое обновление
     }
     function closeQrModal() {
       const modal = document.getElementById('qrModal');
       if (modal) modal.classList.add('hidden');
     }
+
+    window.openQrModal = openQrModal;
+    window.closeQrModal = closeQrModal;
+    window.switchQrTab = switchQrTab;
+    window.restartTunnelManual = restartTunnelManual;
+    window.copyMobileUrl = copyMobileUrl;
 
     async function restartTunnelManual() {
       const btn = document.getElementById('btnRestartTunnel');
