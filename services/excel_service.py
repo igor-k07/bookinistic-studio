@@ -354,7 +354,12 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
                                 and not f.startswith(f"{article}")
                                 and not f.startswith(("03_info_page", "info_page"))
                             ]
-                            add_f = add_f[:14]
+                            card_f = [f for f in add_f if f.startswith("99_card")]
+                            add_f_no_card = [f for f in add_f if not f.startswith("99_card")]
+                            if card_f:
+                                add_f = add_f_no_card[:13] + [card_f[0]]
+                            else:
+                                add_f = add_f_no_card[:14]
                             if add_f:
                                 add_photo_urls = " ".join([f"{tunnel_url}/vault/{article}/{f}" for f in add_f])
                     break

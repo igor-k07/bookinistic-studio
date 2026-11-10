@@ -736,8 +736,19 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                         main_photo = "01_cover_front.jpg" if "01_cover_front.jpg" in saved_files else saved_files[0]
                         book_data["main_photo_url"] = f"{tunnel_url}/vault/{article}/{main_photo}"
 
-                        add_files = [f for f in saved_files if f != main_photo and not f.startswith(f"{article}")]
-                        add_files = add_files[:14]
+                        add_files = [
+                            f for f in saved_files
+                            if f != main_photo
+                            and not f.startswith(f"{article}")
+                            and not f.startswith("info_page")
+                        ]
+                        card_file = "99_card.jpg" if "99_card.jpg" in add_files else None
+                        add_files_no_card = [f for f in add_files if f != "99_card.jpg"]
+                        if card_file:
+                            add_files = add_files_no_card[:13] + [card_file]
+                        else:
+                            add_files = add_files_no_card[:14]
+
                         if add_files:
                             book_data["add_photo_urls"] = " ".join([f"{tunnel_url}/vault/{article}/{f}" for f in add_files])
 

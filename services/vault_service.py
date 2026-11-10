@@ -92,30 +92,32 @@ def save_book_vault_photos(
             print(f"Ошибка сохранения фото {filename}: {e}")
 
     if slots_photos:
-        # 1. Передняя обложка (главное фото для Ozon)
+        # 1. Обложка (главное фото для Ozon)
         if slots_photos.get("cover_front"):
             write_photo("01_cover_front.jpg", slots_photos["cover_front"], f"{article}.jpg", is_ozon_photo=True)
 
-        # 2. Задняя обложка (первое доп. фото для Ozon)
-        if slots_photos.get("cover_back"):
-            write_photo("02_cover_back.jpg", slots_photos["cover_back"], f"{article}_1.jpg", is_ozon_photo=True)
+        cur_ozon_idx = 1
 
-        # 3. Инфо-страницы (титул, оборот) — сохраняем ТОЛЬКО локально для архива и ИИ, НЕ передаем в Ozon!
-        for idx, p in enumerate(slots_photos.get("info_pages", []), 1):
-            write_photo(f"03_info_page_{idx}.jpg", p, ozon_alt_name=None, is_ozon_photo=False)
-
-        # 4. Иллюстрации (доп. фото для Ozon, нумерация с _2)
-        cur_ozon_idx = 2
-        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
-            write_photo(f"04_illustration_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
-            cur_ozon_idx += 1
-
-        # 5. Мантра и дефекты (доп. фото для Ozon)
+        # 2. Фото дефектов при наличии (первые доп. фото для Ozon)
         for idx, p in enumerate(slots_photos.get("mantra_defects", []), 1):
-            write_photo(f"05_defect_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
+            write_photo(f"02_defect_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
             cur_ozon_idx += 1
 
-    # 6. Финальная инфо-карточка Ozon (card.png) — всегда в конце карточки книги
+        # 3. Фото иллюстраций
+        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
+            write_photo(f"03_illustration_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
+            cur_ozon_idx += 1
+
+        # 4. Фото задней части книги
+        if slots_photos.get("cover_back"):
+            write_photo("04_cover_back.jpg", slots_photos["cover_back"], f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
+            cur_ozon_idx += 1
+
+        # Инфо-страницы (титул, оборот) — сохраняем ТОЛЬКО локально для архива и ИИ, НЕ передаем в Ozon!
+        for idx, p in enumerate(slots_photos.get("info_pages", []), 1):
+            write_photo(f"info_page_{idx}.jpg", p, ozon_alt_name=None, is_ozon_photo=False)
+
+    # 5. Финальное шаблонное фото с предупреждением (card.png) — всегда в самом конце
     card_path = get_card_image_path()
     if card_path and os.path.exists(card_path):
         try:
