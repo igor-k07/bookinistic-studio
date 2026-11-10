@@ -53,7 +53,7 @@ def is_vpn_active() -> bool:
         return False
 
 
-def get_local_url(port: int = 8090) -> str:
+def get_local_url(port: int = 8095) -> str:
     ip = get_local_ip()
     return f"http://{ip}:{port}"
 
@@ -66,7 +66,7 @@ def cleanup_stale_tunnels():
         pass
 
 
-def start_tunnel(port: int = 8090) -> Optional[str]:
+def start_tunnel(port: int = 8095) -> Optional[str]:
     """
     Запускает фоновый Cloudflare Quick Tunnel на указанный порт и извлекает публичный HTTPS-адрес.
     """
@@ -143,7 +143,7 @@ def stop_tunnel():
         _tunnel_url = None
 
 
-def restart_tunnel(port: int = 8090) -> Optional[str]:
+def restart_tunnel(port: int = 8095) -> Optional[str]:
     """Принудительно перезапускает туннель (при смене сети Wi-Fi или обрыве)."""
     stop_tunnel()
     time.sleep(0.5)
@@ -153,7 +153,7 @@ def restart_tunnel(port: int = 8090) -> Optional[str]:
 _watchdog_started = False
 
 
-def start_network_watchdog(port: int = 8090):
+def start_network_watchdog(port: int = 8095):
     """
     Фоновый страж: отслеживает смену Wi-Fi сети (смену локального IP)
     или падение процесса cloudflared и автоматически восстанавливает соединение.

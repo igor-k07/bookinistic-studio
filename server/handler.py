@@ -32,7 +32,7 @@ from config import (
     get_ozon_config,
     save_ozon_config,
 )
-from server.state import check_mobile_events, record_mobile_upload
+from server.state import add_mobile_chunk, check_mobile_events, record_mobile_upload
 from services.ai_service import call_gemini_vision, classify_and_group_book_photos
 from services.excel_service import (
     append_book_to_excel,
@@ -613,18 +613,23 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             try:
                 body = json.loads(post_data.decode("utf-8"))
                 images = body.get("images", [])
-                if not images:
+                session_id = str(body.get("session_id", ""))
+                chunk_index = int(body.get("chunk_index", 0))
+                total_chunks = int(body.get("total_chunks", 1))
+                is_last_chunk = bool(body.get("is_last_chunk", total_chunks <= 1))
+
+                if not images and not is_last_chunk:
                     raise Exception("Нет изображений в запросе")
 
                 session_ts = int(time.time())
                 for idx, img in enumerate(images):
-                    fname = f"mobile_batch_{session_ts}_{idx+1}.jpg"
+                    fname = f"mobile_batch_{session_ts}_{chunk_index}_{idx+1}.jpg"
                     p = os.path.join(INBOX_DIR, fname)
                     with open(p, "wb") as f:
                         f.write(base64.b64decode(img.get("data", "")))
 
-                record_mobile_upload(session_ts, images)
-                self.send_json({"success": True, "count": len(images)})
+                result = add_mobile_chunk(session_id, chunk_index, total_chunks, is_last_chunk, images)
+                self.send_json(result)
             except Exception as e:
                 self.send_error_json(e)
 

@@ -304,7 +304,22 @@
       }
 
       if (photoPool.length === 0) {
-        container.innerHTML = '<div class="text-center py-12 w-full text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 flex flex-col items-center justify-center gap-2"><span class="text-2xl">📸</span><span>Пул пуст. Снимите пачку книг на телефон через QR-код или нажмите «20 тестовых фото»</span></div>';
+        container.innerHTML = `
+          <div class="text-center py-12 w-full text-xs text-slate-500 border border-dashed border-slate-800 rounded-2xl bg-slate-950/40 flex flex-col items-center justify-center gap-3">
+            <span class="text-3xl">📸</span>
+            <span class="text-slate-400">Пул пуст. Загрузите пачку фото со смартфона или выберите файлы с диска</span>
+            <div class="flex items-center gap-2.5 mt-1">
+              <button type="button" onclick="openQrModal()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/25 active:scale-95 transition">
+                <span>📱</span>
+                <span>Загрузить со смартфона (QR)</span>
+              </button>
+              <button type="button" onclick="document.getElementById('poolFileInput').click()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center gap-1.5">
+                <span>📁</span>
+                <span>Выбрать с диска</span>
+              </button>
+            </div>
+          </div>
+        `;
         updateSelectedToolbar();
         return;
       }

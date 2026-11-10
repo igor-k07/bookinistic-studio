@@ -8,11 +8,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }</style>
+  <style>
+    body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .btn-press:active { transform: scale(0.97); }
+  </style>
 </head>
 <body class="min-h-full flex flex-col justify-between p-4 bg-slate-950">
 
   <div class="space-y-4 pt-2">
+    <!-- ВЕРХНЯЯ ШАПКА СО СТАТУСОМ ПОДКЛЮЧЕНИЯ К MAC -->
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
       <div class="flex items-center gap-2.5">
         <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center text-lg shadow-md">
@@ -20,23 +24,23 @@
         </div>
         <div>
           <h1 class="text-sm font-bold text-white leading-tight">Batch <span class="text-amber-400">Mobile Studio</span></h1>
-          <p class="text-[11px] text-emerald-400 font-medium">🟢 Подключено к вашему Mac (8095)</p>
+          <p id="mobileConnBadge" class="text-[11px] text-emerald-400 font-medium">🟢 Подключено к вашему Mac (8095)</p>
         </div>
       </div>
-      <span id="mobileCountBadge" class="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">0 фото</span>
+      <span id="mobileCountBadge" class="text-xs font-mono px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">0 фото</span>
     </div>
 
-    <!-- КНОПКИ ВЫБОРА ПАЧКИ ФОТО -->
+    <!-- КНОПКИ ВЫБОРА ПАЧКИ ФОТО (ИЗ ГАЛЕРЕИ ИЛИ С КАМЕРЫ) -->
     <div class="grid grid-cols-2 gap-3">
-      <label class="flex flex-col items-center justify-center p-3.5 bg-slate-900 border border-slate-800 rounded-2xl active:bg-slate-800 transition text-center cursor-pointer shadow-lg">
-        <input type="file" multiple accept="image/*" class="hidden" onchange="handleMobileFiles(event)">
+      <label class="btn-press flex flex-col items-center justify-center p-3.5 bg-slate-900 border border-slate-800 rounded-2xl active:bg-slate-800 transition text-center cursor-pointer shadow-lg hover:border-amber-500/40">
+        <input type="file" id="batchFileInput" multiple accept="image/*" class="hidden" onchange="handleMobileFiles(event)">
         <span class="text-2xl mb-1">📂</span>
         <span class="text-xs font-bold text-white">Выбрать пачку</span>
         <span class="text-[10px] text-slate-400">из галереи</span>
       </label>
 
-      <label class="flex flex-col items-center justify-center p-3.5 bg-slate-900 border border-slate-800 rounded-2xl active:bg-slate-800 transition text-center cursor-pointer shadow-lg">
-        <input type="file" capture="environment" accept="image/*" class="hidden" onchange="handleMobileFiles(event)">
+      <label class="btn-press flex flex-col items-center justify-center p-3.5 bg-slate-900 border border-slate-800 rounded-2xl active:bg-slate-800 transition text-center cursor-pointer shadow-lg hover:border-amber-500/40">
+        <input type="file" id="cameraFileInput" capture="environment" accept="image/*" class="hidden" onchange="handleMobileFiles(event)">
         <span class="text-2xl mb-1">📷</span>
         <span class="text-xs font-bold text-white">Камера</span>
         <span class="text-[10px] text-slate-400">Снять сейчас</span>
@@ -52,7 +56,7 @@
           <div class="text-[10px] text-amber-400/90 font-medium" id="currentBookCount">0 фото в текущей книге</div>
         </div>
       </div>
-      <button type="button" onclick="nextMobileBook()" class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs shadow-md transition flex items-center gap-1.5 shrink-0">
+      <button type="button" onclick="nextMobileBook()" class="btn-press px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs shadow-md transition flex items-center gap-1.5 shrink-0">
         <span>+ След. книга</span>
         <span id="nextBookNumBadge" class="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 text-[10px] font-mono">#2</span>
       </button>
@@ -62,7 +66,7 @@
     <div class="space-y-2">
       <div class="flex items-center justify-between text-xs text-slate-400">
         <span>Кадры сессии:</span>
-        <button type="button" onclick="clearMobilePhotos()" class="text-rose-400">Очистить всё</button>
+        <button type="button" onclick="clearMobilePhotos()" class="text-rose-400 hover:text-rose-300">Очистить всё</button>
       </div>
 
       <div id="mobileGrid" class="space-y-3 min-h-[120px]">
@@ -73,9 +77,17 @@
     </div>
   </div>
 
+  <!-- НИЖНЯЯ ПАНЕЛЬ: ПРОГРЕСС И КНОПКА ОТПРАВКИ НА MAC -->
   <div class="pt-4 pb-2">
-    <button type="button" onclick="sendToMac()" id="sendBtn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 active:from-amber-600 text-white font-bold text-base shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2">
-      <span>🚀</span>
+    <!-- Полоса прогресса загрузки -->
+    <div id="uploadProgressWrapper" class="hidden mb-2.5">
+      <div class="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden border border-slate-800">
+        <div id="uploadProgressBar" class="bg-gradient-to-r from-amber-500 to-orange-500 h-2.5 rounded-full transition-all duration-200 w-0"></div>
+      </div>
+    </div>
+
+    <button type="button" onclick="sendToMac()" id="sendBtn" class="btn-press w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 active:from-amber-600 text-white font-bold text-base shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+      <span id="sendBtnIcon">🚀</span>
       <span id="sendBtnText">Отправить пачку в программу на Mac</span>
     </button>
     <p id="mobileStatus" class="text-center text-[11px] text-slate-500 mt-2">Кадры мгновенно попадут в сортировщик на Mac</p>
@@ -84,6 +96,30 @@
   <script>
     let mobileImages = [];
     let currentMobileBookNum = 1;
+    let isUploading = false;
+
+    // ПРОВЕРКА СВЯЗИ С MAC СЕРВЕРОМ
+    async function checkMobileConnection() {
+      const connBadge = document.getElementById('mobileConnBadge');
+      try {
+        const res = await fetch('/api/get_tunnel_url', { cache: 'no-store' });
+        if (res.ok) {
+          if (connBadge) {
+            connBadge.innerHTML = '🟢 Подключено к вашему Mac (8095)';
+            connBadge.className = 'text-[11px] text-emerald-400 font-medium';
+          }
+        } else {
+          throw new Error('HTTP ' + res.status);
+        }
+      } catch (err) {
+        if (connBadge) {
+          connBadge.innerHTML = '🔴 Нет связи с сервером на Mac';
+          connBadge.className = 'text-[11px] text-rose-400 font-semibold';
+        }
+      }
+    }
+    checkMobileConnection();
+    setInterval(checkMobileConnection, 8000);
 
     function nextMobileBook() {
       const photosInCur = mobileImages.filter(img => (img.book_index || 1) === currentMobileBookNum).length;
@@ -107,14 +143,33 @@
       if (nextBadge) nextBadge.textContent = `#${currentMobileBookNum + 1}`;
     }
 
-    function resizeImage(file, maxDimension = 1800, quality = 0.85) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new Image();
-          img.onload = () => {
-            let width = img.width;
-            let height = img.height;
+    // БЕЗОПАСНАЯ И БЫСТРАЯ ОПТИМИЗАЦИЯ ИЗОБРАЖЕНИЙ (С ЗАЩИТОЙ ОТ ПАДЕНИЙ И ТАЙМАУТОВ)
+    function resizeImage(file, maxDimension = 1600, quality = 0.82) {
+      return new Promise(async (resolve) => {
+        let settled = false;
+        // Защитный таймаут 12 секунд на один файл (чтобы пакет никогда не зависал)
+        const timeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            console.warn('Resize timeout for:', file.name);
+            resolve(null);
+          }
+        }, 12000);
+
+        const finish = (res) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve(res);
+          }
+        };
+
+        // 1. Попытка через современный нативный createImageBitmap (без лишнего расхода RAM)
+        if (typeof createImageBitmap === 'function') {
+          try {
+            const bitmap = await createImageBitmap(file);
+            let width = bitmap.width;
+            let height = bitmap.height;
             if (width > maxDimension || height > maxDimension) {
               if (width > height) {
                 height = Math.round((height * maxDimension) / width);
@@ -128,40 +183,121 @@
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
+            ctx.drawImage(bitmap, 0, 0, width, height);
+            if (bitmap.close) bitmap.close();
             const dataUrl = canvas.toDataURL('image/jpeg', quality);
-            resolve({
+            finish({
               name: file.name || 'batch_photo.jpg',
               mime: 'image/jpeg',
               data: dataUrl.split(',')[1],
               preview: dataUrl,
               book_index: currentMobileBookNum
             });
+            return;
+          } catch (e) {
+            // Переход на fallback ниже
+          }
+        }
+
+        // 2. Fallback: URL.createObjectURL + HTMLImageElement
+        let blobUrl = null;
+        try {
+          blobUrl = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            try {
+              let width = img.width;
+              let height = img.height;
+              if (width > maxDimension || height > maxDimension) {
+                if (width > height) {
+                  height = Math.round((height * maxDimension) / width);
+                  width = maxDimension;
+                } else {
+                  width = Math.round((width * maxDimension) / height);
+                  height = maxDimension;
+                }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+              const dataUrl = canvas.toDataURL('image/jpeg', quality);
+              if (blobUrl) URL.revokeObjectURL(blobUrl);
+              finish({
+                name: file.name || 'batch_photo.jpg',
+                mime: 'image/jpeg',
+                data: dataUrl.split(',')[1],
+                preview: dataUrl,
+                book_index: currentMobileBookNum
+              });
+            } catch (err) {
+              if (blobUrl) URL.revokeObjectURL(blobUrl);
+              console.error('Canvas error:', err);
+              finish(null);
+            }
           };
-          img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
+          img.onerror = () => {
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+            console.warn('Image decode error for:', file.name);
+            finish(null);
+          };
+          img.src = blobUrl;
+        } catch (err) {
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          console.error('Resize fallback error:', err);
+          finish(null);
+        }
       });
     }
 
     async function handleMobileFiles(e) {
-      const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
-      if (files.length === 0) return;
-      const status = document.getElementById('mobileStatus');
-      status.textContent = '⚡ Быстрая оптимизация ' + files.length + ' фото...';
+      const rawFiles = Array.from(e.target.files || []);
+      if (!rawFiles || rawFiles.length === 0) return;
 
-      // Параллельная оптимизация порциями по 4 файла для моментальной отдачи
-      const batchSize = 4;
-      for (let i = 0; i < files.length; i += batchSize) {
-        const slice = files.slice(i, i + batchSize);
-        const resizedSlice = await Promise.all(slice.map(f => resizeImage(f, 1600, 0.84)));
-        mobileImages.push(...resizedSlice);
-        updateMobileBookUI();
-        renderMobileGrid();
-        status.textContent = `⚡ Оптимизировано ${mobileImages.length} из ${files.length} фото...`;
+      // Принимаем любые файлы изображений, включая пустой MIME от iOS камеры и HEIC
+      const files = rawFiles.filter(f => {
+        if (!f) return false;
+        if (f.type && f.type.startsWith('image/')) return true;
+        if (/\.(jpe?g|png|webp|heic|heif|bmp|tiff)$/i.test(f.name || '')) return true;
+        return f.size > 0;
+      });
+
+      if (files.length === 0) {
+        alert('Выбранные файлы не являются поддерживаемыми изображениями.');
+        e.target.value = '';
+        return;
       }
-      status.textContent = `✅ ${mobileImages.length} фото готовы к отправке на Mac`;
-      e.target.value = '';
+
+      const status = document.getElementById('mobileStatus');
+      status.textContent = `⚡ Оптимизация ${files.length} фото...`;
+      status.className = 'text-center text-[11px] text-amber-400 font-medium mt-2';
+
+      try {
+        // Оптимизация порциями по 2 файла для предотвращения переполнения памяти на мобильных устройствах
+        const batchSize = 2;
+        let processedCount = 0;
+        for (let i = 0; i < files.length; i += batchSize) {
+          const slice = files.slice(i, i + batchSize);
+          const resizedSlice = await Promise.all(slice.map(f => resizeImage(f, 1600, 0.82)));
+          const validPhotos = resizedSlice.filter(Boolean);
+          if (validPhotos.length > 0) {
+            mobileImages.push(...validPhotos);
+            updateMobileBookUI();
+            renderMobileGrid();
+          }
+          processedCount += slice.length;
+          status.textContent = `⚡ Оптимизировано ${processedCount} из ${files.length} фото...`;
+        }
+        status.textContent = `✅ Готово! Всего ${mobileImages.length} фото в сессии`;
+        status.className = 'text-center text-[11px] text-emerald-400 font-medium mt-2';
+      } catch (err) {
+        console.error('Processing error:', err);
+        status.textContent = 'Часть фото не удалось обработать';
+        status.className = 'text-center text-[11px] text-rose-400 mt-2';
+      } finally {
+        e.target.value = '';
+      }
     }
 
     function renderMobileGrid() {
@@ -197,11 +333,11 @@
             <div class="grid grid-cols-3 gap-2">
               ${items.map(({ img, idx }) => `
                 <div class="relative group bg-slate-950 rounded-xl overflow-hidden border border-slate-800 aspect-[3/4]">
-                  <img src="${img.preview}" class="w-full h-full object-cover">
+                  <img src="${img.preview}" class="w-full h-full object-cover" loading="lazy">
                   <div class="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-semibold text-white">
                     #${idx+1}
                   </div>
-                  <button type="button" onclick="removeMobileImage(${idx})" class="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/80 text-white flex items-center justify-center text-xs">✕</button>
+                  <button type="button" onclick="removeMobileImage(${idx})" class="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/80 text-white flex items-center justify-center text-xs active:bg-rose-600">✕</button>
                 </div>
               `).join('')}
             </div>
@@ -217,59 +353,145 @@
     }
 
     function clearMobilePhotos() {
+      if (mobileImages.length === 0) return;
+      if (!confirm('Очистить все выбранные фото?')) return;
       mobileImages = [];
       currentMobileBookNum = 1;
       updateMobileBookUI();
       renderMobileGrid();
+      const status = document.getElementById('mobileStatus');
+      status.textContent = 'Кадры мгновенно попадут в сортировщик на Mac';
+      status.className = 'text-center text-[11px] text-slate-500 mt-2';
     }
 
+    // НАДЕЖНАЯ ПОРЦИОННАЯ ОТПРАВКА НА MAC С ПОВТОРАМИ ПРИ СБОЕ СЕТИ
     async function sendToMac() {
+      if (isUploading) return;
       if (mobileImages.length === 0) {
-        alert('Пожалуйста, выберите фотографии!');
+        alert('Пожалуйста, выберите или снимите фотографии перед отправкой!');
         return;
       }
 
       const btn = document.getElementById('sendBtn');
       const btnText = document.getElementById('sendBtnText');
+      const btnIcon = document.getElementById('sendBtnIcon');
       const status = document.getElementById('mobileStatus');
+      const progressWrap = document.getElementById('uploadProgressWrapper');
+      const progressBar = document.getElementById('uploadProgressBar');
 
+      isUploading = true;
       btn.disabled = true;
-      btnText.textContent = 'Передача пачки на Mac...';
-      status.textContent = `Отправка ${mobileImages.length} фотографий...`;
+      btnIcon.textContent = '⏳';
+      if (progressWrap) progressWrap.classList.remove('hidden');
+      if (progressBar) progressBar.style.width = '0%';
+
+      const totalImages = mobileImages.length;
+      btnText.textContent = `Подготовка к передаче (${totalImages} фото)...`;
+      status.textContent = `Отправка ${totalImages} фото в конвейер на Mac...`;
+      status.className = 'text-center text-xs text-amber-400 font-medium mt-2';
+
+      // Сессия и размер порции: по 2 фото за один HTTP POST (~1-1.5 МБ).
+      // Это полностью исключает таймауты Cloudflare и сбои мобильного интернета.
+      const sessionId = 'mob_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      const chunkSize = 2;
+      const totalChunks = Math.ceil(totalImages / chunkSize);
 
       try {
-        const res = await fetch('/api/mobile_upload', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            images: mobileImages.map(img => ({
-              name: img.name,
-              mime: img.mime,
-              data: img.data,
-              book_index: img.book_index || 1
-            }))
-          })
-        });
+        for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+          const start = chunkIdx * chunkSize;
+          const end = Math.min(start + chunkSize, totalImages);
+          const chunkImages = mobileImages.slice(start, end).map(img => ({
+            name: img.name,
+            mime: img.mime,
+            data: img.data,
+            book_index: img.book_index || 1
+          }));
+          const isLastChunk = (chunkIdx === totalChunks - 1);
+          const pct = Math.round((end / totalImages) * 100);
 
-        const data = await res.json();
-        if (data.success) {
-          status.textContent = '✅ Пачка успешно передана в программу на Mac!';
-          status.className = 'text-center text-xs text-emerald-400 font-semibold mt-2';
-          mobileImages = [];
-          currentMobileBookNum = 1;
-          updateMobileBookUI();
-          renderMobileGrid();
-          alert('✅ Успешно отправлено! Все фото уже в пуле на экране компьютера.');
-        } else {
-          throw new Error(data.error || 'Ошибка передачи');
+          if (progressBar) progressBar.style.width = `${pct}%`;
+          btnText.textContent = `Отправка ${end} из ${totalImages} фото (${pct}%)...`;
+          status.textContent = `Передача порции ${chunkIdx + 1} из ${totalChunks} на Mac...`;
+
+          // Попытка отправки текущей порции с автоповтором до 3 раз
+          let success = false;
+          let lastErr = null;
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const res = await fetch('/api/mobile_upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  session_id: sessionId,
+                  chunk_index: chunkIdx,
+                  total_chunks: totalChunks,
+                  is_last_chunk: isLastChunk,
+                  images: chunkImages
+                })
+              });
+
+              if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`HTTP ${res.status}: ${errText || 'Сбой ответа сервера'}`);
+              }
+
+              const data = await res.json();
+              if (!data.success) {
+                throw new Error(data.error || 'Ошибка сохранения на сервере');
+              }
+
+              success = true;
+              break;
+            } catch (err) {
+              lastErr = err;
+              if (attempt < 3) {
+                status.textContent = `Повтор порции ${chunkIdx + 1} (попытка ${attempt + 1}/3)...`;
+                await new Promise(r => setTimeout(r, 1000));
+              }
+            }
+          }
+
+          if (!success) {
+            throw new Error(`Сбой при передаче порции ${chunkIdx + 1}: ${lastErr ? lastErr.message : 'Нет связи'}`);
+          }
         }
+
+        // ВСЕ ПОРЦИИ УСПЕШНО ПЕРЕДАНЫ
+        if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+        if (progressBar) progressBar.style.width = '100%';
+        btnIcon.textContent = '✅';
+        btnText.textContent = 'Успешно отправлено!';
+        status.textContent = `✅ Все ${totalImages} фото успешно переданы на Mac!`;
+        status.className = 'text-center text-xs text-emerald-400 font-bold mt-2';
+
+        // Очищаем сессию
+        mobileImages = [];
+        currentMobileBookNum = 1;
+        updateMobileBookUI();
+        renderMobileGrid();
+
+        alert(`✅ Успешно отправлено!\n\nВсе ${totalImages} фото уже в общем пуле на экране компьютера.`);
+
+        setTimeout(() => {
+          btnIcon.textContent = '🚀';
+          btnText.textContent = 'Отправить пачку в программу на Mac';
+          btn.disabled = false;
+          isUploading = false;
+          if (progressWrap) progressWrap.classList.add('hidden');
+          status.textContent = 'Кадры мгновенно попадут в сортировщик на Mac';
+          status.className = 'text-center text-[11px] text-slate-500 mt-2';
+        }, 2500);
+
       } catch (err) {
-        alert('Ошибка: ' + err.message);
-        status.textContent = 'Ошибка отправки';
-        status.className = 'text-center text-xs text-rose-400 mt-2';
-      } finally {
+        console.error('Mobile upload error:', err);
+        btnIcon.textContent = '🔄';
+        btnText.textContent = 'Повторить отправку на Mac';
         btn.disabled = false;
-        btnText.textContent = 'Отправить пачку в программу на Mac';
+        isUploading = false;
+        status.textContent = `⚠️ Ошибка: ${err.message}`;
+        status.className = 'text-center text-xs text-rose-400 font-semibold mt-2';
+        alert(`Ошибка при отправке: ${err.message}\n\nВаши кадры сохранены на телефоне. Нажмите кнопку «Повторить отправку на Mac».`);
       }
     }
   </script>
