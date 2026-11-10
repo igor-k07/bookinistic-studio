@@ -134,7 +134,7 @@
       );
     }
 
-    let poolCardScale = 'large';
+    // poolCardScale объявлен в state.js
     try {
       const savedScale = localStorage.getItem('bookinistic_pool_scale');
       if (savedScale && ['normal', 'large', 'xlarge'].includes(savedScale)) poolCardScale = savedScale;
@@ -935,8 +935,9 @@
     // -------------------------------------------------------------
     // DRAG AND DROP: МЕЖДУ СЛОТАМИ, ИЗ ПУЛА В СЛОТЫ И ОБРАТНО В ПУЛ
     // -------------------------------------------------------------
-    let draggedPhotoId = null;
-    let draggedSourceSlot = null;
+    // draggedPhotoId и draggedSourceSlot объявлены в state.js
+    draggedPhotoId = null;
+    draggedSourceSlot = null;
 
     function handlePhotoDragStart(e, photoId, sourceSlot) {
       draggedPhotoId = photoId;
