@@ -128,24 +128,97 @@ def calculate_dimensions_and_weight(
 
 def _clean_query(text: str) -> str:
     """Очищает строку запроса от кавычек, скобок и пунктуации."""
-    return re.sub(r"[\"«».,!?;:()\[\]]", " ", text).strip()
+    return re.sub(r"[\"«».,!?;:()\[\]]", " ", text or "").strip()
+
+
+def _normalize_isbn(isbn_str: Optional[str]) -> str:
+    """Очищает ISBN, оставляя только цифры и X."""
+    if not isbn_str:
+        return ""
+    return re.sub(r"[^\dX]", "", str(isbn_str).upper())
+
+
+def _isbns_match(isbn1: Optional[str], isbn2: Optional[str]) -> bool:
+    """Сверяет два ISBN с учетом дефисов, пробелов и формата ISBN-10 / ISBN-13."""
+    c1 = _normalize_isbn(isbn1)
+    c2 = _normalize_isbn(isbn2)
+    if not c1 or not c2:
+        return False
+    if c1 == c2:
+        return True
+    if len(c1) == 13 and len(c2) == 10 and c1.startswith("978"):
+        return c1[3:12] == c2[:9]
+    if len(c2) == 13 and len(c1) == 10 and c2.startswith("978"):
+        return c2[3:12] == c1[:9]
+    return False
+
+
+def get_fantlab_work_original_title(work_id: int) -> Optional[str]:
+    """Получает оригинальное иностранное название произведения по work_id из FantLab."""
+    url = f"https://api.fantlab.ru/work/{work_id}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+    try:
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            orig = (data.get("work_name_orig") or "").strip()
+            if orig and any("a" <= c.lower() <= "z" for c in orig):
+                return orig
+    except Exception as e:
+        print(f"[Enrichment:FantLab] Ошибка получения work/{work_id}: {e}", flush=True)
+    return None
 
 
 def search_fantlab_edition(
-    title: str,
+    title: str = "",
     author: str = "",
     year: Optional[int] = None,
-    publisher: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+    publisher: Optional[str] = None,
+    isbn: Optional[str] = None
+) -> Tuple[Optional[Dict[str, Any]], bool]:
     """
-    Поиск издания в базе FantLab по названию, автору и году.
-    Возвращает dict с метаданными лучшего совпадения.
+    Поиск издания в базе FantLab.
+    1. Если указан ISBN — в первую очередь ищет прямое совпадение по ISBN.
+    2. Если по ISBN не найдено или ISBN не указан — ищет по автору и названию.
+    Возвращает (match_dict, is_exact_isbn_match).
     """
-    clean_t = _clean_query(title)
-    if not clean_t:
-        return None
+    clean_isbn = _normalize_isbn(isbn)
 
+    # 1. Поиск напрямую по ISBN
+    if clean_isbn:
+        queries = [isbn.strip(), clean_isbn]
+        if len(clean_isbn) == 13 and clean_isbn.startswith("978"):
+            queries.append(clean_isbn[3:12])
+
+        for q_cand in queries:
+            if not q_cand:
+                continue
+            q_enc = urllib.parse.quote(q_cand)
+            url = f"https://api.fantlab.ru/search-editions?q={q_enc}"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+            try:
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    d = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                    matches = d.get("matches", [])
+                    for m in matches:
+                        if _isbns_match(m.get("isbn"), isbn):
+                            return m, True
+                        ed_id = m.get("edition_id")
+                        if ed_id:
+                            det = get_fantlab_edition_details(ed_id)
+                            if det:
+                                for det_isbn in det.get("isbns", []):
+                                    if _isbns_match(det_isbn, isbn):
+                                        m["_cached_details"] = det
+                                        return m, True
+            except Exception as e:
+                print(f"[Enrichment:FantLab] Ошибка поиска по ISBN '{q_cand}': {e}", flush=True)
+
+    # 2. Поиск по названию и автору
+    clean_t = _clean_query(title)
     clean_a = _clean_query(author)
+    if not clean_t and not clean_a:
+        return None, False
+
     q_str = f"{clean_a} {clean_t}".strip()
     q_enc = urllib.parse.quote(q_str)
     url = f"https://api.fantlab.ru/search-editions?q={q_enc}"
@@ -156,9 +229,23 @@ def search_fantlab_edition(
             data = json.loads(resp.read().decode("utf-8", errors="ignore"))
             matches = data.get("matches", [])
             if not matches:
-                return None
+                return None, False
 
-            # 1. Приоритет: совпадение по точному году
+            # Если пользователь передавал ISBN, проверяем среди результатов на точное совпадение
+            if clean_isbn:
+                for m in matches:
+                    if _isbns_match(m.get("isbn"), isbn):
+                        return m, True
+                    ed_id = m.get("edition_id")
+                    if ed_id:
+                        det = get_fantlab_edition_details(ed_id)
+                        if det:
+                            for det_isbn in det.get("isbns", []):
+                                if _isbns_match(det_isbn, isbn):
+                                    m["_cached_details"] = det
+                                    return m, True
+
+            # Иначе: фильтрация по году
             if year:
                 try:
                     y_int = int(year)
@@ -168,24 +255,24 @@ def search_fantlab_edition(
                             pub_low = publisher.lower()
                             pub_match = [m for m in exact_year if pub_low in (m.get("publisher") or "").lower()]
                             if pub_match:
-                                return pub_match[0]
-                        return exact_year[0]
+                                return pub_match[0], False
+                        return exact_year[0], False
                 except Exception:
                     pass
 
-            # 2. Приоритет: совпадение по издательству
+            # Фильтрация по издательству
             if publisher:
                 pub_low = publisher.lower()
                 exact_pub = [m for m in matches if pub_low in (m.get("publisher") or "").lower()]
                 if exact_pub:
-                    return exact_pub[0]
+                    return exact_pub[0], False
 
-            # 3. Дефолт: первое релевантное совпадение
-            return matches[0]
+            # Первое релевантное совпадение
+            return matches[0], False
 
     except Exception as e:
         print(f"[Enrichment:FantLab] Ошибка поиска издания: {e}", flush=True)
-        return None
+        return None, False
 
 
 def get_fantlab_artist_fullname(art_id: int) -> Optional[str]:
@@ -252,148 +339,331 @@ def get_original_title_openlibrary(author: str, title: str) -> Optional[str]:
     return None
 
 
-def enrich_book_metadata(data: Dict[str, Any], has_illustrations: bool = True) -> Dict[str, Any]:
+def _clean_fantlab_text(text: Optional[str]) -> str:
+    """Очищает bb-code теги FantLab вида [autor=19]...[/autor], [pub=33]...[/pub], [b]...[/b] и html."""
+    if not text:
+        return ""
+    cleaned = re.sub(r"\[/?[a-zA-Z]+(?:=[^\]]*)?\]", "", str(text))
+    cleaned = re.sub(r"<[^>]+>", "", cleaned)
+    return cleaned.strip()
+
+
+def _map_cover_type(fl_cover: Optional[str]) -> str:
+    """Приводит тип обложки FantLab к справочнику Ozon."""
+    if not fl_cover:
+        return "Твердый переплет"
+    c = fl_cover.lower()
+    if "супер" in c:
+        if "мягк" in c:
+            return "Мягкая обложка, суперобложка"
+        elif "интеграл" in c:
+            return "Интегральный переплет, суперобложка"
+        elif "ткан" in c:
+            return "Тканевый переплет, суперобложка"
+        return "Твердый переплет, суперобложка"
+    if "мягк" in c or "обложк" in c:
+        if "клапан" in c:
+            return "Обложка с клапанами"
+        return "Мягкая обложка"
+    elif "интеграл" in c:
+        return "Интегральный переплет"
+    elif "ткан" in c:
+        return "Тканевый переплет"
+    elif "кож" in c:
+        return "Кожаный переплет"
+    return "Твердый переплет"
+
+
+def _detect_paper_type(text: str) -> Optional[str]:
+    """Определяет тип бумаги из примечаний и описания издания."""
+    if not text:
+        return None
+    t = text.lower()
+    if "мелован" in t:
+        if "глянц" in t:
+            return "Мелованная глянцевая"
+        return "Мелованная матовая"
+    if "офсет" in t:
+        return "Офсетная"
+    if "газетн" in t:
+        return "Газетная"
+    if "типографск" in t:
+        return "Типографская"
+    if "пухл" in t:
+        return "Пухлая"
+    return None
+
+
+def _extract_translator(text: str) -> Optional[str]:
+    """Извлекает имя переводчика из текста описания/примечаний FantLab."""
+    if not text:
+        return None
+    cleaned = re.sub(r"<[^>]+>", " ", text)
+    cleaned = re.sub(r"\[/?[a-zA-Z]+(?:=[^\]]*)?\]", " ", cleaned)
+    m = re.search(r"(?:перевод(?:чик(?:а)?)?(?:\s+с\s+[а-яё]+(?:ского)?)?|в\s+переводе)[\s:]+([А-ЯЁ][^\n\r,;/]+)", cleaned, re.IGNORECASE)
+    if m:
+        words = m.group(1).split()
+        chosen = []
+        for w in words[:3]:
+            w_clean = re.sub(r"[;,.]+$", "", w).strip()
+            if not w_clean or re.match(r"(?:иллюстрац|серия|художн|подписан|тираж|отв|ред)", w_clean, re.I):
+                break
+            chosen.append(w.rstrip(",;"))
+        if chosen:
+            res = " ".join(chosen).rstrip(".")
+            if any(c.isupper() for c in res):
+                return res
+    return None
+
+
+def enrich_book_metadata(
+    data: Dict[str, Any],
+    has_illustrations: bool = True,
+    skip_dimensions: bool = False
+) -> Dict[str, Any]:
     """
     Основная функция сверки и обогащения данных книги:
-    1. Ищет точное совпадение в FantLab.
-    2. Расшифровывает инициалы художника-иллюстратора в полное паспортное ФИО Ozon.
-    3. Подтягивает латинское название книги (original_title) для зарубежных переводов.
-    4. Уточняет точное количество страниц и размеры в мм, если они отсутствовали.
-    5. Гарантирует правило: если иллюстраций нет в пуле — поле illustrator всегда пустая строка.
+    1. Ищет точное совпадение в FantLab по ISBN (в первую очередь) или названию/автору.
+    2. При точном совпадении ISBN (exact_isbn_match=True):
+       - Уточняет поля книги (title, author, publisher, year, series, pages, cover_type,
+         book_format_code, isbn, original_title, translator, paper_type).
+       - Строго НЕ перезаписывает price, annotation и размеры, если skip_dimensions=True.
+    3. При неточном совпадении (по названию/автору):
+       - Безопасно дополняет только недостающие поля (pages, series, format, etc.).
+    4. Расшифровывает инициалы художника-иллюстратора в полное паспортное ФИО Ozon,
+       но только если в слоте иллюстраций есть реальные фото (has_illustrations=True).
+    5. Если skip_dimensions=False — рассчитывает физические размеры и массу книги.
     """
     if not isinstance(data, dict):
         return data
 
-    title = str(data.get("title") or "").strip()
-    author = str(data.get("author") or data.get("author_cover") or "").strip()
-    year = data.get("year")
-    publisher = str(data.get("publisher") or "").strip()
+    res = dict(data)
+    title = str(res.get("title") or "").strip()
+    author = str(res.get("author") or res.get("author_cover") or "").strip()
+    year = res.get("year")
+    publisher = str(res.get("publisher") or "").strip()
+    isbn = str(res.get("isbn") or "").strip()
 
     # Если в пуле фото нет кадров со слотом иллюстраций — иллюстратора строго обнуляем
     if not has_illustrations:
-        data["illustrator"] = ""
+        res["illustrator"] = ""
 
-    # Проверяем, есть ли признаки сложной книги, требующей сверки:
-    curr_ill = str(data.get("illustrator") or "").strip()
-    curr_orig = str(data.get("original_title") or "").strip()
-    curr_pages = data.get("pages")
+    curr_ill = str(res.get("illustrator") or "").strip()
 
-    # Инициалы у иллюстратора (например: 'Васильева В.', 'В. Васнецов', 'И. Билибин')
-    has_abbreviated_artist = bool(
-        curr_ill and (
-            re.search(r"\b[А-ЯЁ]\.?\s*$", curr_ill) or
-            re.search(r"^[А-ЯЁ]\.?\s+", curr_ill) or
-            len(curr_ill.split()) < 3
-        )
-    )
+    # Поиск книги в базе FantLab
+    fl_match, is_exact_isbn = search_fantlab_edition(title, author, year, publisher, isbn)
+    res["exact_isbn_match"] = is_exact_isbn
 
-    # Пробуем найти книгу в FantLab
-    fl_match = search_fantlab_edition(title, author, year, publisher)
     if fl_match:
         ed_id = fl_match.get("edition_id")
-        data["verified_by"] = f"FantLab #{ed_id}"
-        print(f"✨ [Enrichment] Найдено совпадение в FantLab: ID #{ed_id} «{fl_match.get('name')}» ({fl_match.get('year')} г.)", flush=True)
+        details = fl_match.get("_cached_details") or (get_fantlab_edition_details(ed_id) if ed_id else {}) or {}
 
-        details = get_fantlab_edition_details(ed_id) if ed_id else None
-        if details:
-            # 1. Расшифровка художника-иллюстратора
-            if has_illustrations:
-                desc = details.get("description") or ""
-                art_m = re.search(r'/art(\d+)', desc)
-                if art_m:
-                    art_id = int(art_m.group(1))
-                    full_artist_name = get_fantlab_artist_fullname(art_id)
-                    if full_artist_name:
-                        print(f"🎨 [Enrichment] Иллюстратор расшифрован из базы: '{curr_ill}' -> '{full_artist_name}'", flush=True)
-                        data["illustrator"] = full_artist_name
+        if is_exact_isbn:
+            # 100% точное совпадение по ISBN -> уточняем карточку книги из официальной базы
+            res["verified_by"] = f"FantLab (ISBN {fl_match.get('isbn') or isbn})"
+            print(f"🎯 [Enrichment] 100% совпадение по ISBN: уточняем карточку #{ed_id} «{fl_match.get('name')}»", flush=True)
 
-            # 2. Уточнение точного числа страниц
+            # Название
+            fl_title = (details.get("edition_name") or fl_match.get("name") or "").strip()
+            if fl_title:
+                res["title"] = fl_title
+
+            # Авторы
+            creators = details.get("creators") or {}
+            authors_list = creators.get("authors") if isinstance(creators, dict) else None
+            if authors_list and isinstance(authors_list, list):
+                fl_author = ", ".join(a["name"].strip() for a in authors_list if isinstance(a, dict) and a.get("name"))
+            else:
+                fl_author = _clean_fantlab_text(fl_match.get("autors"))
+            if fl_author:
+                res["author"] = fl_author
+                res["author_cover"] = fl_author
+
+            # Издательство и бренд
+            publishers_list = creators.get("publishers") if isinstance(creators, dict) else None
+            if publishers_list and isinstance(publishers_list, list):
+                fl_pub = ", ".join(p["name"].strip() for p in publishers_list if isinstance(p, dict) and p.get("name"))
+            else:
+                fl_pub = _clean_fantlab_text(fl_match.get("publisher"))
+            if fl_pub:
+                res["publisher"] = fl_pub
+                res["brand"] = fl_pub
+
+            # Год издания
+            fl_year = fl_match.get("year") or details.get("year")
+            if fl_year:
+                try:
+                    res["year"] = int(fl_year)
+                except Exception:
+                    pass
+
+            # Серия
+            series_list = details.get("series") if isinstance(details.get("series"), list) else None
+            if series_list and isinstance(series_list, list):
+                fl_series = ", ".join(s["name"].strip() for s in series_list if isinstance(s, dict) and s.get("name"))
+            else:
+                fl_series = _clean_fantlab_text(fl_match.get("series"))
+            if fl_series:
+                res["series"] = fl_series
+
+            # Страницы
             fl_pages = details.get("pages")
             if fl_pages:
                 try:
                     p_int = int(fl_pages)
                     if p_int > 0:
-                        data["pages"] = p_int
+                        res["pages"] = p_int
                 except Exception:
                     pass
 
-            # 3. Извлечение точных размеров книги в мм из FantLab
-            found_dims = False
-            fl_fmt_mm = details.get("format_mm") or ""
-            if fl_fmt_mm and "x" in fl_fmt_mm.lower():
-                try:
-                    f_parts = re.split(r"[xхXХ]", str(fl_fmt_mm).strip())
-                    if len(f_parts) == 2:
-                        d1 = int(f_parts[0].strip())
-                        d2 = int(f_parts[1].strip())
-                        if d1 > 50 and d2 > 50:
-                            data["width_mm"] = min(d1, d2)
-                            data["length_mm"] = max(d1, d2)
-                            found_dims = True
-                            print(f"📏 [Enrichment] Точные габариты из FantLab (format_mm): {data['width_mm']} × {data['length_mm']} мм", flush=True)
-                except Exception:
-                    pass
+            # Переплет
+            fl_cover = details.get("cover_type")
+            if fl_cover:
+                res["cover_type"] = _map_cover_type(fl_cover)
 
-            # Если format_mm не заполнен, проверяем типографский формат издания (например: '60x84/16')
+            # Формат книги
             fl_fmt_code = str(details.get("format") or "").strip()
             if fl_fmt_code:
-                data["book_format_code"] = fl_fmt_code
-                if not found_dims:
-                    parsed_fmt = parse_book_format_code(fl_fmt_code)
-                    if parsed_fmt:
-                        _, w_sov, l_sov = parsed_fmt
-                        data["width_mm"] = w_sov
-                        data["length_mm"] = l_sov
-                        found_dims = True
-                        print(f"📏 [Enrichment] Габариты определены по формату листа '{fl_fmt_code}': {w_sov} × {l_sov} мм", flush=True)
+                res["book_format_code"] = fl_fmt_code
 
-            # 4. Уточнение серии, если не была распознана
+            # Нормализованный ISBN издания
+            fl_isbns = details.get("isbns") or []
+            fl_isbn_best = fl_match.get("isbn") or (fl_isbns[0] if fl_isbns else isbn)
+            if fl_isbn_best:
+                res["isbn"] = fl_isbn_best
+
+            # Примечания и описание издания
+            notes_and_desc = f"{details.get('notes') or ''} {details.get('description') or ''} {fl_match.get('notes') or ''}".strip()
+
+            # Переводчик
+            fl_trans = _extract_translator(notes_and_desc)
+            if fl_trans:
+                res["translator"] = fl_trans
+
+            # Тип бумаги
+            fl_paper = _detect_paper_type(notes_and_desc)
+            if fl_paper:
+                res["paper_type"] = fl_paper
+
+            # Оригинальное название иностранного произведения
+            desc_text = details.get("description") or ""
+            work_ids = re.findall(r"/work(\d+)", desc_text)
+            orig_found = False
+            for w_id in work_ids:
+                orig_work = get_fantlab_work_original_title(int(w_id))
+                if orig_work:
+                    res["original_title"] = orig_work
+                    orig_found = True
+                    break
+            if not orig_found and not res.get("original_title"):
+                ol_title = get_original_title_openlibrary(res.get("author", author), res.get("title", title))
+                if ol_title:
+                    res["original_title"] = ol_title
+
+        else:
+            # Не точное совпадение по ISBN -> деликатное дополнение только недостающих полей
+            res["verified_by"] = f"FantLab #{ed_id}"
+            print(f"✨ [Enrichment] Частичное совпадение в FantLab: #{ed_id} «{fl_match.get('name')}» ({fl_match.get('year')} г.)", flush=True)
+
+            fl_pages = details.get("pages")
+            if fl_pages and not res.get("pages"):
+                try:
+                    p_int = int(fl_pages)
+                    if p_int > 0:
+                        res["pages"] = p_int
+                except Exception:
+                    pass
+
             fl_series = fl_match.get("series")
-            if fl_series and not data.get("series"):
-                data["series"] = fl_series
+            if fl_series and not res.get("series"):
+                res["series"] = _clean_fantlab_text(fl_series)
 
-    # 5. Обогащение оригинального названия через Open Library (если книга переводная и латиницы нет)
-    if not curr_orig:
-        # Проверяем, похож ли автор на иностранного
-        author_low = author.lower()
-        is_foreign = any(name in author_low for name in [
+            fl_fmt_code = str(details.get("format") or "").strip()
+            if fl_fmt_code and not res.get("book_format_code"):
+                res["book_format_code"] = fl_fmt_code
+
+        # Для обоих случаев: расшифровка иллюстратора (только если иллюстрации присутствуют!)
+        if has_illustrations:
+            desc = details.get("description") or ""
+            art_m = re.search(r'/art(\d+)', desc)
+            if art_m:
+                art_id = int(art_m.group(1))
+                full_artist_name = get_fantlab_artist_fullname(art_id)
+                if full_artist_name:
+                    print(f"🎨 [Enrichment] Иллюстратор расшифрован из базы: '{curr_ill}' -> '{full_artist_name}'", flush=True)
+                    res["illustrator"] = full_artist_name
+        else:
+            res["illustrator"] = ""
+
+        # Габариты из базы FantLab (если format_mm указан)
+        fl_fmt_mm = details.get("format_mm") or ""
+        if fl_fmt_mm and "x" in fl_fmt_mm.lower():
+            try:
+                f_parts = re.split(r"[xхXХ]", str(fl_fmt_mm).strip())
+                if len(f_parts) == 2:
+                    d1 = int(f_parts[0].strip())
+                    d2 = int(f_parts[1].strip())
+                    if d1 > 50 and d2 > 50:
+                        res["width_mm"] = min(d1, d2)
+                        res["length_mm"] = max(d1, d2)
+            except Exception:
+                pass
+
+        if not res.get("width_mm") and res.get("book_format_code"):
+            parsed_fmt = parse_book_format_code(res["book_format_code"])
+            if parsed_fmt:
+                _, w_sov, l_sov = parsed_fmt
+                res["width_mm"] = w_sov
+                res["length_mm"] = l_sov
+
+    # Если оригинальное название еще не заполнено и автор иностранный
+    if not res.get("original_title"):
+        author_check = (res.get("author") or author).lower()
+        is_foreign = any(name in author_check for name in [
             "линдгрен", "рид", "верн", "твен", "лондон", "дюма", "толкин", "толкиен",
             "конан дойл", "кристи", "по", "уэллс", "киплинг", "азимов", "лем",
             "диккенс", "скотт", "вайльд", "уайльд", "свифт", "дефо", "хаггард", "брэдбери"
         ])
         if is_foreign:
-            ol_title = get_original_title_openlibrary(author, title)
+            ol_title = get_original_title_openlibrary(res.get("author", author), res.get("title", title))
             if ol_title:
-                print(f"🌍 [Enrichment] Оригинальное название найдено в Open Library: '{ol_title}'", flush=True)
-                data["original_title"] = ol_title
+                res["original_title"] = ol_title
 
-    # 6. Физический точный расчет габаритов и массы книги
-    try:
-        pages_val = data.get("pages") or 200
-        cover_val = data.get("cover_type") or "Твердый переплет"
-        paper_val = data.get("paper_type") or "Офсетная"
-        fmt_val = data.get("book_format_code") or ""
-        w_in = data.get("width_mm")
-        l_in = data.get("length_mm")
-        cw, cl, ch, cwt = calculate_dimensions_and_weight(
-            pages=pages_val,
-            cover_type=cover_val,
-            paper_type=paper_val,
-            format_code=fmt_val,
-            width_mm=w_in,
-            length_mm=l_in
-        )
-        data["width_mm"] = cw
-        data["length_mm"] = cl
-        data["height_mm"] = ch
-        data["weight_g"] = cwt
-        print(f"⚖️ [Enrichment] Физические замеры рассчитаны: {cw} × {cl} × {ch} мм, вес {cwt} г", flush=True)
-    except Exception as e:
-        print(f"[Enrichment] Ошибка расчета габаритов: {e}", flush=True)
+    # Если запрошен пропуск габаритов/цены/аннотации (ручная сверка карточки)
+    if skip_dimensions:
+        for k in [
+            "width", "length", "height", "weight",
+            "width_mm", "length_mm", "height_mm", "weight_g", "dimensions",
+            "price", "suggested_price", "old_price", "annotation"
+        ]:
+            res.pop(k, None)
+    else:
+        # Расчет физических параметров
+        try:
+            pages_val = res.get("pages") or 200
+            cover_val = res.get("cover_type") or "Твердый переплет"
+            paper_val = res.get("paper_type") or "Офсетная"
+            fmt_val = res.get("book_format_code") or ""
+            w_in = res.get("width_mm")
+            l_in = res.get("length_mm")
+            cw, cl, ch, cwt = calculate_dimensions_and_weight(
+                pages=pages_val,
+                cover_type=cover_val,
+                paper_type=paper_val,
+                format_code=fmt_val,
+                width_mm=w_in,
+                length_mm=l_in
+            )
+            res["width_mm"] = cw
+            res["length_mm"] = cl
+            res["height_mm"] = ch
+            res["weight_g"] = cwt
+        except Exception as e:
+            print(f"[Enrichment] Ошибка расчета габаритов: {e}", flush=True)
 
     # Финальная гарантия по иллюстратору
     if not has_illustrations:
-        data["illustrator"] = ""
+        res["illustrator"] = ""
 
-    return data
+    return res
 

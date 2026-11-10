@@ -871,9 +871,10 @@
     // РУЧНАЯ СВЕРКА С БАЗОЙ (FANTLAB / OPEN LIBRARY)
     // -------------------------------------------------------------
     async function runManualEnrichment() {
-      const title = document.getElementById('title')?.value?.trim();
-      if (!title) {
-        alert('Сначала укажите название книги для поиска в базе!');
+      const title = document.getElementById('title')?.value?.trim() || '';
+      const isbn = document.getElementById('isbn')?.value?.trim() || '';
+      if (!title && !isbn) {
+        alert('Укажите название книги или ISBN для сверки с базой FantLab!');
         return;
       }
       const curBook = getActiveBook();
@@ -881,19 +882,19 @@
 
       const bookPayload = {
         title: title,
+        isbn: isbn,
         author: document.getElementById('author')?.value?.trim() || document.getElementById('author_cover')?.value?.trim() || '',
         year: document.getElementById('year')?.value?.trim() || '',
         publisher: document.getElementById('publisher')?.value?.trim() || '',
         illustrator: document.getElementById('illustrator')?.value?.trim() || '',
         series: document.getElementById('series')?.value?.trim() || '',
         original_title: document.getElementById('original_title')?.value?.trim() || '',
-        pages: document.getElementById('pages')?.value?.trim() || '',
-        annotation: document.getElementById('annotation')?.value?.trim() || ''
+        pages: document.getElementById('pages')?.value?.trim() || ''
       };
 
       const fs = document.getElementById('formStatus');
       if (fs) {
-        fs.textContent = '🔍 Поиск в библиографической базе FantLab...';
+        fs.textContent = isbn ? `🔍 Поиск в базе FantLab по ISBN [${isbn}]...` : '🔍 Поиск в библиографической базе FantLab...';
         fs.className = 'text-center text-xs text-cyan-400 font-semibold';
       }
 
@@ -901,21 +902,49 @@
         const res = await fetch('/api/enrich_book', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ book: bookPayload, has_illustrations: hasIllustrations })
+          body: JSON.stringify({ book: bookPayload, has_illustrations: hasIllustrations, skip_dimensions: true })
         });
         const json = await res.json();
         if (json.success && json.data) {
+          // Строго исключаем цену, аннотацию и размеры из перезаписи при ручной сверке
+          delete json.data.price;
+          delete json.data.suggested_price;
+          delete json.data.old_price;
+          delete json.data.annotation;
+          delete json.data.width;
+          delete json.data.length;
+          delete json.data.height;
+          delete json.data.width_mm;
+          delete json.data.length_mm;
+          delete json.data.height_mm;
+          delete json.data.weight;
+          delete json.data.weight_g;
+          delete json.data.dimensions;
+
           populateFields(json.data, curBook);
-          if (fs) {
+
+          if (json.data.exact_isbn_match) {
+            const matchedIsbn = json.data.isbn || isbn;
+            const successMsg = `✓ 100% совпадение по ISBN [${matchedIsbn}]: поля книги уточнены через FantLab!`;
+            if (fs) {
+              fs.textContent = successMsg;
+              fs.className = 'text-center text-xs text-emerald-400 font-bold';
+            }
+            showToast(`🎯 FantLab: карточка уточнена по ISBN ${matchedIsbn}`);
+          } else {
             const vSource = json.data.verified_by || 'База проверена';
-            fs.textContent = `✓ Данные успешно синхронизированы с базой: ${vSource}!`;
-            fs.className = 'text-center text-xs text-emerald-400 font-semibold';
+            if (fs) {
+              fs.textContent = `✓ Данные сверены с базой (${vSource}), недостающие поля дополнены.`;
+              fs.className = 'text-center text-xs text-cyan-400 font-semibold';
+            }
+            showToast(`✓ Сверка с базой завершена (${vSource})`);
           }
         } else {
           if (fs) {
             fs.textContent = 'ℹ️ Точных совпадений в базе FantLab не найдено.';
             fs.className = 'text-center text-xs text-slate-400 font-medium';
           }
+          showToast('ℹ️ В базе FantLab совпадений не найдено');
         }
       } catch (err) {
         console.error('Ошибка в runManualEnrichment:', err);
@@ -923,6 +952,7 @@
           fs.textContent = '⚠️ Не удалось связаться с базой.';
           fs.className = 'text-center text-xs text-rose-400';
         }
+        showToast('⚠️ Ошибка соединения с FantLab');
       }
     }
 
@@ -935,12 +965,14 @@
       const isCurrentActive = (curBookObj.id === activeBookId);
 
       try {
-        const fill = (id, val) => {
-          const sVal = (val !== undefined && val !== null) ? String(val) : '';
+        const fill = (id, val, allowEmpty = false) => {
+          if (val === undefined || val === null) return;
+          const sVal = String(val);
+          if (!allowEmpty && sVal.trim() === '') return;
           curBookObj.formData[id] = sVal;
           if (isCurrentActive) {
             const el = document.getElementById(id);
-            if (el && sVal.trim() !== '') {
+            if (el) {
               el.value = sVal;
               el.classList.add('field-updated');
               setTimeout(() => el.classList.remove('field-updated'), 1200);
@@ -948,12 +980,12 @@
           }
         };
 
-        fill('title', data.title || '');
-        fill('original_title', data.original_title || '');
-        fill('author_cover', data.author_cover || '');
-        fill('author', data.author || data.author_cover || '');
-        fill('publisher', data.publisher || '');
-        fill('brand', data.brand || 'Нет бренда');
+        if (data.title) fill('title', data.title);
+        if (data.original_title) fill('original_title', data.original_title);
+        if (data.author_cover) fill('author_cover', data.author_cover);
+        if (data.author || data.author_cover) fill('author', data.author || data.author_cover);
+        if (data.publisher) fill('publisher', data.publisher);
+        if (data.brand) fill('brand', data.brand);
         const recognizedYear = data.year ? parseInt(data.year, 10) : 0;
         if (data.year) {
           fill('year', data.year);
@@ -963,27 +995,26 @@
         }
 
         // Правило: если книга до 2011 года и ISBN не был распознан на 100% прямо с фото — строго не указывать
+        // Исключение: при точном подтверждении ISBN из базы (exact_isbn_match) ISBN гарантированно сохраняется
         const isPre2011 = (recognizedYear > 0 && recognizedYear <= 2011) || currentTemplateMode === 'pre2011';
         let cleanIsbn = data.isbn ? String(data.isbn).trim() : '';
         const is100PercentOnPhoto = !!data.isbn_100_percent_on_photo;
 
-        if (isPre2011 && !is100PercentOnPhoto) {
+        if (isPre2011 && !is100PercentOnPhoto && !data.exact_isbn_match) {
           cleanIsbn = '';
         }
-        if (recognizedYear > 0 && recognizedYear < 1987) {
+        if (recognizedYear > 0 && recognizedYear < 1987 && !data.exact_isbn_match) {
           cleanIsbn = ''; // В СССР до 1987 г. ISBN не существовало
         }
 
         if (cleanIsbn) {
           fill('isbn', cleanIsbn);
+        } else if (data.exact_isbn_match && data.isbn) {
+          fill('isbn', data.isbn);
         } else if (currentTemplateMode === 'post2011') {
           fill('isbn', '978-5-0000-0000-0');
-        } else {
-          fill('isbn', '');
-          if (isCurrentActive) {
-            const isbnEl = document.getElementById('isbn');
-            if (isbnEl) isbnEl.value = '';
-          }
+        } else if (data.isbn !== undefined) {
+          fill('isbn', '', true);
         }
         let bcVal = data.barcode ? String(data.barcode).trim() : '';
         if (!bcVal || bcVal === 'генерирует озон' || !/^\d{12,13}$/.test(bcVal)) {
@@ -991,48 +1022,46 @@
           bcVal = generateEan13FromArticle(curArt);
         }
         fill('barcode', bcVal);
-        fill('series', data.series || '');
-        fill('pages', data.pages || '');
+        if (data.series) fill('series', data.series);
+        if (data.pages) fill('pages', data.pages);
 
         // Аннотация:
         // Если новая аннотация передана (от Gemini) — используем её.
         // Если в data аннотации нет (при сверке с FantLab) — сохраняем ТЕКУЩИЙ текст именно этой книги!
-        const existingAnt = (curBookObj.formData.annotation || (isCurrentActive ? document.getElementById('annotation')?.value : '') || '').trim();
-        const incomingAnt = (data && data.annotation !== undefined && data.annotation !== null) ? String(data.annotation).trim() : '';
-        const rawAnt = incomingAnt || existingAnt;
-
-        let cleanAnt = cleanAnnotationText(rawAnt);
-        const hasMantraDefects = Boolean(curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
-
-        let fullAnt = cleanAnt;
-        if (hasMantraDefects && cleanAnt) {
-          fullAnt = ANNOTATION_WARNING + '\n\n' + cleanAnt;
-        }
-
-        curBookObj.formData.annotation = fullAnt;
-
-        if (isCurrentActive) {
-          const antEl = document.getElementById('annotation');
-          if (antEl) {
-            antEl.value = fullAnt;
-            antEl.classList.add('field-updated');
-            setTimeout(() => antEl.classList.remove('field-updated'), 1200);
+        if (data.annotation !== undefined && data.annotation !== null) {
+          const incomingAnt = String(data.annotation).trim();
+          if (incomingAnt) {
+            let cleanAnt = cleanAnnotationText(incomingAnt);
+            const hasMantraDefects = Boolean(curBookObj.slots && curBookObj.slots.mantra_defects && curBookObj.slots.mantra_defects.length > 0);
+            let fullAnt = cleanAnt;
+            if (hasMantraDefects && cleanAnt) {
+              fullAnt = ANNOTATION_WARNING + '\n\n' + cleanAnt;
+            }
+            curBookObj.formData.annotation = fullAnt;
+            if (isCurrentActive) {
+              const antEl = document.getElementById('annotation');
+              if (antEl) {
+                antEl.value = fullAnt;
+                antEl.classList.add('field-updated');
+                setTimeout(() => antEl.classList.remove('field-updated'), 1200);
+              }
+              syncAnnotationWarningWithDefectsSlot();
+            }
           }
-          syncAnnotationWarningWithDefectsSlot();
         }
 
-        fill('translator', data.translator || '');
+        if (data.translator) fill('translator', data.translator);
 
         // Правило: иллюстратора указываем ТОЛЬКО если в слоте иллюстраций есть реальные фото
         const hasIllustrationsPhotos = curBookObj.slots && curBookObj.slots.illustrations && curBookObj.slots.illustrations.length > 0;
         if (!hasIllustrationsPhotos) {
-          fill('illustrator', '');
+          fill('illustrator', '', true);
           if (isCurrentActive) {
             const illEl = document.getElementById('illustrator');
             if (illEl) illEl.value = '';
           }
-        } else {
-          fill('illustrator', data.illustrator || '');
+        } else if (data.illustrator) {
+          fill('illustrator', data.illustrator);
         }
 
         fill('hashtags', '');

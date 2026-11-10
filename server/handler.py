@@ -662,7 +662,8 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 body = json.loads(post_data.decode("utf-8")) if post_data else {}
                 book_in = body.get("book", {})
                 has_illustrations = bool(body.get("has_illustrations", True))
-                enriched = enrich_book_metadata(book_in, has_illustrations=has_illustrations)
+                skip_dimensions = bool(body.get("skip_dimensions", True))
+                enriched = enrich_book_metadata(book_in, has_illustrations=has_illustrations, skip_dimensions=skip_dimensions)
                 self.send_json({"success": True, "data": enriched})
             except Exception as e:
                 self.send_error_json(e)
