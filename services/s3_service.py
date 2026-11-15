@@ -79,6 +79,53 @@ def upload_bytes(key: str, data: bytes, content_type: str = "image/jpeg") -> Opt
         return None
 
 
+def upload_single_slot_photo(
+    article: str,
+    title: str,
+    slot: str,
+    photo_index: int,
+    photo_obj: Any,
+) -> Optional[str]:
+    """
+    Упреждающая выгрузка одного фото слота в Yandex S3 в фоновом режиме (Шаг 3 спецификации).
+    Возвращает постоянный публичный HTTPS URL с параметром версионирования ?v=timestamp.
+    """
+    client, bucket = get_s3_client()
+    if not client or not bucket:
+        return None
+
+    from services.vault_service import resolve_photo_bytes
+    data = resolve_photo_bytes(photo_obj)
+    if not data:
+        return None
+
+    clean_title = re.sub(r"[^\w\s-]", "", title or "book").strip().replace(" ", "_")[:30]
+    folder = f"{article}_{clean_title}".strip("_")
+
+    if slot == "cover_front":
+        filename = "01_cover_front.jpg"
+    elif slot == "mantra_defects":
+        filename = f"02_defect_{photo_index}.jpg"
+    elif slot == "illustrations":
+        filename = f"03_illustration_{photo_index}.jpg"
+    elif slot == "cover_back":
+        suffix = f"_{photo_index}" if photo_index > 1 else ""
+        filename = f"04_cover_back{suffix}.jpg"
+    elif slot == "info_pages":
+        filename = f"archive/info_page_{photo_index}.jpg"
+    else:
+        filename = f"photo_{photo_index}.jpg"
+
+    key = f"{folder}/{filename}"
+    url = upload_bytes(key, data)
+    if url:
+        import time
+        versioned = f"{url}?v={int(time.time())}"
+        print(f"☁️ [S3 Proactive] Фото {filename} выгружено в S3: {versioned}", flush=True)
+        return versioned
+    return None
+
+
 def upload_book_photos(
     article: str,
     title: str,
@@ -86,6 +133,7 @@ def upload_book_photos(
 ) -> Tuple[Optional[str], str]:
     """
     Выгружает фото книги в Yandex S3 бакет under /{article}/...
+    Если фото уже было выгружено упреждающе (имеет валидный s3_url), использует его без повторной заливки.
     Возвращает (main_photo_url, add_photo_urls_str):
     - main_photo_url: ссылка на 01_cover_front.jpg
     - add_photo_urls_str: разделенные пробелом ссылки на доп. фото (задник, иллюстрации, дефекты, card.png)
@@ -109,45 +157,64 @@ def upload_book_photos(
 
     if slots_photos:
         # 1. Обложка (главное фото для Ozon)
-        if slots_photos.get("cover_front"):
-            data = _decode_photo(slots_photos["cover_front"])
-            if data:
-                url = upload_bytes(f"{folder}/01_cover_front.jpg", data)
-                if url:
-                    main_photo_url = url
+        cf = slots_photos.get("cover_front")
+        if cf:
+            existing_s3 = cf.get("s3_url") if isinstance(cf, dict) else None
+            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+                main_photo_url = existing_s3
+            else:
+                data = _decode_photo(cf)
+                if data:
+                    url = upload_bytes(f"{folder}/01_cover_front.jpg", data)
+                    if url:
+                        main_photo_url = url
 
         # 2. Фото дефектов при наличии (первые доп. фото)
         for idx, p in enumerate(slots_photos.get("mantra_defects", []), 1):
-            data = _decode_photo(p)
-            if data:
-                url = upload_bytes(f"{folder}/02_defect_{idx}.jpg", data)
-                if url:
-                    add_photo_urls.append(url)
+            existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
+            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+                add_photo_urls.append(existing_s3)
+            else:
+                data = _decode_photo(p)
+                if data:
+                    url = upload_bytes(f"{folder}/02_defect_{idx}.jpg", data)
+                    if url:
+                        add_photo_urls.append(url)
 
-        # 3. Фото задников книги (для комплектов — задник каждой книги)
+        # 3. Фото иллюстраций (если есть, идут перед задником)
+        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
+            existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
+            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+                add_photo_urls.append(existing_s3)
+            else:
+                data = _decode_photo(p)
+                if data:
+                    url = upload_bytes(f"{folder}/03_illustration_{idx}.jpg", data)
+                    if url:
+                        add_photo_urls.append(url)
+
+        # 4. Фото задников книги (в конце перед карточкой; для комплектов — задник каждой книги)
         cb_raw = slots_photos.get("cover_back")
         cb_list = cb_raw if isinstance(cb_raw, list) else ([cb_raw] if cb_raw else [])
         for idx, p in enumerate(cb_list, 1):
-            data = _decode_photo(p)
-            if data:
-                suffix = f"_{idx}" if len(cb_list) > 1 else ""
-                url = upload_bytes(f"{folder}/03_cover_back{suffix}.jpg", data)
-                if url:
-                    add_photo_urls.append(url)
-
-        # 4. Фото иллюстраций
-        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
-            data = _decode_photo(p)
-            if data:
-                url = upload_bytes(f"{folder}/04_illustration_{idx}.jpg", data)
-                if url:
-                    add_photo_urls.append(url)
+            existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
+            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+                add_photo_urls.append(existing_s3)
+            else:
+                data = _decode_photo(p)
+                if data:
+                    suffix = f"_{idx}" if len(cb_list) > 1 else ""
+                    url = upload_bytes(f"{folder}/04_cover_back{suffix}.jpg", data)
+                    if url:
+                        add_photo_urls.append(url)
 
         # Инфо-страницы (титул, оборот) — архивируем в облаке в подпапку archive/, НЕ передаем в Ozon ссылки!
         for idx, p in enumerate(slots_photos.get("info_pages", []), 1):
-            data = _decode_photo(p)
-            if data:
-                upload_bytes(f"{folder}/archive/info_page_{idx}.jpg", data)
+            existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
+            if not (existing_s3 and "storage.yandexcloud.net" in existing_s3):
+                data = _decode_photo(p)
+                if data:
+                    upload_bytes(f"{folder}/archive/info_page_{idx}.jpg", data)
 
     # 5. Шаблонное фото с предупреждением (card.png) для каждой книги — всегда в самом конце
     card_path = get_card_image_path()

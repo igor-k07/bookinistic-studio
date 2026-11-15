@@ -103,17 +103,17 @@ def save_book_vault_photos(
             write_photo(f"02_defect_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
             cur_ozon_idx += 1
 
-        # 3. Фото задников книги (для комплектов — задники всех книг)
+        # 3. Фото иллюстраций (если есть, идут перед задником)
+        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
+            write_photo(f"03_illustration_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
+            cur_ozon_idx += 1
+
+        # 4. Фото задников книги (в конце перед карточкой; для комплектов — задники всех книг)
         cb_raw = slots_photos.get("cover_back")
         cb_list = cb_raw if isinstance(cb_raw, list) else ([cb_raw] if cb_raw else [])
         for idx, p in enumerate(cb_list, 1):
-            fname = f"03_cover_back_{idx}.jpg" if len(cb_list) > 1 else "03_cover_back.jpg"
+            fname = f"04_cover_back_{idx}.jpg" if len(cb_list) > 1 else "04_cover_back.jpg"
             write_photo(fname, p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
-            cur_ozon_idx += 1
-
-        # 4. Фото иллюстраций
-        for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
-            write_photo(f"04_illustration_{idx}.jpg", p, f"{article}_{cur_ozon_idx}.jpg", is_ozon_photo=True)
             cur_ozon_idx += 1
 
         # Инфо-страницы (титул, оборот) — сохраняем ТОЛЬКО локально для архива и ИИ, НЕ передаем в Ozon!

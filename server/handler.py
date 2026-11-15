@@ -1,70 +1,29 @@
 """
 handler.py: HTTP обработчик запросов BatchHandler для Bookinistic Studio.
+Архитектура: Тонкий адаптер HTTP-транспорта, делегирующий маршрутизацию в Router,
+а бизнес-логику — в Use Cases и контроллеры.
 """
 
-import base64
 import http.server
 import json
 import os
-import re
 import socket
-import subprocess
 import time
+from typing import Any
 import urllib.parse
-from typing import Any, Dict
 
 from config import (
     BASE_DIR,
-    DOCS_DIR,
-    DRAFT_FILE,
     INBOX_DIR,
-    PORT,
-    READY_TABLES_DIR,
-    READY_TABLES_PRE2011_DIR,
-    READY_TABLES_POST2011_DIR,
     SESSION_PHOTOS_DIR,
     TEMPLATES_DIR,
     VAULT_DIR,
     get_card_image_path,
-    get_saved_api_key,
-    get_target_excel_file,
-    save_api_key,
-    get_ozon_config,
-    save_ozon_config,
 )
-from server.state import add_mobile_chunk, check_mobile_events, record_mobile_upload
-from services.ai_service import call_gemini_vision, classify_and_group_book_photos
-from services.excel_service import (
-    append_book_to_excel,
-    clear_excel_table,
-    delete_book_from_excel,
-    get_current_books,
-)
-from services.db_service import (
-    init_db,
-    save_book_to_db,
-    get_book_from_db,
-    delete_book_from_db,
-    get_all_books_from_db,
-    get_next_article_number,
-    backup_db_to_s3,
-    restore_db_from_s3,
-    get_db_sync_status,
-    get_catalog_references,
-    reconcile_with_references,
-)
-import services.ozon_service as ozon_service
-import services.tunnel_service as tunnel_service
-from services.vault_service import (
-    clear_session_draft_storage,
-    create_photos_zip,
-    resolve_photo_bytes,
-    save_book_vault_photos,
-    save_session_draft_file,
-)
-from services.s3_service import upload_book_photos as s3_upload_book_photos
-from services.image_service import process_image_ai
-from services.enrichment_service import enrich_book_metadata
+from server.routes import build_router
+
+# Инициализируем глобальный роутер приложения один раз
+ROUTER = build_router()
 
 
 class BatchHandler(http.server.BaseHTTPRequestHandler):
@@ -78,7 +37,7 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             pass
 
     def log_message(self, format, *args):
-        # Отключаем дефолтный спам логов базового сервера
+        # Отключаем стандартный спам логов в терминал
         pass
 
     def end_headers(self):
@@ -182,305 +141,18 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
     # -------------------------------------------------------------
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
 
-        if parsed.path == "/":
+        # 1. HTML-страницы
+        if path == "/":
             self.serve_template("desktop.html")
-
-        elif parsed.path == "/mobile":
+            return
+        if path == "/mobile":
             self.serve_template("mobile.html")
+            return
 
-        elif parsed.path == "/api/get_tunnel_url":
-            url = tunnel_service.get_tunnel_url()
-            local_url = tunnel_service.get_local_url(PORT)
-            local_ip = tunnel_service.get_local_ip()
-            self.send_json({
-                "url": url or "",
-                "local_url": local_url,
-                "local_ip": local_ip,
-                "has_vpn": tunnel_service.tunnel_manager.is_vpn_active()
-            })
-
-        elif parsed.path == "/api/restart_tunnel":
-            new_url = tunnel_service.restart_tunnel(PORT)
-            self.send_json({
-                "success": True,
-                "url": new_url or "",
-                "local_url": tunnel_service.get_local_url(PORT),
-                "local_ip": tunnel_service.get_local_ip(),
-                "has_vpn": tunnel_service.tunnel_manager.is_vpn_active()
-            })
-
-        elif parsed.path == "/api/check_mobile_event":
-            query = urllib.parse.parse_qs(parsed.query)
-            last_client_id = int(query.get("last_id", ["0"])[0])
-            self.send_json(check_mobile_events(last_client_id))
-
-        elif parsed.path == "/api/references":
-            try:
-                refs = get_catalog_references()
-                self.send_json({"success": True, "references": refs})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/load_test_batch":
-            self.send_json({"success": True, "photos": []})
-
-        elif parsed.path == "/api/get_books":
-            qs = urllib.parse.parse_qs(parsed.query)
-            mode = qs.get("mode", ["pre2011"])[0]
-            pre_books = get_current_books("pre2011")
-            post_books = get_current_books("post2011")
-            current_list = pre_books if mode == "pre2011" else post_books
-            self.send_json({
-                "success": True,
-                "mode": mode,
-                "books": current_list,
-                "pre2011_count": len(pre_books),
-                "post2011_count": len(post_books),
-                "total": len(pre_books) + len(post_books)
-            })
-
-        elif parsed.path == "/api/get_next_article":
-            try:
-                next_art = get_next_article_number()
-                self.send_json({"success": True, "article": next_art})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/get_db_catalog":
-            try:
-                qs = urllib.parse.parse_qs(parsed.query)
-                mode = qs.get("mode", [None])[0]
-                status = qs.get("status", [None])[0]
-                search = qs.get("search", [None])[0]
-                db_books = get_all_books_from_db(mode=mode, status=status, search=search)
-                self.send_json({
-                    "success": True,
-                    "count": len(db_books),
-                    "books": db_books
-                })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/db_sync_status":
-            try:
-                status_info = get_db_sync_status()
-                self.send_json({"success": True, "sync": status_info})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ozon/status":
-            try:
-                cfg = get_ozon_config()
-                if not cfg or not cfg.get("client_id") or not cfg.get("api_key"):
-                    self.send_json({"configured": False, "message": "Ключи Ozon Seller API не настроены", "next_article": get_next_article_number()})
-                else:
-                    status_res = ozon_service.check_ozon_connection()
-                    cid = str(cfg.get("client_id", ""))
-                    masked_cid = (cid[:4] + "***") if len(cid) > 4 else "***"
-                    self.send_json({
-                        "configured": True,
-                        "client_id": masked_cid,
-                        "next_article": get_next_article_number(),
-                        **status_res
-                    })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ozon/import_status":
-            try:
-                st = ozon_service.get_import_status()
-                self.send_json({"success": True, "status": st})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/download_excel":
-            qs = urllib.parse.parse_qs(parsed.query)
-            mode = qs.get("mode", ["pre2011"])[0]
-            target_file = get_target_excel_file(mode)
-            filename = os.path.basename(target_file)
-            if os.path.exists(target_file):
-                ascii_name = f"Pechatnaya_kniga_{mode}.xlsx"
-                encoded_name = urllib.parse.quote(filename)
-                self.send_response(200)
-                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                self.send_header("Content-Disposition", f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}")
-                self.end_headers()
-                with open(target_file, "rb") as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-        elif parsed.path == "/api/open_ready_folder":
-            qs = urllib.parse.parse_qs(parsed.query)
-            mode = qs.get("mode", [None])[0]
-            if mode == "pre2011":
-                folder_to_open = READY_TABLES_PRE2011_DIR
-            elif mode in ("post2011", "post"):
-                folder_to_open = READY_TABLES_POST2011_DIR
-            else:
-                folder_to_open = READY_TABLES_DIR
-            try:
-                subprocess.Popen(["open", folder_to_open])
-                self.send_json({
-                    "success": True,
-                    "path": folder_to_open,
-                    "rel_path": os.path.relpath(folder_to_open, BASE_DIR)
-                })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/open_guide":
-            qs = urllib.parse.parse_qs(parsed.query)
-            doc_name = qs.get("name", ["OZON_FIELDS_GUIDE.md"])[0]
-            # Защита от выхода за пределы директории
-            clean_name = os.path.basename(doc_name)
-            candidates = [
-                os.path.join(DOCS_DIR, clean_name),
-                os.path.join(BASE_DIR, clean_name),
-            ]
-            target_doc = None
-            for p in candidates:
-                if os.path.exists(p):
-                    target_doc = p
-                    break
-            if not target_doc:
-                target_doc = os.path.join(DOCS_DIR, "OZON_FIELDS_GUIDE.md")
-
-            try:
-                subprocess.Popen(["open", target_doc])
-                self.send_json({
-                    "success": True,
-                    "file": target_doc,
-                    "filename": os.path.basename(target_doc),
-                    "rel_path": os.path.relpath(target_doc, BASE_DIR)
-                })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/open_docs_folder":
-            try:
-                subprocess.Popen(["open", DOCS_DIR])
-                self.send_json({
-                    "success": True,
-                    "path": DOCS_DIR,
-                    "rel_path": os.path.relpath(DOCS_DIR, BASE_DIR)
-                })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/get_memos":
-            memo_defs = [
-                {
-                    "id": "OZON_FIELDS_GUIDE.md",
-                    "title": "Поля Ozon и правила заполнения",
-                    "category": "Ozon & Каталог",
-                    "icon": "📋",
-                    "badge": "Главная",
-                    "badge_color": "bg-amber-500/20 text-amber-300 border-amber-500/40",
-                    "desc": "Справочник всех 81/86 колонок Ozon, обязательная ручная цена, 12 типов бумаги, авторы, ГОСТ-габариты и вес.",
-                },
-                {
-                    "id": "OZON_DICTIONARIES.md",
-                    "title": "Официальные словари Ozon",
-                    "category": "Ozon & Каталог",
-                    "icon": "📖",
-                    "badge": "Словари",
-                    "badge_color": "bg-blue-500/20 text-blue-300 border-blue-500/40",
-                    "desc": "16 типов обложек, 12 типов бумаги, 56 жанров Ozon, 5 градаций сохранности и возрастные маркировки.",
-                },
-                {
-                    "id": "OZON_BRANDS.md",
-                    "title": "Справочник 397 брендов Ozon",
-                    "category": "Ozon & Каталог",
-                    "icon": "🏷️",
-                    "badge": "397 брендов",
-                    "badge_color": "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-                    "desc": "Реестр подтвержденных брендов Ozon из catalog.db, рейтинг ТОП-30 и правила подстановки «Нет бренда».",
-                },
-                {
-                    "id": "KEYS_GUIDE.md",
-                    "title": "Справочник по ключам и API",
-                    "category": "Безопасность & Доступы",
-                    "icon": "🔑",
-                    "badge": "Ключи",
-                    "badge_color": "bg-purple-500/20 text-purple-300 border-purple-500/40",
-                    "desc": "Карта ключей: Gemini AI, Ozon Seller API, Yandex S3, Cloudflare Tunnel, .env и приоритеты загрузки.",
-                },
-                {
-                    "id": "PHOTO_PIPELINE.md",
-                    "title": "Регламент фотосъемки и ракурсов",
-                    "category": "Склад & Съемка",
-                    "icon": "📸",
-                    "badge": "Фото",
-                    "badge_color": "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
-                    "desc": "Ракурсы съемки (обложка, титул, мантра, дефекты), постоянная карточка card.png, обрезка и S3 CDN.",
-                },
-                {
-                    "id": "BARCODE_CHEAT_SHEET.md",
-                    "title": "Штрихкоды и термоэтикетки",
-                    "category": "Склад & Съемка",
-                    "icon": "🏷️",
-                    "badge": "EAN-13",
-                    "badge_color": "bg-rose-500/20 text-rose-300 border-rose-500/40",
-                    "desc": "Генерация штрихкодов EAN-13 из артикула, работа с ISBN и печать этикеток 58х40 мм для Ozon.",
-                },
-                {
-                    "id": "TECH_STACK.md",
-                    "title": "Архитектура и технический стек",
-                    "category": "Разработка",
-                    "icon": "💻",
-                    "badge": "Стек",
-                    "badge_color": "bg-slate-500/20 text-slate-300 border-slate-500/40",
-                    "desc": "Техническое описание, прямой парсер OpenXML Excel, схема SQLite catalog.db и REST API.",
-                },
-            ]
-            result = []
-            for m in memo_defs:
-                fpath = os.path.join(DOCS_DIR, m["id"])
-                exists = os.path.exists(fpath)
-                size_kb = round(os.path.getsize(fpath) / 1024, 1) if exists else 0
-                item = dict(m)
-                item["exists"] = exists
-                item["size_kb"] = size_kb
-                result.append(item)
-            self.send_json({"success": True, "memos": result, "docs_dir": DOCS_DIR})
-
-        elif parsed.path == "/api/reveal_file":
-            qs = urllib.parse.parse_qs(parsed.query)
-            mode = qs.get("mode", ["pre2011"])[0]
-            target_file = get_target_excel_file(mode)
-            folder = os.path.dirname(target_file)
-            try:
-                subprocess.Popen(["open", "-R", target_file])
-                self.send_json({
-                    "success": True,
-                    "file": target_file,
-                    "filename": os.path.basename(target_file),
-                    "folder": folder,
-                    "rel_folder": os.path.relpath(folder, BASE_DIR)
-                })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/get_key":
-            self.send_json({"key": get_saved_api_key()})
-
-        elif parsed.path == "/api/get_session_draft":
-            if os.path.exists(DRAFT_FILE) and os.path.getsize(DRAFT_FILE) > 5:
-                try:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.end_headers()
-                    with open(DRAFT_FILE, "rb") as f:
-                        self.wfile.write(f.read())
-                    return
-                except Exception:
-                    pass
-            self.send_json({"has_draft": False})
-
-        elif parsed.path in ("/card.png", "/templates/card.png", "/storage/card.png"):
+        # 2. Постоянная карточка магазина
+        if path in ("/card.png", "/templates/card.png", "/storage/card.png"):
             card_path = get_card_image_path()
             if card_path and os.path.exists(card_path):
                 self.send_response(200)
@@ -492,9 +164,11 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_response(404)
                 self.end_headers()
+            return
 
-        elif parsed.path.startswith("/session_photos/"):
-            rel_path = urllib.parse.unquote(parsed.path[len("/session_photos/"):])
+        # 3. Фото сессии
+        if path.startswith("/session_photos/"):
+            rel_path = urllib.parse.unquote(path[len("/session_photos/"):])
             safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
             if safe_rel_path.startswith(".."):
                 self.send_response(403)
@@ -502,9 +176,11 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 return
             full_file_path = os.path.join(SESSION_PHOTOS_DIR, safe_rel_path)
             self._serve_file_stream(full_file_path, tag="SESSION_PHOTO", rel_label=safe_rel_path)
+            return
 
-        elif parsed.path.startswith("/vault/"):
-            rel_path = urllib.parse.unquote(parsed.path[len("/vault/"):])
+        # 4. Фото из архива books_vault/
+        if path.startswith("/vault/"):
+            rel_path = urllib.parse.unquote(path[len("/vault/"):])
             safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
             if safe_rel_path.startswith(".."):
                 self.send_response(403)
@@ -512,8 +188,6 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             full_file_path = os.path.join(VAULT_DIR, safe_rel_path)
-
-            # Если путь не найден напрямую, ищем по артикулу: /vault/{article}/{filename}
             if not (os.path.exists(full_file_path) and os.path.isfile(full_file_path)) and "/" in safe_rel_path:
                 parts = safe_rel_path.split("/", 1)
                 art_prefix = parts[0]
@@ -527,9 +201,11 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                                 break
 
             self._serve_file_stream(full_file_path, tag="VAULT", rel_label=safe_rel_path)
+            return
 
-        elif parsed.path.startswith("/inbox/"):
-            rel_path = urllib.parse.unquote(parsed.path[len("/inbox/"):])
+        # 5. Inbox (фото с мобильного)
+        if path.startswith("/inbox/"):
+            rel_path = urllib.parse.unquote(path[len("/inbox/"):])
             safe_rel_path = os.path.normpath(rel_path).lstrip("/\\")
             if safe_rel_path.startswith(".."):
                 self.send_response(403)
@@ -537,9 +213,11 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 return
             full_file_path = os.path.join(INBOX_DIR, safe_rel_path)
             self._serve_file_stream(full_file_path, tag="INBOX", rel_label=safe_rel_path)
+            return
 
-        elif (parsed.path.startswith("/static/") or parsed.path.endswith((".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".ico", ".webp"))) and not parsed.path.startswith(("/session_photos/", "/vault/", "/inbox/")):
-            clean_rel = urllib.parse.unquote(parsed.path.lstrip("/"))
+        # 6. Статика (JS, CSS, шрифты)
+        if (path.startswith("/static/") or path.endswith((".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".ico", ".webp"))) and not path.startswith(("/session_photos/", "/vault/", "/inbox/")):
+            clean_rel = urllib.parse.unquote(path.lstrip("/"))
             candidates = [
                 os.path.join(TEMPLATES_DIR, clean_rel),
                 os.path.join(TEMPLATES_DIR, os.path.basename(clean_rel)),
@@ -582,314 +260,21 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-        elif parsed.path == "/api/download_photos_zip":
-            qs = urllib.parse.parse_qs(parsed.query)
-            article_req = qs.get("article", [""])[0].strip()
-            zip_bytes, zip_filename = create_photos_zip(article_req)
+        # 7. Диспетчеризация через Router
+        if ROUTER.dispatch(self, "GET"):
+            return
 
-            ascii_name = re.sub(r"[^\w.-]", "_", zip_filename)
-            encoded_name = urllib.parse.quote(zip_filename)
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/zip")
-            self.send_header("Content-Disposition", f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded_name}')
-            self.send_header("Content-Length", str(len(zip_bytes)))
-            self.end_headers()
-            self.wfile.write(zip_bytes)
-
-        else:
-            self.send_response(404)
-            self.end_headers()
+        # 404 если маршрут не найден
+        self.send_response(404)
+        self.end_headers()
 
     # -------------------------------------------------------------
     # POST ЗАПРОСЫ
     # -------------------------------------------------------------
     def do_POST(self):
-        parsed = urllib.parse.urlparse(self.path)
-        content_length = int(self.headers.get("Content-Length", 0))
-        post_data = self.rfile.read(content_length) if content_length > 0 else b"{}"
+        # Вся обработка POST делегируется декларативному Router
+        if ROUTER.dispatch(self, "POST"):
+            return
 
-        if parsed.path == "/api/mobile_upload":
-            try:
-                body = json.loads(post_data.decode("utf-8"))
-                images = body.get("images", [])
-                session_id = str(body.get("session_id", ""))
-                chunk_index = int(body.get("chunk_index", 0))
-                total_chunks = int(body.get("total_chunks", 1))
-                is_last_chunk = bool(body.get("is_last_chunk", total_chunks <= 1))
-
-                if not images and not is_last_chunk:
-                    raise Exception("Нет изображений в запросе")
-
-                session_ts = int(time.time())
-                for idx, img in enumerate(images):
-                    fname = f"mobile_batch_{session_ts}_{chunk_index}_{idx+1}.jpg"
-                    p = os.path.join(INBOX_DIR, fname)
-                    with open(p, "wb") as f:
-                        f.write(base64.b64decode(img.get("data", "")))
-
-                result = add_mobile_chunk(session_id, chunk_index, total_chunks, is_last_chunk, images)
-                self.send_json(result)
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ai_recognize_book":
-            try:
-                body = json.loads(post_data.decode("utf-8"))
-                api_key = (body.get("api_key") or "").strip() or get_saved_api_key()
-                if not api_key:
-                    raise Exception("API ключ Gemini не введен! Нажмите «Ввести API ключ» в правом верхнем углу интерфейса.")
-                images = body.get("images", [])
-                if not images:
-                    raise Exception("Нет изображений для распознавания! Добавьте фото в слот или выберите фото в ленте.")
-
-                print(f"[/api/ai_recognize_book] Запрос распознавания: {len(images)} фото...", flush=True)
-                result = call_gemini_vision(images, api_key)
-
-                # Проверяем наличие слота иллюстраций в запросе
-                has_illustrations = any("иллюстрац" in (img.get("role_name") or "").lower() for img in images) or bool(body.get("has_illustrations"))
-
-                # Вторичная сверка и обогащение в сложных случаях (FantLab / Open Library)
-                try:
-                    result = enrich_book_metadata(result, has_illustrations=has_illustrations)
-                except Exception as enrich_e:
-                    print(f"[/api/ai_recognize_book] Обогащение пропущено: {enrich_e}", flush=True)
-
-                self.send_json({"success": True, "data": result})
-            except Exception as e:
-                import traceback
-                print(f"[/api/ai_recognize_book] ОШИБКА: {e}", flush=True)
-                traceback.print_exc()
-                self.send_json({"success": False, "error": str(e)})
-
-        elif parsed.path == "/api/enrich_book":
-            try:
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-                book_in = body.get("book", {})
-                has_illustrations = bool(body.get("has_illustrations", True))
-                skip_dimensions = bool(body.get("skip_dimensions", True))
-                enriched = enrich_book_metadata(book_in, has_illustrations=has_illustrations, skip_dimensions=skip_dimensions)
-                self.send_json({"success": True, "data": enriched})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ai_classify_batch":
-            try:
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-                api_key = (body.get("api_key") or "").strip() or get_saved_api_key()
-                if not api_key:
-                    raise Exception("API ключ Gemini не введен!")
-                photos = body.get("photos", [])
-                if not photos:
-                    raise Exception("Нет фотографий для классификации")
-                items = classify_and_group_book_photos(photos, api_key)
-                self.send_json({"success": True, "items": items})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/save_book":
-            try:
-                book_data = json.loads(post_data.decode("utf-8"))
-                # Нечувствительная к регистру сверка и канонизация по базе catalog.db
-                try:
-                    book_data = reconcile_with_references(book_data)
-                except Exception as rec_err:
-                    print(f"⚠️ Ошибка канонизации при сохранении: {rec_err}")
-
-                mode = book_data.get("template_mode")
-                if not mode:
-                    year_val = str(book_data.get("year", "")).strip()
-                    try:
-                        y_int = int(year_val)
-                        mode = "pre2011" if y_int <= 2011 else "post2011"
-                    except Exception:
-                        mode = "pre2011"
-
-                article = str(book_data.get("article") or "").strip()
-                if not article:
-                    article = get_next_article_number()
-                    book_data["article"] = article
-
-                title = book_data.get("title", "")
-
-                # 1. Сохраняем обработанные фото книги в архив storage/books_vault/
-                slots_photos = book_data.get("slots_photos")
-                folder_name, saved_files = save_book_vault_photos(
-                    article,
-                    title,
-                    slots_photos
-                )
-
-                # 2. Выгружаем фото в Yandex S3 (приоритетный источник постоянных ссылок Ozon)
-                s3_main_url, s3_add_urls = None, ""
-                try:
-                    s3_main_url, s3_add_urls = s3_upload_book_photos(article, title, slots_photos)
-                except Exception as s3_err:
-                    print(f"⚠️ Ошибка S3 выгрузки (переключаемся на туннель): {s3_err}")
-
-                tunnel_url = ""
-                if s3_main_url:
-                    book_data["main_photo_url"] = s3_main_url
-                    book_data["add_photo_urls"] = s3_add_urls
-                else:
-                    # Fallback: Cloudflare Quick Tunnel для публичных ссылок Ozon
-                    tunnel_url = tunnel_service.get_tunnel_url()
-                    if not tunnel_url:
-                        tunnel_url = tunnel_service.start_tunnel(PORT)
-
-                    if tunnel_url and article and saved_files:
-                        main_photo = "01_cover_front.jpg" if "01_cover_front.jpg" in saved_files else saved_files[0]
-                        book_data["main_photo_url"] = f"{tunnel_url}/vault/{article}/{main_photo}"
-
-                        add_files = [
-                            f for f in saved_files
-                            if f != main_photo
-                            and not f.startswith(f"{article}")
-                            and not f.startswith("info_page")
-                        ]
-                        card_file = "99_card.jpg" if "99_card.jpg" in add_files else None
-                        add_files_no_card = [f for f in add_files if f != "99_card.jpg"]
-                        if card_file:
-                            add_files = add_files_no_card[:13] + [card_file]
-                        else:
-                            add_files = add_files_no_card[:14]
-
-                        if add_files:
-                            book_data["add_photo_urls"] = " ".join([f"{tunnel_url}/vault/{article}/{f}" for f in add_files])
-
-                # 3. Сохраняем книгу в постоянную базу данных SQLite (catalog.db)
-                book_data["vault_folder"] = folder_name
-                try:
-                    save_book_to_db(book_data)
-                except Exception as db_err:
-                    print(f"⚠️ Ошибка сохранения в SQLite DB: {db_err}")
-
-                # 4. Записываем книгу в Excel
-                result = append_book_to_excel(book_data)
-                result["saved_photos"] = saved_files
-                result["vault_folder"] = folder_name
-                result["tunnel_url"] = tunnel_url or ""
-                result["main_photo_url"] = book_data.get("main_photo_url", "")
-                result["add_photo_urls"] = book_data.get("add_photo_urls", "")
-                result["s3_enabled"] = bool(s3_main_url)
-
-                self.send_json(result)
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ai_process_photo":
-            try:
-                body = json.loads(post_data.decode("utf-8"))
-                img_val = body.get("image", "")
-                if not img_val:
-                    raise Exception("Нет изображения для обработки")
-                img_bytes = resolve_photo_bytes(img_val)
-                if not img_bytes:
-                    raise Exception("Не удалось прочитать байты изображения")
-                result = process_image_ai(img_bytes)
-                if isinstance(result, dict):
-                    full_img_bytes = result.get("image_bytes") or result.get("full_bytes")
-                    out_b64 = "data:image/jpeg;base64," + base64.b64encode(full_img_bytes).decode("ascii")
-                    crop_rel = result.get("crop_relative")
-                    rot = result.get("rotation", 0)
-                else:
-                    out_b64 = "data:image/jpeg;base64," + base64.b64encode(result).decode("ascii")
-                    crop_rel = None
-                    rot = 0
-                self.send_json({
-                    "success": True,
-                    "image": out_b64,
-                    "crop_relative": crop_rel,
-                    "rotation": rot
-                })
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/save_key":
-            try:
-                body = json.loads(post_data.decode("utf-8"))
-                save_api_key(body.get("key", ""))
-                self.send_json({"success": True})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/save_session_draft":
-            try:
-                draft_data = json.loads(post_data.decode("utf-8"))
-                updated_urls = save_session_draft_file(draft_data)
-                self.send_json({"success": True, "updated_urls": updated_urls})
-            except Exception as e:
-                self.send_json({"success": False, "error": str(e)})
-
-        elif parsed.path == "/api/clear_session_draft":
-            try:
-                clear_session_draft_storage()
-                self.send_json({"success": True})
-            except Exception as e:
-                self.send_json({"success": False, "error": str(e)})
-
-        elif parsed.path == "/api/clear_excel":
-            try:
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-                mode = body.get("mode", "pre2011")
-                res = clear_excel_table(mode)
-                self.send_json(res)
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/delete_book_row":
-            try:
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-                article = body.get("article", "")
-                mode = body.get("mode", "pre2011")
-                if not article:
-                    raise Exception("Не указан артикул книги для удаления")
-                try:
-                    delete_book_from_db(article)
-                except Exception as db_e:
-                    print(f"⚠️ Ошибка удаления из БД: {db_e}")
-                res = delete_book_from_excel(article, mode)
-                self.send_json(res)
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/backup_db":
-            try:
-                res = backup_db_to_s3()
-                self.send_json(res)
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/restore_db":
-            try:
-                res = restore_db_from_s3()
-                self.send_json(res)
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ozon/save_keys":
-            try:
-                body = json.loads(post_data.decode("utf-8")) if post_data else {}
-                client_id = body.get("client_id", "").strip()
-                api_key = body.get("api_key", "").strip()
-                if not client_id or not api_key:
-                    raise Exception("Необходимо указать Client-Id и Api-Key")
-                save_ozon_config(client_id, api_key)
-                conn_test = ozon_service.check_ozon_connection()
-                self.send_json({"success": True, "connection": conn_test})
-            except Exception as e:
-                self.send_error_json(e)
-
-        elif parsed.path == "/api/ozon/start_import":
-            try:
-                res = ozon_service.start_import_catalog_async()
-                self.send_json(res)
-            except Exception as e:
-                self.send_error_json(e)
-
-        else:
-            self.send_response(404)
-            self.end_headers()
-
+        self.send_response(404)
+        self.end_headers()

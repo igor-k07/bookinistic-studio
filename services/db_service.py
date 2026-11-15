@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from config import DB_PATH, READY_TABLES_DIR
 from core.constants import normalize_genre
+from core.domain.rules import calculate_book_condition, format_annotation_with_warning
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -55,26 +56,13 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     (фото сохраняются в хранилище books_vault и Yandex S3, в БД хранятся ссылки и имена файлов).
     """
     clean = dict(book)
-    # Правило: плашка-предупреждение вставляется ТОЛЬКО если есть фото мантры / дефектов (слот 5)
-    warning_prefix = "ВНИМАНИЕ! КНИГА НЕ НОВАЯ. Имеются определённые нюансы (повреждения) см. дополнительные фото."
     slots_photos_raw = clean.get("slots_photos") or {}
     mantra_photos = slots_photos_raw.get("mantra_defects") or []
     has_mantra_defects = bool(mantra_photos) or bool(clean.get("has_mantra_defects"))
-    ant = str(clean.get("annotation") or "").strip()
-    if warning_prefix in ant:
-        ant = ant.replace(warning_prefix, "").strip()
-    if has_mantra_defects and ant:
-        ant = (warning_prefix + "\n\n" + ant).strip()
-    clean["annotation"] = ant
+    clean["annotation"] = format_annotation_with_warning(clean.get("annotation") or "", has_mantra_defects)
 
-    # Санитизация сохранности книги по регламенту Ozon
-    cond_raw = str(clean.get("condition") or "").strip().lower()
-    if not has_mantra_defects:
-        clean["condition"] = "Очень хорошая"
-    elif "удовл" in cond_raw:
-        clean["condition"] = "Удовлетворительная"
-    else:
-        clean["condition"] = "Хорошая"
+    # Санитизация сохранности книги по регламенту Ozon через доменное правило
+    clean["condition"] = calculate_book_condition(has_mantra_defects, clean.get("condition")).value
 
     # Санитизация бренда: сверка с базой брендов Ozon по названию издательства
     brand_raw = str(clean.get("brand") or "").strip()
@@ -101,9 +89,19 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
         compact_slots = {}
         for slot, item in clean["slots_photos"].items():
             if isinstance(item, dict):
-                compact_slots[slot] = {"name": item.get("name", "photo.jpg")}
+                slot_dict = {"name": item.get("name", "photo.jpg")}
+                if item.get("s3_url"):
+                    slot_dict["s3_url"] = item["s3_url"]
+                compact_slots[slot] = slot_dict
             elif isinstance(item, list):
-                compact_slots[slot] = [{"name": p.get("name", "photo.jpg")} for p in item if isinstance(p, dict)]
+                slot_list = []
+                for p in item:
+                    if isinstance(p, dict):
+                        p_dict = {"name": p.get("name", "photo.jpg")}
+                        if p.get("s3_url"):
+                            p_dict["s3_url"] = p["s3_url"]
+                        slot_list.append(p_dict)
+                compact_slots[slot] = slot_list
             else:
                 compact_slots[slot] = item
         clean["slots_photos"] = compact_slots

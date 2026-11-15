@@ -434,3 +434,114 @@ def start_import_catalog_async() -> Dict[str, Any]:
     t.start()
     return {"success": True, "message": "Импорт запущен в фоновом режиме"}
 
+
+def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
+    """
+    Публикует (или обновляет) товар в Ozon Seller API через POST /v3/product/import.
+    Поддерживает прямую загрузку книги со всеми фотографиями из S3/CDN.
+    """
+    article = str(book.get("article", "")).strip()
+    if not article:
+        return False, "Не указан артикул товара (offer_id)"
+
+    title = str(book.get("title", "")).strip()
+    if not title:
+        return False, "Не указано название книги"
+
+    price = str(book.get("price", "350")).strip()
+    old_price = str(book.get("old_price", "")).strip() or str(round(float(price) * 1.4))
+
+    # Габариты упаковки (в мм) и вес (в граммах)
+    width = int(book.get("width_package") or book.get("width") or 140)
+    height = int(book.get("height_package") or book.get("height") or 22)
+    depth = int(book.get("length_package") or book.get("length") or 215)
+    weight = int(book.get("weight_package") or book.get("weight") or 330)
+
+    # Фотографии товара
+    main_photo = book.get("main_photo_url") or book.get("photo_main") or ""
+    additional_photos_raw = book.get("add_photo_urls") or book.get("photos_additional") or ""
+    if isinstance(additional_photos_raw, str):
+        add_photos = [p.strip() for p in additional_photos_raw.split() if p.strip()]
+    elif isinstance(additional_photos_raw, list):
+        add_photos = [str(p).strip() for p in additional_photos_raw if str(p).strip()]
+    else:
+        add_photos = []
+
+    all_images = []
+    if main_photo:
+        all_images.append(main_photo)
+    for p in add_photos:
+        if p and p != main_photo and p not in all_images:
+            all_images.append(p)
+
+    # Формируем атрибуты Ozon
+    attributes = []
+
+    def _add_attr(attr_id: int, val: Any):
+        if val is not None and str(val).strip():
+            attributes.append({
+                "id": attr_id,
+                "values": [{"value": str(val).strip()}]
+            })
+
+    # Название и авторы
+    _add_attr(4180, title)
+    author = book.get("author") or book.get("author_cover") or "не указан"
+    _add_attr(105, author)
+    _add_attr(4182, book.get("author_cover") or author)
+    if book.get("original_title"):
+        _add_attr(4183, book.get("original_title"))
+
+    # Издательство, бренд, серия
+    if book.get("publisher"):
+        _add_attr(85, book.get("publisher"))
+    if book.get("brand") and book.get("brand") != "Нет бренда":
+        _add_attr(85, book.get("brand"))
+    if book.get("series"):
+        _add_attr(1, book.get("series"))
+
+    # Характеристики издания
+    if book.get("year"):
+        _add_attr(4081, book.get("year"))
+    if book.get("pages"):
+        _add_attr(4051, book.get("pages"))
+    if book.get("isbn"):
+        _add_attr(4184, book.get("isbn"))
+    if book.get("cover_type"):
+        _add_attr(9356, book.get("cover_type"))
+    if book.get("condition"):
+        _add_attr(8857, book.get("condition"))
+    if book.get("genre"):
+        _add_attr(23273, book.get("genre"))
+    if book.get("annotation"):
+        _add_attr(4191, book.get("annotation"))
+    if book.get("age_limit"):
+        _add_attr(8862, book.get("age_limit"))
+    if book.get("translator"):
+        _add_attr(112, book.get("translator"))
+    if book.get("dimensions"):
+        _add_attr(4082, book.get("dimensions"))
+
+    item_payload = {
+        "description_category_id": 17028757,  # Категория Ozon: Печатная книга
+        "name": title,
+        "offer_id": article,
+        "barcode": str(book.get("barcode", "")).strip(),
+        "price": str(price),
+        "old_price": str(old_price),
+        "vat": "0.1",
+        "dimension_unit": "mm",
+        "weight_unit": "g",
+        "width": width,
+        "height": height,
+        "depth": depth,
+        "weight": weight,
+        "primary_image": main_photo or (all_images[0] if all_images else ""),
+        "images": all_images,
+        "attributes": attributes,
+    }
+
+    payload = {"items": [item_payload]}
+    return _make_ozon_request("/v3/product/import", payload)
+
+

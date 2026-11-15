@@ -322,21 +322,6 @@
       }
     }
 
-    function findPhotoById(photoId) {
-      let photo = photoPool.find(p => p.id === photoId);
-      if (photo) return photo;
-      for (const b of booksSession) {
-        if (!b || !b.slots) continue;
-        if (b.slots.cover_front && b.slots.cover_front.id === photoId) return b.slots.cover_front;
-        for (const s of ['cover_back', 'info_pages', 'illustrations', 'mantra_defects']) {
-          const list = Array.isArray(b.slots[s]) ? b.slots[s] : (b.slots[s] ? [b.slots[s]] : []);
-          const found = list.find(p => p && p.id === photoId);
-          if (found) return found;
-        }
-      }
-      return null;
-    }
-
     function getStudioPhotoNavigationList() {
       if (!currentEditingPhoto) return [];
       const book = getActiveBook();
@@ -421,6 +406,12 @@
       if (e) e.stopPropagation();
       const photo = findPhotoById(photoId);
       if (!photo) return;
+
+      // Приостанавливаем упреждающую выгрузку в S3, пока пользователь в редакторе
+      if (typeof proactiveS3Timers !== 'undefined' && proactiveS3Timers.has(photo.id)) {
+        clearTimeout(proactiveS3Timers.get(photo.id));
+        proactiveS3Timers.delete(photo.id);
+      }
 
       currentEditingPhoto = photo;
       if (!photo.cameraOriginal) {
@@ -1873,6 +1864,11 @@
         hasUnsavedStudioChanges = false;
         updateAiBatchBtnState();
 
+        const savedPhotoId = currentEditingPhoto.id;
+        const assignedSlot = currentEditingPhoto.assignedSlot;
+        currentEditingPhoto.is_s3_uploaded = false;
+        currentEditingPhoto.s3_url = null;
+
         if (!keepModalOpen) {
           isStudioOpen = false;
           if (cropperInstance) {
@@ -1887,6 +1883,11 @@
         renderPool();
         renderActiveBookSlots();
         scheduleAutoSave();
+
+        // Шаг 3 спецификации: планируем упреждающую выгрузку отредактированного кадра в S3
+        if (assignedSlot && typeof scheduleProactiveS3Upload === 'function') {
+          scheduleProactiveS3Upload(savedPhotoId, assignedSlot, 2500);
+        }
 
         if (!keepModalOpen) {
           showToast(isCroppedActive ? '💾 Обрезка и настройки фото сохранены!' : '💾 Фото сохранено в полном кадре!');

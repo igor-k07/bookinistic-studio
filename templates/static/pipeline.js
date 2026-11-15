@@ -35,7 +35,7 @@
           });
           renderPool();
           scheduleAutoSave();
-          addedPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
+          // П. 3.2 спецификации: не вырезаем фон для нераспределенных фото пачки
         }
       } catch (e) {
         alert('Ошибка загрузки теста: ' + e.message);
@@ -106,7 +106,7 @@
       renderPool();
       scheduleAutoSave();
       e.target.value = '';
-      addedPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
+      // П. 3.2 спецификации: не вырезаем фон для нераспределенных фото пачки
     }
 
     function clearPool() {
@@ -119,19 +119,6 @@
         renderActiveBookSlots();
         scheduleAutoSave();
       }
-    }
-
-    function isPhotoProcessed(photo) {
-      if (!photo) return false;
-      return Boolean(
-        photo.isProcessed ||
-        (photo.whiten !== undefined && photo.whiten > 0) ||
-        (photo.brightness !== undefined && photo.brightness !== 0) ||
-        (photo.contrast !== undefined && photo.contrast !== 0) ||
-        (photo.saturation !== undefined && photo.saturation !== 0) ||
-        (photo.rotation !== undefined && photo.rotation !== 0) ||
-        photo.isCropped
-      );
     }
 
     // poolCardScale объявлен в state.js
@@ -434,6 +421,57 @@
 // -------------------------------------------------------------
 // СЛОТЫ И ДРАГ-Н-ДРОП
 // -------------------------------------------------------------
+    const proactiveS3Timers = new Map();
+
+    function scheduleProactiveS3Upload(photoId, slotName, delayMs = 2500) {
+      if (proactiveS3Timers.has(photoId)) {
+        clearTimeout(proactiveS3Timers.get(photoId));
+        proactiveS3Timers.delete(photoId);
+      }
+
+      const timer = setTimeout(async () => {
+        proactiveS3Timers.delete(photoId);
+
+        // Если в данный момент открыт фоторедактор для этого фото, выгрузку не делаем
+        if (typeof isStudioOpen !== 'undefined' && isStudioOpen && typeof currentEditingPhoto !== 'undefined' && currentEditingPhoto && currentEditingPhoto.id === photoId) {
+          return;
+        }
+
+        const photo = findPhotoById(photoId);
+        if (!photo || !photo.assignedSlot) return;
+        if (photo.is_s3_uploaded && photo.s3_url) return;
+
+        const book = getActiveBook();
+        const article = (book && book.formData && book.formData.article) || (book && book.article) || document.getElementById('article')?.value?.trim();
+        if (!article) return;
+        const title = (book && book.formData && book.formData.title) || document.getElementById('title')?.value?.trim() || 'book';
+
+        let photoIndex = 1;
+        if (['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].includes(photo.assignedSlot)) {
+          const list = Array.isArray(book.slots[photo.assignedSlot]) ? book.slots[photo.assignedSlot] : [];
+          const idx = list.findIndex(p => p && p.id === photoId);
+          if (idx >= 0) photoIndex = idx + 1;
+        }
+
+        const payloadData = photo.data || photo.preview || photo.croppedBase || photo.cameraOriginal;
+        if (!payloadData) return;
+
+        try {
+          const res = await ApiClient.uploadSlotPhoto(article, title, photo.assignedSlot, photoIndex, payloadData, photoId);
+          if (res && res.success && res.s3_url) {
+            photo.s3_url = res.s3_url;
+            photo.is_s3_uploaded = true;
+            if (window.EventBus) window.EventBus.emit('photo:s3-uploaded', { photoId, s3_url: res.s3_url });
+            renderActiveBookSlots();
+          }
+        } catch (err) {
+          console.warn(`[Proactive S3] Фоновая выгрузка ${photoId}:`, err);
+        }
+      }, delayMs);
+
+      proactiveS3Timers.set(photoId, timer);
+    }
+
     function assignPhotoToSlot(photoId, slotName, e) {
       if (e) e.stopPropagation();
       const photo = photoPool.find(p => p.id === photoId);
@@ -472,6 +510,14 @@
         selectedPoolPhotoId = remaining.length > 0 ? remaining[0].id : null;
       }
 
+      // Согласно п. 3.2 спецификации: удаление фона нейросетью запускается ТОЛЬКО для обложки и задника!
+      if (slotName === 'cover_front' || slotName === 'cover_back') {
+        queueAiBackgroundRemoval(photo.id);
+      }
+
+      // Шаг 3 спецификации: планируем упреждающую фоновую выгрузку в S3 с таймером покоя 2.5 сек
+      scheduleProactiveS3Upload(photo.id, slotName, 2500);
+
       renderPool();
       renderBooksTabs();
       renderActiveBookSlots();
@@ -480,10 +526,16 @@
 
     function unassignPhoto(photoId, e) {
       if (e) e.stopPropagation();
+      if (proactiveS3Timers.has(photoId)) {
+        clearTimeout(proactiveS3Timers.get(photoId));
+        proactiveS3Timers.delete(photoId);
+      }
       const photo = photoPool.find(p => p.id === photoId);
       if (photo) {
         photo.assignedBookId = null;
         photo.assignedSlot = null;
+        photo.is_s3_uploaded = false;
+        photo.s3_url = null;
         selectedPoolPhotoId = photo.id;
       }
       removePhotoFromSlots(photoId);
@@ -533,9 +585,15 @@
     let activeAiWorkers = 0;
     const MAX_CONCURRENT_AI = 4;
 
-    function queueAiBackgroundRemoval(photoId) {
+    function queueAiBackgroundRemoval(photoId, force = false) {
       const photo = findPhotoById(photoId);
       if (!photo || photo.isAiProcessed || photo.isAiProcessing) return;
+
+      // П. 3.2 спецификации: автоматическое вырезание стола разрешено ТОЛЬКО для обложки и задника!
+      if (!force && photo.assignedSlot && !['cover_front', 'cover_back'].includes(photo.assignedSlot)) {
+        return;
+      }
+
       if (!aiProcessQueue.includes(photoId)) {
         aiProcessQueue.push(photoId);
       }
@@ -609,12 +667,8 @@
           photo.rawOriginal = photo.cameraOriginal;
         }
         const baseSrc = photo.cameraOriginal || photo.rawOriginal || photo.preview;
-        const res = await fetch('/api/ai_process_photo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: baseSrc })
-        });
-        const data = await res.json();
+        const role = photo.assignedSlot || 'cover_front';
+        const data = await ApiClient.processPhoto(baseSrc, role, !silent);
         if (!data.success || !data.image) {
           throw new Error(data.error || 'Ошибка ИИ-обработки');
         }
@@ -1081,8 +1135,11 @@
       const backList = Array.isArray(book.slots.cover_back) ? book.slots.cover_back : (book.slots.cover_back ? [book.slots.cover_back] : []);
       backList.forEach((p, idx) => addCleanImg(backList.length > 1 ? `Вид обложки сзади #${idx+1}` : "Вид обложки сзади", p));
       book.slots.info_pages.forEach((p, idx) => addCleanImg(`Лист с информацией и описанием (титул/оборот #${idx+1})`, p));
-      book.slots.illustrations.forEach((p, idx) => addCleanImg(`Иллюстрации книги #${idx+1}`, p));
-      book.slots.mantra_defects.forEach((p, idx) => addCleanImg(`Фото мантры и дефектов книги #${idx+1}`, p));
+
+      // Согласно п. 4.1 спецификации: фото иллюстраций и повреждений в Gemini не отправляются,
+      // вместо этого передаются логические флаги для библиографического обогащения
+      const hasIllustrations = Boolean(book.slots.illustrations && book.slots.illustrations.length > 0);
+      const hasDefects = Boolean(book.slots.mantra_defects && book.slots.mantra_defects.length > 0);
 
       if (sendImages.length === 0) {
         if (!silent) alert('⚠️ В слотах этой книги нет фото для распознавания!');
@@ -1105,16 +1162,7 @@
       }
 
       try {
-        const res = await fetch('/api/ai_recognize_book', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            api_key: currentApiKey,
-            images: sendImages
-          })
-        });
-
-        const result = await res.json();
+        const result = await ApiClient.recognizeBook(sendImages, currentApiKey, hasIllustrations);
         if (!result.success) throw new Error(result.error || 'Ошибка распознавания');
 
         const recognizedData = result.data || {};
@@ -1639,8 +1687,8 @@
               scheduleAutoSave();
               closeQrModal();
               playNotificationSound();
-              showToast(`📱 Со смартфона получено ${data.images.length} фото! ИИ начал вырезание фона...`);
-              addedPhotos.forEach(p => queueAiBackgroundRemoval(p.id));
+              showToast(`📱 Со смартфона получено ${data.images.length} фото!`);
+              // П. 3.2 спецификации: вырезание фона стола запускается только для обложек после их назначения в слоты
               if (document.getElementById('batchAutoDistributeToggle')?.checked) {
                 setTimeout(() => {
                   runBatchDistributePipeline(true);

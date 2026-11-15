@@ -25,6 +25,7 @@ from config import (
 )
 from core.barcode import generate_ean13_from_article
 from core.constants import normalize_genre
+from core.domain.rules import calculate_book_condition
 import tunnel_manager
 
 
@@ -42,17 +43,8 @@ def with_excel_lock(func):
 
 
 def normalize_condition(raw_cond: Any, has_defects: bool) -> str:
-    """
-    Приводит сохранность книги к регламенту Ozon:
-    - Без фото дефектов -> ВСЕГДА 'Очень хорошая'
-    - При наличии дефектов -> 'Хорошая', либо 'Удовлетворительная' (если выставлена вручную)
-    """
-    if not has_defects:
-        return "Очень хорошая"
-    c = str(raw_cond or "").strip().lower()
-    if "удовл" in c:
-        return "Удовлетворительная"
-    return "Хорошая"
+    """Приводит сохранность книги к регламенту Ozon через единое доменное правило."""
+    return calculate_book_condition(has_defects, str(raw_cond or "")).value
 
 
 @with_excel_lock
