@@ -568,10 +568,6 @@
           },
           cropend() {
             if (!isProgrammaticCropBoxUpdate && cropperInstance && cropperInstance.cropped) {
-              const cb = cropperInstance.getCropBoxData();
-              if (cb && cb.width > 25 && cb.height > 25) {
-                zoomStudioToCropBox();
-              }
               captureCropBoxOnOriginal();
             }
             updateCropResolution();
@@ -652,60 +648,12 @@
     const cancelCropMode = resetCropToOriginal;
 
     function zoomStudioToCropBox() {
-      if (!cropperInstance || !cropperInstance.cropped) return;
-
-      const container = cropperInstance.getContainerData();
-      const canvas = cropperInstance.getCanvasData();
-      const cb = cropperInstance.getCropBoxData();
-
-      if (!cb.width || !cb.height || cb.width < 25 || cb.height < 25) return;
-
-      const padX = 40;
-      const padTop = 32;
-      const padBottom = 135; // Надежный безопасный запас снизу, рамка и маркеры гарантированно не перекрываются нижней панелью управления
-      const targetW = container.width - padX * 2;
-      const targetH = container.height - padTop - padBottom;
-      if (targetW <= 0 || targetH <= 0) return;
-
-      const scale = Math.min(targetW / cb.width, targetH / cb.height);
-      if (!isFinite(scale) || scale <= 0) return;
-
-      const clampedScale = Math.min(scale, 6.0);
-
-      const newCanvasW = canvas.width * clampedScale;
-      const newCanvasH = canvas.height * clampedScale;
-      const newCbW = cb.width * clampedScale;
-      const newCbH = cb.height * clampedScale;
-
-      const newCbLeft = (container.width - newCbW) / 2;
-      const newCbTop = padTop + (targetH - newCbH) / 2;
-
-      const offsetInCanvasX = cb.left - canvas.left;
-      const offsetInCanvasY = cb.top - canvas.top;
-
-      const newCanvasLeft = newCbLeft - offsetInCanvasX * clampedScale;
-      const newCanvasTop = newCbTop - offsetInCanvasY * clampedScale;
-
-      isProgrammaticCropBoxUpdate = true;
-      cropperInstance.setCanvasData({
-        left: newCanvasLeft,
-        top: newCanvasTop,
-        width: newCanvasW,
-        height: newCanvasH
-      });
-      cropperInstance.setCropBoxData({
-        left: newCbLeft,
-        top: newCbTop,
-        width: newCbW,
-        height: newCbH
-      });
-      isProgrammaticCropBoxUpdate = false;
-
-      captureCropBoxOnOriginal();
+      // Фотография всегда должна быть видна целиком с комфортным запасом свободного места по краям
+      if (!cropperInstance) return;
+      fitStudioImageToContainer(false);
       updateCropResolution();
       updateZoomBadge();
       updateCropResetButtonVisibility();
-      markStudioChanged('Приближение среза');
     }
 
     function commitStudioCrop() {
@@ -974,6 +922,26 @@
         e.preventDefault();
         centerStudioImage();
       });
+
+      setupStudioResizeObserver();
+    }
+
+    let studioResizeObserver = null;
+    function setupStudioResizeObserver() {
+      const container = document.getElementById('studioCropperContainer');
+      if (!container || studioResizeObserver) return;
+      if (typeof ResizeObserver === 'undefined') return;
+
+      studioResizeObserver = new ResizeObserver((entries) => {
+        if (!isStudioOpen || !cropperInstance) return;
+        for (const entry of entries) {
+          if (entry.contentRect.width > 50 && entry.contentRect.height > 50) {
+            cropperInstance.resize();
+            fitStudioImageToContainer(false);
+          }
+        }
+      });
+      studioResizeObserver.observe(container);
     }
 
     function updateZoomBadge() {
@@ -1221,15 +1189,25 @@
       if (!cw || !ch) return;
 
       const canvasData = cropperInstance.getCanvasData();
-      const rotW = canvasData.naturalWidth || canvasData.width;
-      const rotH = canvasData.naturalHeight || canvasData.height;
-      if (!rotW || !rotH) return;
+      const imgData = (typeof cropperInstance.getImageData === 'function') ? cropperInstance.getImageData() : {};
+      const nw = imgData.naturalWidth || canvasData.naturalWidth || canvasData.width;
+      const nh = imgData.naturalHeight || canvasData.naturalHeight || canvasData.height;
+      if (!nw || !nh) return;
 
-      const aspect = rotW / rotH;
-      // Оставляем безопасный отступ 16px с каждой стороны, чтобы элементы управления рамкой были легко доступны
-      const pad = 16;
-      const maxW = Math.max(100, cw - pad * 2);
-      const maxH = Math.max(100, ch - pad * 2);
+      // Учитываем текущий угол поворота холста для точного расчета соотношения сторон
+      const rad = ((studioCurrentRotation || 0) * Math.PI) / 180;
+      const rotW = Math.abs(nw * Math.cos(rad)) + Math.abs(nh * Math.sin(rad));
+      const rotH = Math.abs(nw * Math.sin(rad)) + Math.abs(nh * Math.cos(rad));
+      const aspect = (rotW > 0 && rotH > 0) ? (rotW / rotH) : (cw / ch);
+
+      // Оставляем комфортные безопасные отступы вокруг фото (по бокам, сверху и снизу),
+      // чтобы изображение всегда оставалось полностью видимым с запасом свободного места
+      // и гарантированно не перекрывалось нижней панелью инструментов
+      const padX = 36;
+      const padTop = 24;
+      const padBottom = 44;
+      const maxW = Math.max(80, cw - padX * 2);
+      const maxH = Math.max(80, ch - padTop - padBottom);
 
       let fitW, fitH;
       if (maxH * aspect > maxW) {
@@ -1241,7 +1219,7 @@
       }
 
       const fitLeft = (cw - fitW) / 2;
-      const fitTop = (ch - fitH) / 2;
+      const fitTop = padTop + (maxH - fitH) / 2;
 
       const wasCropped = Boolean(cropperInstance.cropped);
 
@@ -1281,6 +1259,16 @@
           top: fitTop + ry * fitH,
           width: Math.min(fitW, rw * fitW),
           height: Math.min(fitH, rh * fitH)
+        });
+        isProgrammaticCropBoxUpdate = false;
+        captureCropBoxOnOriginal();
+      } else if (resetCropBox) {
+        isProgrammaticCropBoxUpdate = true;
+        cropperInstance.setCropBoxData({
+          left: fitLeft,
+          top: fitTop,
+          width: fitW,
+          height: fitH
         });
         isProgrammaticCropBoxUpdate = false;
         captureCropBoxOnOriginal();
@@ -1735,6 +1723,7 @@
 
     window.addEventListener('resize', () => {
       if (isStudioOpen && cropperInstance) {
+        cropperInstance.resize();
         fitStudioImageToContainer(false);
       }
     });

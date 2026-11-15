@@ -63,8 +63,9 @@
     #studioCropperContainer {
       position: relative;
       width: 100%;
-      height: 100%;
+      flex: 1 1 0%;
       min-height: 0;
+      height: auto;
     }
     #studioCropperContainer .cropper-container {
       width: 100% !important;
@@ -1528,7 +1529,7 @@
         <div class="flex-1 min-h-0 flex flex-col p-3 bg-slate-950 overflow-hidden relative">
           
           <!-- Контейнер Cropper.js на всю доступную высоту -->
-          <div id="studioCropperContainer" class="flex-1 w-full h-full min-h-0 bg-slate-950 rounded-2xl flex items-center justify-center relative overflow-hidden select-none">
+          <div id="studioCropperContainer" class="flex-1 w-full min-h-0 bg-slate-950 rounded-2xl flex items-center justify-center relative overflow-hidden select-none">
             <img id="studioCropperImage" class="max-w-full max-h-full block" alt="Editor">
             <div id="studioOriginalBadge" class="hidden absolute top-4 left-4 px-3 py-1 bg-amber-500 text-slate-950 font-bold text-xs rounded-full shadow-lg pointer-events-none z-30">ОРИГИНАЛЬНОЕ ФОТО</div>
 
@@ -1584,7 +1585,7 @@
           </div>
 
           <!-- Динамическая текстовая подсказка -->
-          <div class="mt-1 text-[11px] text-slate-500 font-mono px-1 flex items-center justify-between">
+          <div class="mt-1 text-[11px] text-slate-500 font-mono px-1 flex items-center justify-between shrink-0">
             <span id="studioCropHint">✋ Режим перемещения: зажмите мышь и двигайте фото. Колесико — зум. [R] поворот, [W] фон Ozon, [Enter] сохранить.</span>
           </div>
         </div>
