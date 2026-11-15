@@ -663,45 +663,106 @@
       if (!container || !container.width || !container.height) return;
       if (!canvas || !canvas.width || !canvas.height) return;
 
-      // Безопасные отступы от краев рабочей зоны редактора:
-      // padBottom = 48px гарантирует, что ни рамка, ни нижний край фото не перекроются панелью инструментов
-      const padX = 40;
-      const padTop = 28;
-      const padBottom = 48;
+      // Безопасные отступы: гарантируют, что ни рамка, ни холст не залезут под нижнюю панель
+      const safePadX = 28;
+      const safePadTop = 20;
+      const safePadBottom = 46;
 
-      const availW = Math.max(100, container.width - padX * 2);
-      const availH = Math.max(100, container.height - padTop - padBottom);
+      const availW = Math.max(100, container.width - safePadX * 2);
+      const availH = Math.max(100, container.height - safePadTop - safePadBottom);
 
-      // Зона обрезки масштабируется так, чтобы занимать 72% безопасной области просмотра по центру.
-      // Оставшиеся ~14% пространства с каждой стороны позволяют пользователю видеть внешние края фотографии,
-      // сохраняя контекст вокруг выделения.
-      const CROP_VIEW_FRACTION = 0.72;
-      const targetCbW = availW * CROP_VIEW_FRACTION;
-      const targetCbH = availH * CROP_VIEW_FRACTION;
+      // Рассчитываем базовый размер холста при комфортном вписывании (как при открытии)
+      const imgData = (typeof cropperInstance.getImageData === 'function') ? cropperInstance.getImageData() : {};
+      const nw = imgData.naturalWidth || canvas.naturalWidth || canvas.width;
+      const nh = imgData.naturalHeight || canvas.naturalHeight || canvas.height;
+      const rad = ((studioCurrentRotation || 0) * Math.PI) / 180;
+      const rotW = Math.abs(nw * Math.cos(rad)) + Math.abs(nh * Math.sin(rad));
+      const rotH = Math.abs(nw * Math.sin(rad)) + Math.abs(nh * Math.cos(rad));
+      const aspect = (rotW > 0 && rotH > 0) ? (rotW / rotH) : (availW / availH);
 
-      const scale = Math.min(targetCbW / cb.width, targetCbH / cb.height);
+      let baseFitW, baseFitH;
+      if (availH * aspect > availW) {
+        baseFitW = availW;
+        baseFitH = baseFitW / aspect;
+      } else {
+        baseFitH = availH;
+        baseFitW = baseFitH * aspect;
+      }
+
+      // Зона обрезки масштабируется так, чтобы быть крупной на экране (до 90% полезной области),
+      // но в безопасном диапазоне без вылезания за границы экрана
+      const CROP_SAFE_FRACTION = 0.90;
+      const targetCbW = availW * CROP_SAFE_FRACTION;
+      const targetCbH = availH * CROP_SAFE_FRACTION;
+
+      let scale = Math.min(targetCbW / cb.width, targetCbH / cb.height);
       if (!isFinite(scale) || scale <= 0) return;
 
-      const clampedScale = Math.max(0.25, Math.min(scale, 4.0));
+      // Никогда не уменьшаем картинку ниже базового комфортного размера открытия
+      const currentCanvasW = canvas.width;
+      if (currentCanvasW > 0 && baseFitW > 0) {
+        const minScaleToKeepBaseFit = baseFitW / currentCanvasW;
+        if (scale < minScaleToKeepBaseFit) {
+          scale = Math.max(scale, minScaleToKeepBaseFit);
+        }
+      }
+
+      // Ограничиваем максимальное приближение
+      const clampedScale = Math.min(scale, 4.0);
 
       const newCanvasW = canvas.width * clampedScale;
       const newCanvasH = canvas.height * clampedScale;
       const newCbW = cb.width * clampedScale;
       const newCbH = cb.height * clampedScale;
 
-      // Центрируем зону обрезки строго по центру безопасной области
+      // Идеальное положение: зона обрезки по центру безопасной области
       const centerX = container.width / 2;
-      const centerY = padTop + availH / 2;
+      const centerY = safePadTop + availH / 2;
 
-      const newCbLeft = centerX - newCbW / 2;
-      const newCbTop = centerY - newCbH / 2;
+      let newCbLeft = centerX - newCbW / 2;
+      let newCbTop = centerY - newCbH / 2;
+
+      // Строго держим зону обрезки в безопасном диапазоне экрана
+      const minCbLeft = safePadX;
+      const maxCbLeft = container.width - safePadX - newCbW;
+      if (minCbLeft <= maxCbLeft) {
+        newCbLeft = Math.max(minCbLeft, Math.min(maxCbLeft, newCbLeft));
+      } else {
+        newCbLeft = (container.width - newCbW) / 2;
+      }
+
+      const minCbTop = safePadTop;
+      const maxCbTop = container.height - safePadBottom - newCbH;
+      if (minCbTop <= maxCbTop) {
+        newCbTop = Math.max(minCbTop, Math.min(maxCbTop, newCbTop));
+      } else {
+        newCbTop = safePadTop;
+      }
 
       // Смещение рамки относительно начала холста
       const offsetInCanvasX = cb.left - canvas.left;
       const offsetInCanvasY = cb.top - canvas.top;
 
-      const newCanvasLeft = newCbLeft - offsetInCanvasX * clampedScale;
-      const newCanvasTop = newCbTop - offsetInCanvasY * clampedScale;
+      let newCanvasLeft = newCbLeft - offsetInCanvasX * clampedScale;
+      let newCanvasTop = newCbTop - offsetInCanvasY * clampedScale;
+
+      // Если холст целиком помещается в безопасную зону по горизонтали или вертикали, центрируем его
+      if (newCanvasW <= availW) {
+        const idealCanvasLeft = (container.width - newCanvasW) / 2;
+        const shiftX = idealCanvasLeft - newCanvasLeft;
+        if (newCbLeft + shiftX >= safePadX && newCbLeft + newCbW + shiftX <= container.width - safePadX) {
+          newCanvasLeft += shiftX;
+          newCbLeft += shiftX;
+        }
+      }
+      if (newCanvasH <= availH) {
+        const idealCanvasTop = safePadTop + (availH - newCanvasH) / 2;
+        const shiftY = idealCanvasTop - newCanvasTop;
+        if (newCbTop + shiftY >= safePadTop && newCbTop + newCbH + shiftY <= container.height - safePadBottom) {
+          newCanvasTop += shiftY;
+          newCbTop += shiftY;
+        }
+      }
 
       isProgrammaticCropBoxUpdate = true;
       cropperInstance.setCanvasData({
