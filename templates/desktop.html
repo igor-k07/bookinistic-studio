@@ -270,11 +270,6 @@
             <button type="button" onclick="setPoolScale('xlarge')" id="scaleBtn_xlarge" class="px-2.5 py-1 text-xs rounded-lg transition font-medium text-slate-400 hover:text-white" title="Экстра-крупный размер (300px)">Экстра</button>
           </div>
 
-          <!-- МАССОВОЕ ИИ-ВЫРЕЗАНИЕ ФОНА -->
-          <button type="button" id="batchAiBtn" onclick="batchAiProcessAllPool()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-violet-700 to-indigo-700 hover:from-violet-600 hover:to-indigo-600 text-white text-xs font-bold border border-violet-500/40 transition flex items-center gap-1.5 shadow-md shadow-violet-700/20" title="Автоматически вырезать фон стола у всех необработанных фото нейросетью rembg на чистый белый (#FFFFFF)">
-            <span>✨ ИИ-вырезать фон пачке</span>
-          </button>
-
           <!-- МАССОВОЕ ОТБЕЛИВАНИЕ -->
           <button type="button" id="batchWhitenBtn" onclick="batchWhitenAllPool()" class="px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold border border-emerald-800 transition flex items-center gap-1.5 shadow-sm" title="Автоматически применить фильтр белого фона Ozon ко всем неотбеленным фото в пуле">
             <span>⚪ Отбелить (фильтр)</span>
@@ -1726,15 +1721,16 @@
               </div>
             </div>
 
-            <!-- 4. ЦВЕТОВЫЕ ПРЕСЕТЫ -->
+            <!-- 4. ЦВЕТОВЫЕ ПРЕСЕТЫ СТУДИИ (ШАГ 1 СПЕЦИФИКАЦИИ) -->
             <div class="space-y-2 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
               <span class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                 <span>🎨</span> <span>Быстрые пресеты</span>
               </span>
-              <div class="grid grid-cols-3 gap-1.5 text-[11px]">
-                <button type="button" onclick="applyStudioPreset('studio_white')" class="p-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-medium transition text-center shadow-sm" title="Отбеливание 85%, Яркость +4%, Контраст +8% (клавиша W)">Студия [W]</button>
-                <button type="button" onclick="applyStudioPreset('sharp_text')" class="p-1.5 rounded-lg bg-sky-950/60 hover:bg-sky-900 border border-sky-500/40 text-sky-300 font-medium transition text-center shadow-sm" title="Контраст +25%, Яркость +5%, Отбеливание 40% (клавиша T)">📝 Текст [T]</button>
-                <button type="button" onclick="applyStudioPreset('defects')" class="p-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 text-purple-300 font-medium transition text-center shadow-sm" title="Контраст +15%, Насыщенность +10%">🔍 Дефекты</button>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <button type="button" onclick="applyStudioPreset('sharp_text')" class="p-2 rounded-xl bg-sky-950/60 hover:bg-sky-900 border border-sky-500/40 text-sky-300 font-semibold transition text-center shadow-sm" title="Контраст +18%, Яркость +3% — для пожелтевших страниц и советского шрифта">📝 Четкий текст</button>
+                <button type="button" onclick="applyStudioPreset('vibrant_art')" class="p-2 rounded-xl bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 text-purple-300 font-semibold transition text-center shadow-sm" title="Насыщенность +15%, Контраст +8% — для цветных вклеек и тиснения">🎨 Иллюстрации</button>
+                <button type="button" onclick="applyStudioPreset('clean_white')" class="p-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-semibold transition text-center shadow-sm" title="Отбеливание 75%, Контраст +5%, Яркость +2% — для белого фона без жесткого rembg">⚪ Чистый фон</button>
+                <button type="button" onclick="applyStudioPreset('original')" class="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-semibold transition text-center shadow-sm" title="Сбросить все бегунки студии в 0">↩️ Сброс в 0</button>
               </div>
             </div>
 

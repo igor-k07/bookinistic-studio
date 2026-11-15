@@ -16,6 +16,8 @@ import urllib.request
 import os
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+import cv2
+import numpy as np
 import rembg
 
 # Ограничиваем пул максимум 2 воркерами, чтобы система оставалась абсолютно отзывчивой
@@ -89,6 +91,61 @@ def detect_book_rotation(img: Image.Image) -> int:
     return 90 if w > h * 1.15 else 0
 
 
+def protect_white_cover_mask(alpha_mask: Image.Image, rgb_image: Image.Image) -> Image.Image:
+    """
+    Защита белых и светлых обложек от вырезания нейросетью rembg (Шаг 1 спецификации):
+    Если книга светлая или rembg оставляет 'дыры' в теле переплета,
+    алгоритм находит внешний контур книги (OpenCV) и восстанавливает 100% непрозрачность
+    внутри книги, отбеливая только фон стола вокруг.
+    """
+    try:
+        mask_np = np.array(alpha_mask)
+        mask_bin = (mask_np > 25).astype(np.uint8) * 255
+
+        contours, _ = cv2.findContours(mask_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return alpha_mask
+
+        # Находим главный контур книги (наибольший по площади)
+        largest = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest)
+        h, w = mask_np.shape
+        total_pixels = h * w
+
+        if area < total_pixels * 0.05:
+            # Контур слишком мал (менее 5% кадра) — не трогаем
+            return alpha_mask
+
+        # Строим выпуклую оболочку книги
+        hull = cv2.convexHull(largest)
+        hull_mask = np.zeros_like(mask_np)
+        cv2.drawContours(hull_mask, [hull], -1, 255, thickness=-1)
+
+        # Проверяем среднюю яркость пикселей внутри книги
+        rgb_np = np.array(rgb_image)
+        book_region = rgb_np[hull_mask == 255]
+        mean_brightness = float(np.mean(book_region)) if len(book_region) > 0 else 0
+
+        # Вычисляем степень заполненности маски внутри контура (нет ли внутренних дыр)
+        inner_mask_sum = np.sum(mask_np[hull_mask == 255] > 25)
+        hull_area = np.sum(hull_mask == 255)
+        fill_ratio = (inner_mask_sum / max(1, hull_area))
+
+        # Если обложка светлая (>190) или rembg 'пробил' дыры (fill_ratio < 0.88),
+        # восстанавливаем целостность тела книги
+        if mean_brightness > 190 or fill_ratio < 0.88:
+            # Мягкое сглаживание краев контура
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+            hull_closed = cv2.morphologyEx(hull_mask, cv2.MORPH_CLOSE, kernel)
+            combined = np.maximum(mask_np, hull_closed)
+            return Image.fromarray(combined)
+
+        return alpha_mask
+    except Exception as e:
+        print(f"⚠️ [protect_white_cover_mask] Ошибка анализа контура книги: {e}")
+        return alpha_mask
+
+
 def _process_image_worker(image_bytes: bytes) -> dict:
     """
     Воркер фоновой обработки фото книги:
@@ -119,6 +176,9 @@ def _process_image_worker(image_bytes: bytes) -> dict:
 
     img_rgba = Image.open(io.BytesIO(out_rgba_bytes)).convert("RGBA")
     alpha = img_rgba.split()[-1]
+
+    # Защита белых/светлых переплетов от вырезания через OpenCV
+    alpha = protect_white_cover_mask(alpha, raw_img.convert("RGB"))
     bbox = alpha.getbbox()  # (left, upper, right, lower)
 
     # 4. Посадка на идеальный белый фон (#FFFFFF)

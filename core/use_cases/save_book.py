@@ -45,8 +45,36 @@ class SaveBookUseCase:
         # 4. Применение чистых доменных правил (сохранность, ГОСТ-габариты, аннотация)
         book.sanitize_domain_rules(allow_overwrite_manual_dims=False)
 
-        # 5. Сохранение обработанных фото в локальный архив books_vault/
+        # 4.1. Авто-кадрирование обложки по безопасному контуру (+3.5%), если оператор не кадрировал вручную
         slots_photos = book.slots_photos or {}
+        cf = slots_photos.get("cover_front")
+        if cf and isinstance(cf, dict):
+            crop_rel = cf.get("aiCropRelative") or cf.get("crop_relative")
+            is_cropped = cf.get("isCropped") or bool(cf.get("croppedBase"))
+            if crop_rel and not is_cropped and isinstance(crop_rel, dict):
+                try:
+                    from services.vault_service import resolve_photo_bytes
+                    img_bytes = resolve_photo_bytes(cf)
+                    if img_bytes:
+                        import io
+                        import base64
+                        from PIL import Image
+                        im = Image.open(io.BytesIO(img_bytes))
+                        w, h = im.size
+                        cx = max(0, int(crop_rel.get("x", 0) * w))
+                        cy = max(0, int(crop_rel.get("y", 0) * h))
+                        cw = int(crop_rel.get("w", 1.0) * w)
+                        ch = int(crop_rel.get("h", 1.0) * h)
+                        if cw > 40 and ch > 40:
+                            cropped_im = im.crop((cx, cy, min(w, cx + cw), min(h, cy + ch)))
+                            buf = io.BytesIO()
+                            cropped_im.save(buf, format="JPEG", quality=90, optimize=True)
+                            cf["croppedBase"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+                            cf["isCropped"] = True
+                except Exception as crop_err:
+                    print(f"⚠️ [SaveBookUseCase] Ошибка авто-кадрирования обложки: {crop_err}")
+
+        # 5. Сохранение обработанных фото в локальный архив books_vault/
         folder_name, saved_files = save_book_vault_photos(
             book.article,
             book.title,

@@ -1311,21 +1311,21 @@
 
     function applyStudioPreset(presetName) {
       pushPhotoHistory(currentEditingPhoto, 'Пресет: ' + presetName);
-      if (presetName === 'studio_white') {
-        studioState.whiten = 85;
-        studioState.brightness = 4;
-        studioState.contrast = 8;
+      if (presetName === 'sharp_text') {
+        studioState.whiten = 0;
+        studioState.brightness = 3;
+        studioState.contrast = 18;
         studioState.saturation = 0;
-      } else if (presetName === 'sharp_text') {
-        studioState.whiten = 40;
-        studioState.brightness = 5;
-        studioState.contrast = 25;
-        studioState.saturation = -10;
-      } else if (presetName === 'defects') {
+      } else if (presetName === 'vibrant_art') {
         studioState.whiten = 0;
         studioState.brightness = 0;
-        studioState.contrast = 15;
-        studioState.saturation = 10;
+        studioState.contrast = 8;
+        studioState.saturation = 15;
+      } else if (presetName === 'clean_white') {
+        studioState.whiten = 75;
+        studioState.brightness = 2;
+        studioState.contrast = 5;
+        studioState.saturation = 0;
       } else if (presetName === 'original') {
         studioState.whiten = 0;
         studioState.brightness = 0;
