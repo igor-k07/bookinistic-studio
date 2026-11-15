@@ -568,7 +568,12 @@
           },
           cropend() {
             if (!isProgrammaticCropBoxUpdate && cropperInstance && cropperInstance.cropped) {
-              captureCropBoxOnOriginal();
+              const cb = cropperInstance.getCropBoxData();
+              if (cb && cb.width > 25 && cb.height > 25) {
+                zoomStudioToCropBox();
+              } else {
+                captureCropBoxOnOriginal();
+              }
             }
             updateCropResolution();
             updateCropResetButtonVisibility();
@@ -648,12 +653,76 @@
     const cancelCropMode = resetCropToOriginal;
 
     function zoomStudioToCropBox() {
-      // Фотография всегда должна быть видна целиком с комфортным запасом свободного места по краям
-      if (!cropperInstance) return;
-      fitStudioImageToContainer(false);
+      if (!cropperInstance || !cropperInstance.cropped) return;
+
+      const container = cropperInstance.getContainerData();
+      const canvas = cropperInstance.getCanvasData();
+      const cb = cropperInstance.getCropBoxData();
+
+      if (!cb || !cb.width || !cb.height || cb.width < 20 || cb.height < 20) return;
+      if (!container || !container.width || !container.height) return;
+      if (!canvas || !canvas.width || !canvas.height) return;
+
+      // Безопасные отступы от краев рабочей зоны редактора:
+      // padBottom = 48px гарантирует, что ни рамка, ни нижний край фото не перекроются панелью инструментов
+      const padX = 40;
+      const padTop = 28;
+      const padBottom = 48;
+
+      const availW = Math.max(100, container.width - padX * 2);
+      const availH = Math.max(100, container.height - padTop - padBottom);
+
+      // Зона обрезки масштабируется так, чтобы занимать 72% безопасной области просмотра по центру.
+      // Оставшиеся ~14% пространства с каждой стороны позволяют пользователю видеть внешние края фотографии,
+      // сохраняя контекст вокруг выделения.
+      const CROP_VIEW_FRACTION = 0.72;
+      const targetCbW = availW * CROP_VIEW_FRACTION;
+      const targetCbH = availH * CROP_VIEW_FRACTION;
+
+      const scale = Math.min(targetCbW / cb.width, targetCbH / cb.height);
+      if (!isFinite(scale) || scale <= 0) return;
+
+      const clampedScale = Math.max(0.25, Math.min(scale, 4.0));
+
+      const newCanvasW = canvas.width * clampedScale;
+      const newCanvasH = canvas.height * clampedScale;
+      const newCbW = cb.width * clampedScale;
+      const newCbH = cb.height * clampedScale;
+
+      // Центрируем зону обрезки строго по центру безопасной области
+      const centerX = container.width / 2;
+      const centerY = padTop + availH / 2;
+
+      const newCbLeft = centerX - newCbW / 2;
+      const newCbTop = centerY - newCbH / 2;
+
+      // Смещение рамки относительно начала холста
+      const offsetInCanvasX = cb.left - canvas.left;
+      const offsetInCanvasY = cb.top - canvas.top;
+
+      const newCanvasLeft = newCbLeft - offsetInCanvasX * clampedScale;
+      const newCanvasTop = newCbTop - offsetInCanvasY * clampedScale;
+
+      isProgrammaticCropBoxUpdate = true;
+      cropperInstance.setCanvasData({
+        left: newCanvasLeft,
+        top: newCanvasTop,
+        width: newCanvasW,
+        height: newCanvasH
+      });
+      cropperInstance.setCropBoxData({
+        left: newCbLeft,
+        top: newCbTop,
+        width: newCbW,
+        height: newCbH
+      });
+      isProgrammaticCropBoxUpdate = false;
+
+      captureCropBoxOnOriginal();
       updateCropResolution();
       updateZoomBadge();
       updateCropResetButtonVisibility();
+      markStudioChanged('Приближение к зоне обрезки');
     }
 
     function commitStudioCrop() {
@@ -937,7 +1006,11 @@
         for (const entry of entries) {
           if (entry.contentRect.width > 50 && entry.contentRect.height > 50) {
             cropperInstance.resize();
-            fitStudioImageToContainer(false);
+            if (cropperInstance.cropped) {
+              zoomStudioToCropBox();
+            } else {
+              fitStudioImageToContainer(false);
+            }
           }
         }
       });
@@ -962,7 +1035,11 @@
 
     function centerStudioImage() {
       if (!cropperInstance) return;
-      fitStudioImageToContainer(false);
+      if (cropperInstance.cropped) {
+        zoomStudioToCropBox();
+      } else {
+        fitStudioImageToContainer(false);
+      }
       updateZoomBadge();
       showToast('🎯 Фото выровнено строго по центру');
     }
@@ -1666,6 +1743,7 @@
 
       setStudioInteractionMode('crop');
       captureCropBoxOnOriginal();
+      zoomStudioToCropBox();
       updateCropResolution();
       updateCropResetButtonVisibility();
       markStudioChanged();
@@ -1691,6 +1769,7 @@
       isProgrammaticCropBoxUpdate = false;
 
       captureCropBoxOnOriginal();
+      zoomStudioToCropBox();
       updateCropResolution();
       updateCropResetButtonVisibility();
       markStudioChanged();
@@ -1724,7 +1803,11 @@
     window.addEventListener('resize', () => {
       if (isStudioOpen && cropperInstance) {
         cropperInstance.resize();
-        fitStudioImageToContainer(false);
+        if (cropperInstance.cropped) {
+          zoomStudioToCropBox();
+        } else {
+          fitStudioImageToContainer(false);
+        }
       }
     });
 
