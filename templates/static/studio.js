@@ -466,9 +466,10 @@
       updateStudioPhotoNavUI();
       updateStudioHistoryUI();
 
-      const baseSource = (photo.isCropped && photo.croppedBase)
+      const fullSource = getPhotoFullSource(photo);
+      const baseSource = (photo.isCropped && photo.croppedBase && startMode !== 'crop')
         ? photo.croppedBase
-        : (photo.aiWhiteOriginal || photo.cameraOriginal || photo.rawOriginal || photo.preview);
+        : fullSource;
       document.getElementById('photoStudioModal').classList.remove('hidden');
 
       reloadStudioCropper(baseSource, () => {
@@ -479,38 +480,16 @@
         initStudioSmoothZoom();
         resetCropStateUI();
 
-        // Если есть сохраненные относительные координаты контура книги, сразу выставляем рамку (только если фото еще НЕ обрезано)
-        if (!photo.isCropped && photo.aiWhiteOriginal && photo.aiCropRelative) {
-          try {
-            const canvasData = cropperInstance.getCanvasData();
-            const rel = photo.aiCropRelative;
-            const cbLeft = canvasData.left + rel.x * canvasData.width;
-            const cbTop = canvasData.top + rel.y * canvasData.height;
-            const cbWidth = rel.w * canvasData.width;
-            const cbHeight = rel.h * canvasData.height;
-            cropperInstance.crop();
-            isProgrammaticCropBoxUpdate = true;
-            cropperInstance.setCropBoxData({
-              left: cbLeft,
-              top: cbTop,
-              width: cbWidth,
-              height: cbHeight
-            });
-            isProgrammaticCropBoxUpdate = false;
-            captureCropBoxOnOriginal();
-            zoomStudioToCropBox();
-          } catch (err) {
-            console.error('Ошибка выставления авто-рамки книги:', err);
-          }
+        // Если открываем сразу в режиме кадрирования или есть авто-рамка контура книги
+        if (startMode === 'crop' || (!photo.isCropped && photo.aiWhiteOriginal && photo.aiCropRelative)) {
+          restoreCropFrameOnFullSource();
+          setStudioInteractionMode('crop');
+        } else {
+          setStudioInteractionMode('move');
         }
 
         if (photo.isCropped) {
           updateCropResetButtonVisibility();
-        }
-        if (startMode === 'crop') {
-          setStudioInteractionMode('crop');
-        } else {
-          setStudioInteractionMode('move');
         }
         updateCropResolution();
         updateZoomBadge();
@@ -588,6 +567,81 @@
       imgEl.src = sourceUrl;
     }
 
+    function getPhotoFullSource(photo) {
+      if (!photo) return null;
+      return photo.aiWhiteOriginal || photo.cameraOriginal || photo.rawOriginal || photo.preview;
+    }
+
+    function restoreCropFrameOnFullSource() {
+      if (!cropperInstance || !currentEditingPhoto) return false;
+
+      const canvas = cropperInstance.getCanvasData();
+      const img = cropperInstance.getImageData();
+      if (!canvas || !img || !canvas.width || !canvas.height) return false;
+
+      let cbData = null;
+
+      // 1. Сначала пробуем восстановить по сохраненным координатам на исходнике (с учетом угла поворота)
+      if (currentEditingPhoto.cropBoxOnOriginal) {
+        cbData = originalToScreen(currentEditingPhoto.cropBoxOnOriginal, canvas, img, studioCurrentRotation);
+      }
+
+      // 2. Если нет cropBoxOnOriginal или некорректно, берем относительные координаты
+      const rel = currentEditingPhoto.cropRelative || currentEditingPhoto.aiCropRelative;
+      if ((!cbData || cbData.width < 15 || cbData.height < 15) && rel && rel.w > 0 && rel.h > 0) {
+        cbData = {
+          left: canvas.left + rel.x * canvas.width,
+          top: canvas.top + rel.y * canvas.height,
+          width: rel.w * canvas.width,
+          height: rel.h * canvas.height
+        };
+      }
+
+      // 3. Если рамка определена, активируем ее на полном кадре
+      if (cbData && cbData.width > 15 && cbData.height > 15) {
+        cropperInstance.crop();
+        isProgrammaticCropBoxUpdate = true;
+        cropperInstance.setCropBoxData(cbData);
+        isProgrammaticCropBoxUpdate = false;
+        captureCropBoxOnOriginal();
+        zoomStudioToCropBox();
+        return true;
+      }
+      return false;
+    }
+
+    function switchToFullSourceForCrop(onReadyCallback) {
+      if (!currentEditingPhoto) {
+        if (typeof onReadyCallback === 'function') onReadyCallback();
+        return;
+      }
+
+      const fullSource = getPhotoFullSource(currentEditingPhoto);
+      const imgEl = document.getElementById('studioCropperImage');
+      const isAlreadyFullSource = imgEl && imgEl.src && (imgEl.src === fullSource || imgEl.src.endsWith(fullSource));
+
+      if (isAlreadyFullSource && cropperInstance) {
+        if (!cropperInstance.cropped) {
+          restoreCropFrameOnFullSource();
+        }
+        if (typeof onReadyCallback === 'function') onReadyCallback();
+        return;
+      }
+
+      reloadStudioCropper(fullSource, () => {
+        if (studioCurrentRotation !== 0) {
+          cropperInstance.rotateTo(studioCurrentRotation);
+        }
+        fitStudioImageToContainer(false);
+        restoreCropFrameOnFullSource();
+        applyStudioFilterPreview();
+        updateCropResetButtonVisibility();
+        updateStudioHistoryUI();
+
+        if (typeof onReadyCallback === 'function') onReadyCallback();
+      });
+    }
+
     function updateCropResetButtonVisibility() {
       const btn = document.getElementById('btnResetCrop');
       if (!btn) return;
@@ -605,11 +659,13 @@
       pushPhotoHistory(currentEditingPhoto, 'Сброс рамки');
 
       if (currentEditingPhoto && (currentEditingPhoto.croppedBase || currentEditingPhoto.isCropped)) {
-        const origSrc = currentEditingPhoto.aiWhiteOriginal || currentEditingPhoto.cameraOriginal || currentEditingPhoto.rawOriginal || currentEditingPhoto.preview;
+        const origSrc = getPhotoFullSource(currentEditingPhoto);
         currentEditingPhoto.croppedBase = null;
         currentEditingPhoto.isCropped = false;
         currentEditingPhoto.isAutoCropped = false;
         currentEditingPhoto.aiCropRelative = null;
+        currentEditingPhoto.cropRelative = null;
+        currentEditingPhoto.cropBoxOnOriginal = null;
         currentEditingPhoto.preview = origSrc;
         currentEditingPhoto.data = origSrc.includes(',') ? origSrc.split(',')[1] : origSrc;
         preCropImageSrc = null;
@@ -636,6 +692,8 @@
           currentEditingPhoto.isCropped = false;
           currentEditingPhoto.isAutoCropped = false;
           currentEditingPhoto.aiCropRelative = null;
+          currentEditingPhoto.cropRelative = null;
+          currentEditingPhoto.cropBoxOnOriginal = null;
         }
         studioCropBoxOnOriginal = null;
         cropperInstance.clear();
@@ -800,6 +858,22 @@
           pushPhotoHistory(currentEditingPhoto, 'Обрезка кадра');
           const cleanCroppedUrl = croppedCanvas.toDataURL('image/jpeg', 0.94);
 
+          // 1. Фиксируем точные координаты рамки на полном кадре, чтобы детали старого изображения всегда можно было вернуть
+          captureCropBoxOnOriginal();
+          currentEditingPhoto.cropBoxOnOriginal = studioCropBoxOnOriginal;
+
+          const canvasData = cropperInstance.getCanvasData();
+          const cbData = cropperInstance.getCropBoxData();
+          if (canvasData && cbData && canvasData.width > 0 && canvasData.height > 0) {
+            currentEditingPhoto.cropRelative = {
+              x: (cbData.left - canvasData.left) / canvasData.width,
+              y: (cbData.top - canvasData.top) / canvasData.height,
+              w: cbData.width / canvasData.width,
+              h: cbData.height / canvasData.height
+            };
+            currentEditingPhoto.aiCropRelative = currentEditingPhoto.cropRelative;
+          }
+
           // Применяем текущие фильтры студии к превью для пула и слотов
           const filteredCanvas = document.createElement('canvas');
           filteredCanvas.width = croppedCanvas.width;
@@ -817,7 +891,6 @@
           currentEditingPhoto.mime = 'image/jpeg';
           currentEditingPhoto.isCropped = true;
           currentEditingPhoto.isProcessed = true;
-          currentEditingPhoto.aiCropRelative = null;
 
           renderPool();
           renderActiveBookSlots();
@@ -955,28 +1028,43 @@
       const hint = document.getElementById('studioCropHint');
 
       if (mode === 'crop') {
-        isFreeCroppingActive = true;
-        cropperInstance.setDragMode('crop');
+        const proceedWithCrop = () => {
+          isFreeCroppingActive = true;
+          cropperInstance.setDragMode('crop');
 
-        // Не навязываем рамку на весь экран: оставляем свободный курсор прицел, чтобы оператор выделил область сам
-        if (!cropperInstance.cropped) {
-          cropperInstance.clear();
+          if (!cropperInstance.cropped) {
+            restoreCropFrameOnFullSource();
+          }
+
+          if (btnMove) {
+            btnMove.className = 'py-1 px-2.5 rounded-lg text-[11px] font-medium transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300';
+          }
+          if (btnCrop) {
+            btnCrop.className = 'py-1 px-2.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shadow-md ring-1 ring-amber-400/50';
+          }
+          if (btnCropText) {
+            btnCropText.textContent = 'Выйти из среза';
+          }
+          if (qr) qr.classList.remove('hidden');
+          if (crs) crs.classList.remove('hidden');
+          if (hint) {
+            hint.innerHTML = '✂️ <b>Режим среза активен</b>: полный кадр открыт. Измените границы рамки или выделите область. Нажмите <b>[C]</b> для сохранения.';
+          }
+          updateCropResolution();
+          updateCropResetButtonVisibility();
+        };
+
+        // Если сейчас отображается уже обрезанная миниатюра, переключаемся на полный кадр с фиксацией рамки
+        if (currentEditingPhoto && currentEditingPhoto.isCropped && currentEditingPhoto.croppedBase) {
+          const fullSource = getPhotoFullSource(currentEditingPhoto);
+          const imgEl = document.getElementById('studioCropperImage');
+          if (imgEl && imgEl.src && imgEl.src !== fullSource && !imgEl.src.endsWith(fullSource)) {
+            switchToFullSourceForCrop(proceedWithCrop);
+            return;
+          }
         }
 
-        if (btnMove) {
-          btnMove.className = 'py-1 px-2.5 rounded-lg text-[11px] font-medium transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300';
-        }
-        if (btnCrop) {
-          btnCrop.className = 'py-1 px-2.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shadow-md ring-1 ring-amber-400/50';
-        }
-        if (btnCropText) {
-          btnCropText.textContent = 'Выйти из среза';
-        }
-        if (qr) qr.classList.remove('hidden');
-        if (crs) crs.classList.remove('hidden');
-        if (hint) {
-          hint.innerHTML = '✂️ <b>Режим среза активен</b>: выделите нужную область мышью (прицел). Повторный клик или [C] сохранит изображение в области среза.';
-        }
+        proceedWithCrop();
       } else {
         isFreeCroppingActive = false;
         cropperInstance.setDragMode('move');
@@ -995,9 +1083,9 @@
         if (hint) {
           hint.innerHTML = '✋ <b>Режим перемещения</b>: зажмите мышь и двигайте фото в окне. Колесико мыши — плавный зум. Нажмите <b>[C]</b> для обрезания.';
         }
+        updateCropResolution();
+        updateCropResetButtonVisibility();
       }
-      updateCropResolution();
-      updateCropResetButtonVisibility();
     }
 
     function toggleStudioCropMode() {
@@ -1010,8 +1098,10 @@
           showToast('✋ Режим перемещения активен');
         }
       } else {
-        setStudioInteractionMode('crop');
-        showToast('✂️ Режим среза: выделите область мышью на фото');
+        switchToFullSourceForCrop(() => {
+          setStudioInteractionMode('crop');
+          showToast('✂️ Режим среза: полный кадр открыт, границы рамки зафиксированы');
+        });
       }
     }
 
@@ -1760,81 +1850,108 @@
       cropRatio = mode;
       updateCropRatioButtons(mode);
 
-      const normDeg = ((studioCurrentRotation % 360) + 360) % 360;
-      const nearestCardinal = Math.round(normDeg / 90) * 90 % 360;
-      const isPerp = (nearestCardinal === 90 || nearestCardinal === 270);
+      const applyRatio = () => {
+        const normDeg = ((studioCurrentRotation % 360) + 360) % 360;
+        const nearestCardinal = Math.round(normDeg / 90) * 90 % 360;
+        const isPerp = (nearestCardinal === 90 || nearestCardinal === 270);
 
-      if (mode === '3:4') {
-        cropperInstance.setAspectRatio(isPerp ? 4 / 3 : 3 / 4);
-      } else if (mode === '1:1') {
-        cropperInstance.setAspectRatio(1);
-      } else {
-        cropperInstance.setAspectRatio(NaN);
-      }
+        if (mode === '3:4') {
+          cropperInstance.setAspectRatio(isPerp ? 4 / 3 : 3 / 4);
+        } else if (mode === '1:1') {
+          cropperInstance.setAspectRatio(1);
+        } else {
+          cropperInstance.setAspectRatio(NaN);
+        }
 
-      if (!cropperInstance.cropped) {
-        cropperInstance.crop();
-      }
+        if (!cropperInstance.cropped) {
+          cropperInstance.crop();
+        }
 
-      const cData = cropperInstance.getCanvasData();
-      if (cData && cData.width && cData.height) {
-        let cbW, cbH;
-        const targetRatio = (mode === '3:4') ? (isPerp ? 4 / 3 : 3 / 4) : (mode === '1:1' ? 1 : null);
-        if (targetRatio) {
-          if (cData.width / cData.height > targetRatio) {
-            cbH = cData.height * 0.90;
-            cbW = cbH * targetRatio;
+        const cData = cropperInstance.getCanvasData();
+        if (cData && cData.width && cData.height) {
+          let cbW, cbH;
+          const targetRatio = (mode === '3:4') ? (isPerp ? 4 / 3 : 3 / 4) : (mode === '1:1' ? 1 : null);
+          if (targetRatio) {
+            if (cData.width / cData.height > targetRatio) {
+              cbH = cData.height * 0.90;
+              cbW = cbH * targetRatio;
+            } else {
+              cbW = cData.width * 0.90;
+              cbH = cbW / targetRatio;
+            }
           } else {
             cbW = cData.width * 0.90;
-            cbH = cbW / targetRatio;
+            cbH = cData.height * 0.90;
           }
-        } else {
-          cbW = cData.width * 0.90;
-          cbH = cData.height * 0.90;
+          isProgrammaticCropBoxUpdate = true;
+          cropperInstance.setCropBoxData({
+            left: cData.left + (cData.width - cbW) / 2,
+            top: cData.top + (cData.height - cbH) / 2,
+            width: cbW,
+            height: cbH
+          });
+          isProgrammaticCropBoxUpdate = false;
         }
-        isProgrammaticCropBoxUpdate = true;
-        cropperInstance.setCropBoxData({
-          left: cData.left + (cData.width - cbW) / 2,
-          top: cData.top + (cData.height - cbH) / 2,
-          width: cbW,
-          height: cbH
-        });
-        isProgrammaticCropBoxUpdate = false;
+
+        setStudioInteractionMode('crop');
+        captureCropBoxOnOriginal();
+        zoomStudioToCropBox();
+        updateCropResolution();
+        updateCropResetButtonVisibility();
+        markStudioChanged();
+      };
+
+      if (currentEditingPhoto && currentEditingPhoto.isCropped && currentEditingPhoto.croppedBase) {
+        const fullSource = getPhotoFullSource(currentEditingPhoto);
+        const imgEl = document.getElementById('studioCropperImage');
+        if (imgEl && imgEl.src !== fullSource && !imgEl.src.endsWith(fullSource)) {
+          switchToFullSourceForCrop(applyRatio);
+          return;
+        }
       }
 
-      setStudioInteractionMode('crop');
-      captureCropBoxOnOriginal();
-      zoomStudioToCropBox();
-      updateCropResolution();
-      updateCropResetButtonVisibility();
-      markStudioChanged();
+      applyRatio();
     }
 
     function applyMarginCrop(percent) {
       if (!cropperInstance) return;
-      if (!cropperInstance.cropped) {
-        cropperInstance.crop();
+
+      const applyMargin = () => {
+        if (!cropperInstance.cropped) {
+          cropperInstance.crop();
+        }
+        const cb = cropperInstance.getCropBoxData();
+        const p = (percent / 100.0) / 2.0;
+        const marginX = cb.width * p;
+        const marginY = cb.height * p;
+
+        isProgrammaticCropBoxUpdate = true;
+        cropperInstance.setCropBoxData({
+          left: cb.left + marginX,
+          top: cb.top + marginY,
+          width: Math.max(50, cb.width - marginX * 2),
+          height: Math.max(50, cb.height - marginY * 2)
+        });
+        isProgrammaticCropBoxUpdate = false;
+
+        captureCropBoxOnOriginal();
+        zoomStudioToCropBox();
+        updateCropResolution();
+        updateCropResetButtonVisibility();
+        markStudioChanged();
+        showToast(`✂️ Поля сужены на ${percent}%`);
+      };
+
+      if (currentEditingPhoto && currentEditingPhoto.isCropped && currentEditingPhoto.croppedBase) {
+        const fullSource = getPhotoFullSource(currentEditingPhoto);
+        const imgEl = document.getElementById('studioCropperImage');
+        if (imgEl && imgEl.src !== fullSource && !imgEl.src.endsWith(fullSource)) {
+          switchToFullSourceForCrop(applyMargin);
+          return;
+        }
       }
-      const cb = cropperInstance.getCropBoxData();
-      const p = (percent / 100.0) / 2.0;
-      const marginX = cb.width * p;
-      const marginY = cb.height * p;
 
-      isProgrammaticCropBoxUpdate = true;
-      cropperInstance.setCropBoxData({
-        left: cb.left + marginX,
-        top: cb.top + marginY,
-        width: Math.max(50, cb.width - marginX * 2),
-        height: Math.max(50, cb.height - marginY * 2)
-      });
-      isProgrammaticCropBoxUpdate = false;
-
-      captureCropBoxOnOriginal();
-      zoomStudioToCropBox();
-      updateCropResolution();
-      updateCropResetButtonVisibility();
-      markStudioChanged();
-      showToast(`✂️ Поля сужены на ${percent}%`);
+      applyMargin();
     }
 
     function resetCropBox() {
@@ -1977,7 +2094,19 @@
         currentEditingPhoto.isCropped = isCroppedActive;
         currentEditingPhoto.croppedBase = isCroppedActive ? cleanCroppedUrl : null;
         if (isCroppedActive) {
-          currentEditingPhoto.aiCropRelative = null;
+          captureCropBoxOnOriginal();
+          currentEditingPhoto.cropBoxOnOriginal = studioCropBoxOnOriginal;
+          const canvasData = cropperInstance.getCanvasData();
+          const cbData = cropperInstance.getCropBoxData();
+          if (canvasData && cbData && canvasData.width > 0 && canvasData.height > 0) {
+            currentEditingPhoto.cropRelative = {
+              x: (cbData.left - canvasData.left) / canvasData.width,
+              y: (cbData.top - canvasData.top) / canvasData.height,
+              w: cbData.width / canvasData.width,
+              h: cbData.height / canvasData.height
+            };
+            currentEditingPhoto.aiCropRelative = currentEditingPhoto.cropRelative;
+          }
         }
         currentEditingPhoto.whiten = studioState.whiten;
         currentEditingPhoto.brightness = studioState.brightness;

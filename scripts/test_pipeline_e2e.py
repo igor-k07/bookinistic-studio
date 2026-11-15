@@ -34,7 +34,7 @@ def req(method: str, path: str, body: dict = None) -> dict:
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Content-Type": "application/json"} if body is not None else {}
     r = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(r, timeout=30) as resp:
+    with urllib.request.urlopen(r, timeout=90) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 

@@ -50,6 +50,8 @@
           assignedSlot: p.assignedSlot || null
         };
         if (p.aiCropRelative) item.aiCropRelative = p.aiCropRelative;
+        if (p.cropRelative) item.cropRelative = p.cropRelative;
+        if (p.cropBoxOnOriginal) item.cropBoxOnOriginal = p.cropBoxOnOriginal;
         return item;
       });
 
