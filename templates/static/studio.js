@@ -692,16 +692,14 @@
             updateCropResolution();
           },
           cropmove() {
+            if (!isProgrammaticCropBoxUpdate && isFreeCroppingActive) {
+              syncCropFrameToPhoto();
+            }
             markStudioChanged();
           },
           cropend() {
-            if (!isProgrammaticCropBoxUpdate && cropperInstance && cropperInstance.cropped) {
-              const cb = cropperInstance.getCropBoxData();
-              if (cb && cb.width > 25 && cb.height > 25) {
-                zoomStudioToCropBox();
-              } else {
-                captureCropBoxOnOriginal();
-              }
+            if (!isProgrammaticCropBoxUpdate && isFreeCroppingActive) {
+              syncCropFrameToPhoto();
             }
             updateCropResolution();
             updateCropResetButtonVisibility();
@@ -716,6 +714,28 @@
       imgEl.src = sourceUrl;
     }
 
+    function syncCropFrameToPhoto() {
+      if (!cropperInstance || !cropperInstance.cropped || !currentEditingPhoto) return;
+      const canvasData = cropperInstance.getCanvasData();
+      const cbData = cropperInstance.getCropBoxData();
+      if (canvasData && cbData && canvasData.width > 0 && canvasData.height > 0) {
+        const rx = (cbData.left - canvasData.left) / canvasData.width;
+        const ry = (cbData.top - canvasData.top) / canvasData.height;
+        const rw = cbData.width / canvasData.width;
+        const rh = cbData.height / canvasData.height;
+
+        currentEditingPhoto.cropRelative = {
+          x: Math.max(0, Math.min(0.98, rx)),
+          y: Math.max(0, Math.min(0.98, ry)),
+          w: Math.max(0.02, Math.min(1 - Math.max(0, rx), rw)),
+          h: Math.max(0.02, Math.min(1 - Math.max(0, ry), rh))
+        };
+        currentEditingPhoto.aiCropRelative = currentEditingPhoto.cropRelative;
+        captureCropBoxOnOriginal();
+        currentEditingPhoto.cropBoxOnOriginal = studioCropBoxOnOriginal;
+      }
+    }
+
     function getPhotoFullSource(photo) {
       if (!photo) return null;
       return photo.aiWhiteOriginal || photo.cameraOriginal || photo.rawOriginal || photo.preview;
@@ -725,35 +745,38 @@
       if (!cropperInstance || !currentEditingPhoto) return false;
 
       const canvas = cropperInstance.getCanvasData();
-      const img = cropperInstance.getImageData();
-      if (!canvas || !img || !canvas.width || !canvas.height) return false;
+      if (!canvas || !canvas.width || !canvas.height) return false;
 
       let cbData = null;
 
-      // 1. Сначала пробуем восстановить по сохраненным координатам на исходнике (с учетом угла поворота)
-      if (currentEditingPhoto.cropBoxOnOriginal) {
-        cbData = originalToScreen(currentEditingPhoto.cropBoxOnOriginal, canvas, img, studioCurrentRotation);
-      }
-
-      // 2. Если нет cropBoxOnOriginal или некорректно, берем относительные координаты
+      // 1. Приоритетно восстанавливаем по точным сохраненным относительным координатам
       const rel = currentEditingPhoto.cropRelative || currentEditingPhoto.aiCropRelative;
-      if ((!cbData || cbData.width < 15 || cbData.height < 15) && rel && rel.w > 0 && rel.h > 0) {
+      if (rel && rel.w > 0.01 && rel.h > 0.01) {
+        const rx = Math.max(0, Math.min(0.98, Number(rel.x) || 0));
+        const ry = Math.max(0, Math.min(0.98, Number(rel.y) || 0));
+        const rw = Math.max(0.02, Math.min(1 - rx, Number(rel.w) || 1));
+        const rh = Math.max(0.02, Math.min(1 - ry, Number(rel.h) || 1));
+
         cbData = {
-          left: canvas.left + rel.x * canvas.width,
-          top: canvas.top + rel.y * canvas.height,
-          width: rel.w * canvas.width,
-          height: rel.h * canvas.height
+          left: canvas.left + rx * canvas.width,
+          top: canvas.top + ry * canvas.height,
+          width: rw * canvas.width,
+          height: rh * canvas.height
         };
+      } else if (currentEditingPhoto.cropBoxOnOriginal) {
+        const img = cropperInstance.getImageData();
+        if (img) {
+          cbData = originalToScreen(currentEditingPhoto.cropBoxOnOriginal, canvas, img, studioCurrentRotation);
+        }
       }
 
-      // 3. Если рамка определена, активируем ее на полном кадре
+      // 2. Если рамка определена, активируем ее на полном кадре ровно в сохраненной позиции
       if (cbData && cbData.width > 15 && cbData.height > 15) {
         cropperInstance.crop();
         isProgrammaticCropBoxUpdate = true;
         cropperInstance.setCropBoxData(cbData);
         isProgrammaticCropBoxUpdate = false;
-        captureCropBoxOnOriginal();
-        zoomStudioToCropBox();
+        syncCropFrameToPhoto();
         return true;
       }
       return false;
@@ -770,9 +793,8 @@
       const isAlreadyFullSource = imgEl && imgEl.src && (imgEl.src === fullSource || imgEl.src.endsWith(fullSource));
 
       if (isAlreadyFullSource && cropperInstance) {
-        if (!cropperInstance.cropped) {
-          restoreCropFrameOnFullSource();
-        }
+        restoreCropFrameOnFullSource();
+        setStudioInteractionMode('crop');
         if (typeof onReadyCallback === 'function') onReadyCallback();
         return;
       }
@@ -783,6 +805,7 @@
         }
         fitStudioImageToContainer(false);
         restoreCropFrameOnFullSource();
+        setStudioInteractionMode('crop');
         applyStudioFilterPreview();
         updateCropResetButtonVisibility();
         updateStudioHistoryUI();
@@ -1007,20 +1030,7 @@
           const cleanCroppedUrl = croppedCanvas.toDataURL('image/jpeg', 0.94);
 
           // 1. Фиксируем точные координаты рамки на полном кадре, чтобы детали старого изображения всегда можно было вернуть
-          captureCropBoxOnOriginal();
-          currentEditingPhoto.cropBoxOnOriginal = studioCropBoxOnOriginal;
-
-          const canvasData = cropperInstance.getCanvasData();
-          const cbData = cropperInstance.getCropBoxData();
-          if (canvasData && cbData && canvasData.width > 0 && canvasData.height > 0) {
-            currentEditingPhoto.cropRelative = {
-              x: (cbData.left - canvasData.left) / canvasData.width,
-              y: (cbData.top - canvasData.top) / canvasData.height,
-              w: cbData.width / canvasData.width,
-              h: cbData.height / canvasData.height
-            };
-            currentEditingPhoto.aiCropRelative = currentEditingPhoto.cropRelative;
-          }
+          syncCropFrameToPhoto();
 
           // Применяем текущие фильтры студии к превью для пула и слотов
           const filteredCanvas = document.createElement('canvas');
@@ -2062,8 +2072,7 @@
         }
 
         setStudioInteractionMode('crop');
-        captureCropBoxOnOriginal();
-        zoomStudioToCropBox();
+        syncCropFrameToPhoto();
         updateCropResolution();
         updateCropResetButtonVisibility();
         markStudioChanged();
@@ -2102,8 +2111,7 @@
         });
         isProgrammaticCropBoxUpdate = false;
 
-        captureCropBoxOnOriginal();
-        zoomStudioToCropBox();
+        syncCropFrameToPhoto();
         updateCropResolution();
         updateCropResetButtonVisibility();
         markStudioChanged();
@@ -2262,18 +2270,9 @@
         currentEditingPhoto.isCropped = isCroppedActive;
         currentEditingPhoto.croppedBase = isCroppedActive ? cleanCroppedUrl : null;
         if (isCroppedActive) {
-          captureCropBoxOnOriginal();
-          currentEditingPhoto.cropBoxOnOriginal = studioCropBoxOnOriginal;
-          const canvasData = cropperInstance.getCanvasData();
-          const cbData = cropperInstance.getCropBoxData();
-          if (canvasData && cbData && canvasData.width > 0 && canvasData.height > 0) {
-            currentEditingPhoto.cropRelative = {
-              x: (cbData.left - canvasData.left) / canvasData.width,
-              y: (cbData.top - canvasData.top) / canvasData.height,
-              w: cbData.width / canvasData.width,
-              h: cbData.height / canvasData.height
-            };
-            currentEditingPhoto.aiCropRelative = currentEditingPhoto.cropRelative;
+          // Обновляем координаты рамки только если пользователь сейчас находится в режиме кадрирования!
+          if (isFreeCroppingActive && cropperInstance && cropperInstance.cropped) {
+            syncCropFrameToPhoto();
           }
         }
         currentEditingPhoto.whiten = studioState.whiten;
