@@ -668,95 +668,95 @@
         }
         const baseSrc = photo.cameraOriginal || photo.rawOriginal || photo.preview;
         const role = photo.assignedSlot || 'cover_front';
-        const data = await ApiClient.processPhoto(baseSrc, role, !silent);
+        const data = await ApiClient.processPhoto(baseSrc, role, true);
         if (!data.success || !data.image) {
           throw new Error(data.error || 'Ошибка ИИ-обработки');
         }
 
-        photo.preview = data.image;
-        photo.data = data.image.includes(',') ? data.image.split(',')[1] : data.image;
-        photo.preview = data.image;
-        photo.data = data.image.includes(',') ? data.image.split(',')[1] : data.image;
-        photo.croppedBase = null; // Не сохраняем обрезанное изображение, оставляем полный красивый кадр!
-        photo.isCropped = false;
-        photo.isAutoCropped = false;
+        if (typeof initPhotoHistory === 'function') {
+          initPhotoHistory(photo);
+        }
+
         photo.aiWhiteOriginal = data.image;
-        photo.aiCropRelative = data.crop_relative || null;
-        photo.rotation = 0;
-        photo.whiten = 0;
         photo.isProcessed = true;
         photo.isAiProcessed = true;
 
-        // Всего 1 шаг истории: возврат фона в 1 клик
-        photo.history = [
-          {
-            label: 'Снимок с камеры',
-            timestamp: Date.now() - 1000,
-            preview: photo.cameraOriginal,
-            data: photo.cameraOriginal.includes(',') ? photo.cameraOriginal.split(',')[1] : photo.cameraOriginal,
-            croppedBase: null,
-            rawOriginal: photo.cameraOriginal,
-            cameraOriginal: photo.cameraOriginal,
-            isCropped: false,
-            isAiProcessed: false,
-            hasCropBox: false,
-            cropBoxOnOriginal: null,
-            cropRatio: 'none',
-            whiten: 0,
-            brightness: 0,
-            contrast: 0,
-            saturation: 0,
-            rotation: 0,
-            cardinal: 0
-          },
-          {
-            label: 'ИИ белый фон',
-            timestamp: Date.now(),
-            preview: data.image,
-            data: data.image.includes(',') ? data.image.split(',')[1] : data.image,
-            croppedBase: null,
-            rawOriginal: photo.cameraOriginal,
-            cameraOriginal: photo.cameraOriginal,
-            isCropped: false,
-            isAiProcessed: true,
-            hasCropBox: Boolean(data.crop_relative),
-            cropBoxOnOriginal: null,
-            cropRatio: 'none',
-            whiten: 0,
-            brightness: 0,
-            contrast: 0,
-            saturation: 0,
-            rotation: 0,
-            cardinal: 0
-          }
-        ];
-        photo.historyIndex = 1;
+        // Сохраняем или определяем рамку кадрирования
+        let effectiveCropRel = photo.cropRelative || photo.aiCropRelative || data.crop_relative;
+        if (effectiveCropRel) {
+          photo.cropRelative = effectiveCropRel;
+          photo.aiCropRelative = effectiveCropRel;
+        }
 
-        if (currentEditingPhoto && currentEditingPhoto.id === photo.id && isStudioOpen) {
-          reloadStudioCropper(data.image, () => {
-            fitStudioImageToContainer(false);
-            if (photo.aiCropRelative) {
-              try {
-                const canvasData = cropperInstance.getCanvasData();
-                const rel = photo.aiCropRelative;
-                cropperInstance.crop();
-                isProgrammaticCropBoxUpdate = true;
-                cropperInstance.setCropBoxData({
-                  left: canvasData.left + rel.x * canvasData.width,
-                  top: canvasData.top + rel.y * canvasData.height,
-                  width: rel.w * canvasData.width,
-                  height: rel.h * canvasData.height
-                });
-                isProgrammaticCropBoxUpdate = false;
-                captureCropBoxOnOriginal();
-                zoomStudioToCropBox();
-              } catch (err) {}
-            }
-            setStudioInteractionMode('move');
-            updateZoomBadge();
-            updateCropResolution();
-            updateStudioHistoryUI();
-          });
+        // Если рамка есть, сразу нарезаем новое изображение с белым фоном под эту рамку
+        let croppedUrl = null;
+        if (effectiveCropRel && typeof window.cropImageSourceAsync === 'function') {
+          try {
+            croppedUrl = await window.cropImageSourceAsync(data.image, effectiveCropRel);
+          } catch (err) {
+            console.warn('Ошибка обрезки при быстром ИИ:', err);
+          }
+        }
+
+        if (croppedUrl) {
+          photo.croppedBase = croppedUrl;
+          photo.isCropped = true;
+        }
+
+        const previewBase = photo.croppedBase || data.image;
+        const filters = {
+          whiten: photo.whiten || 0,
+          brightness: photo.brightness || 0,
+          contrast: photo.contrast || 0,
+          saturation: photo.saturation || 0
+        };
+
+        let filteredUrl = previewBase;
+        if (typeof window.applyFiltersToImageAsync === 'function') {
+          filteredUrl = await window.applyFiltersToImageAsync(previewBase, filters);
+        }
+
+        photo.preview = filteredUrl;
+        photo.data = filteredUrl.includes(',') ? filteredUrl.split(',')[1] : filteredUrl;
+        photo.mime = 'image/jpeg';
+
+        // Добавляем шаг истории без затирания предыдущих действий
+        if (!Array.isArray(photo.history)) photo.history = [];
+        photo.history.push({
+          label: 'ИИ белый фон (rembg)',
+          timestamp: Date.now(),
+          preview: photo.preview,
+          data: photo.data,
+          croppedBase: photo.croppedBase,
+          rawOriginal: photo.rawOriginal,
+          cameraOriginal: photo.cameraOriginal,
+          aiWhiteOriginal: photo.aiWhiteOriginal,
+          isCropped: photo.isCropped,
+          isAiProcessed: true,
+          hasCropBox: Boolean(photo.isCropped),
+          cropBoxOnOriginal: photo.cropBoxOnOriginal || null,
+          cropRelative: photo.cropRelative || null,
+          cropRatio: 'none',
+          whiten: photo.whiten || 0,
+          brightness: photo.brightness || 0,
+          contrast: photo.contrast || 0,
+          saturation: photo.saturation || 0,
+          rotation: photo.rotation || 0,
+          cardinal: 0
+        });
+        photo.historyIndex = photo.history.length - 1;
+
+        if (typeof currentEditingPhoto !== 'undefined' && currentEditingPhoto && currentEditingPhoto.id === photo.id && typeof isStudioOpen !== 'undefined' && isStudioOpen) {
+          const displaySrc = photo.croppedBase || data.image;
+          if (typeof reloadStudioCropper === 'function') {
+            reloadStudioCropper(displaySrc, () => {
+              if (typeof fitStudioImageToContainer === 'function') fitStudioImageToContainer(false);
+              if (typeof setStudioInteractionMode === 'function') setStudioInteractionMode('move');
+              if (typeof updateZoomBadge === 'function') updateZoomBadge();
+              if (typeof updateCropResolution === 'function') updateCropResolution();
+              if (typeof updateStudioHistoryUI === 'function') updateStudioHistoryUI();
+            });
+          }
         }
 
         if (!silent) {

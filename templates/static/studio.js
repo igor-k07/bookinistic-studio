@@ -87,6 +87,114 @@
       }
     }
 
+    function cropImageSourceAsync(src, rel) {
+      return new Promise((resolve, reject) => {
+        if (!src) return reject(new Error('Нет источника для обрезки'));
+        if (!rel || !rel.w || !rel.h) return resolve(src);
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const nw = img.naturalWidth || img.width;
+            const nh = img.naturalHeight || img.height;
+            const rx = Math.max(0, Math.min(0.98, Number(rel.x) || 0));
+            const ry = Math.max(0, Math.min(0.98, Number(rel.y) || 0));
+            const rw = Math.max(0.02, Math.min(1 - rx, Number(rel.w) || 1));
+            const rh = Math.max(0.02, Math.min(1 - ry, Number(rel.h) || 1));
+
+            const sx = Math.round(rx * nw);
+            const sy = Math.round(ry * nh);
+            const sw = Math.round(rw * nw);
+            const sh = Math.round(rh * nh);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, sw);
+            canvas.height = Math.max(1, sh);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.94));
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.onerror = () => reject(new Error('Не удалось загрузить изображение для обрезки'));
+        img.src = src;
+      });
+    }
+    window.cropImageSourceAsync = cropImageSourceAsync;
+
+    function applyFiltersToImageAsync(src, filters) {
+      return new Promise((resolve) => {
+        if (!src) return resolve(src);
+        const W = filters ? (Number(filters.whiten) || 0) : 0;
+        const B = filters ? (Number(filters.brightness) || 0) : 0;
+        const C = filters ? (Number(filters.contrast) || 0) : 0;
+        const S = filters ? (Number(filters.saturation) || 0) : 0;
+        if (W === 0 && B === 0 && C === 0 && S === 0) {
+          return resolve(src);
+        }
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            applyPixelFiltersToCanvas(canvas, { whiten: W, brightness: B, contrast: C, saturation: S });
+            resolve(canvas.toDataURL('image/jpeg', 0.92));
+          } catch (e) {
+            resolve(src);
+          }
+        };
+        img.onerror = () => resolve(src);
+        img.src = src;
+      });
+    }
+    window.applyFiltersToImageAsync = applyFiltersToImageAsync;
+
+    function updateCurrentPhotoPreviewFromStudio(callback) {
+      if (!currentEditingPhoto) {
+        if (typeof callback === 'function') callback();
+        return;
+      }
+      const base = (currentEditingPhoto.isCropped && currentEditingPhoto.croppedBase)
+        ? currentEditingPhoto.croppedBase
+        : getPhotoFullSource(currentEditingPhoto);
+      if (!base) {
+        if (typeof callback === 'function') callback();
+        return;
+      }
+
+      currentEditingPhoto.whiten = studioState.whiten;
+      currentEditingPhoto.brightness = studioState.brightness;
+      currentEditingPhoto.contrast = studioState.contrast;
+      currentEditingPhoto.saturation = studioState.saturation;
+      currentEditingPhoto.isProcessed = Boolean(
+        currentEditingPhoto.isCropped ||
+        studioState.whiten > 0 ||
+        studioState.brightness !== 0 ||
+        studioState.contrast !== 0 ||
+        studioState.saturation !== 0 ||
+        studioCurrentRotation !== 0 ||
+        currentEditingPhoto.isAiProcessed
+      );
+
+      applyFiltersToImageAsync(base, studioState).then(filteredUrl => {
+        if (!currentEditingPhoto) return;
+        currentEditingPhoto.preview = filteredUrl;
+        currentEditingPhoto.data = filteredUrl.includes(',') ? filteredUrl.split(',')[1] : filteredUrl;
+        renderPool();
+        renderActiveBookSlots();
+        if (typeof callback === 'function') callback();
+      }).catch(() => {
+        if (typeof callback === 'function') callback();
+      });
+    }
+
     let isUndoingAction = false;
 
     function getStudioCurrentState(label = 'Изменение') {
@@ -103,7 +211,8 @@
         isCropped: Boolean(currentEditingPhoto.isCropped),
         isAiProcessed: Boolean(currentEditingPhoto.isAiProcessed),
         hasCropBox: Boolean(cropperInstance && cropperInstance.cropped),
-        cropBoxOnOriginal: studioCropBoxOnOriginal ? { ...studioCropBoxOnOriginal } : null,
+        cropBoxOnOriginal: studioCropBoxOnOriginal ? { ...studioCropBoxOnOriginal } : (currentEditingPhoto.cropBoxOnOriginal ? { ...currentEditingPhoto.cropBoxOnOriginal } : null),
+        cropRelative: currentEditingPhoto.cropRelative ? { ...currentEditingPhoto.cropRelative } : (currentEditingPhoto.aiCropRelative ? { ...currentEditingPhoto.aiCropRelative } : null),
         cropRatio: cropRatio || 'none',
         whiten: Number(studioState.whiten) || 0,
         brightness: Number(studioState.brightness) || 0,
@@ -125,6 +234,7 @@
              s1.isAiProcessed === s2.isAiProcessed &&
              s1.hasCropBox === s2.hasCropBox &&
              s1.croppedBase === s2.croppedBase &&
+             s1.aiWhiteOriginal === s2.aiWhiteOriginal &&
              s1.cropRatio === s2.cropRatio;
     }
 
@@ -158,7 +268,9 @@
     const pushPhotoHistory = (photo, label) => recordStudioStep(label);
 
     function commitStudioSliderStep(label) {
-      recordStudioStep(label);
+      updateCurrentPhotoPreviewFromStudio(() => {
+        recordStudioStep(label);
+      });
     }
 
     function applyStudioState(targetState, callback) {
@@ -189,6 +301,9 @@
       currentEditingPhoto.data = targetState.data;
       currentEditingPhoto.croppedBase = targetState.croppedBase;
       currentEditingPhoto.isCropped = targetState.isCropped;
+      currentEditingPhoto.cropBoxOnOriginal = targetState.cropBoxOnOriginal ? { ...targetState.cropBoxOnOriginal } : null;
+      currentEditingPhoto.cropRelative = targetState.cropRelative ? { ...targetState.cropRelative } : null;
+      currentEditingPhoto.aiCropRelative = currentEditingPhoto.cropRelative;
       currentEditingPhoto.isAiProcessed = targetState.isAiProcessed;
       currentEditingPhoto.whiten = targetState.whiten;
       currentEditingPhoto.brightness = targetState.brightness;
@@ -211,11 +326,19 @@
         // Перезагружаем Cropper только если физически сменился источник пикселей (rembg)
         reloadStudioCropper(targetSrc, () => {
           setStudioRotation(studioCurrentRotation, true, false);
-          if (targetState.hasCropBox && studioCropBoxOnOriginal) {
+          if (targetState.isCropped && targetState.croppedBase) {
+            // Если целевое состояние — обрезанное фото, оно уже нарезано в targetSrc!
+            // Фиксируем в режиме перемещения БЕЗ наложения второй рамки поверх
+            cropperInstance.clear();
+            isFreeCroppingActive = false;
+            setStudioInteractionMode('move');
+          } else if (targetState.hasCropBox && studioCropBoxOnOriginal) {
             cropperInstance.crop();
             updateCropBoxForCurrentRotation();
           } else {
             cropperInstance.clear();
+            isFreeCroppingActive = false;
+            setStudioInteractionMode('move');
           }
           applyStudioFilterPreview();
           updateCropResetButtonVisibility();
@@ -229,11 +352,17 @@
       } else {
         // Мгновенное применение БЕЗ перезагрузки Cropper
         setStudioRotation(studioCurrentRotation, false, false);
-        if (targetState.hasCropBox && studioCropBoxOnOriginal) {
+        if (targetState.isCropped && targetState.croppedBase) {
+          cropperInstance.clear();
+          isFreeCroppingActive = false;
+          setStudioInteractionMode('move');
+        } else if (targetState.hasCropBox && studioCropBoxOnOriginal) {
           if (!cropperInstance.cropped) cropperInstance.crop();
           updateCropBoxForCurrentRotation();
         } else {
           if (cropperInstance.cropped) cropperInstance.clear();
+          isFreeCroppingActive = false;
+          setStudioInteractionMode('move');
         }
         applyStudioFilterPreview();
         updateCropResetButtonVisibility();
@@ -392,6 +521,11 @@
       }
       const targetPhoto = list[targetIdx];
 
+      // Если в режиме кадрирования была активна рамка, сначала фиксируем обрезку
+      if (isFreeCroppingActive && cropperInstance && cropperInstance.cropped) {
+        commitStudioCrop();
+      }
+
       if (hasUnsavedStudioChanges) {
         saveStudioChanges(() => {
           openPhotoStudio(targetPhoto.id);
@@ -467,9 +601,24 @@
       updateStudioHistoryUI();
 
       const fullSource = getPhotoFullSource(photo);
-      const baseSource = (photo.isCropped && photo.croppedBase && startMode !== 'crop')
+      let baseSource = (photo.isCropped && photo.croppedBase && startMode !== 'crop')
         ? photo.croppedBase
         : fullSource;
+
+      // Защитная генерация croppedBase, если флаг isCropped стоял, а среза не было в памяти
+      if (photo.isCropped && !photo.croppedBase && startMode !== 'crop' && (photo.cropRelative || photo.aiCropRelative)) {
+        const rel = photo.cropRelative || photo.aiCropRelative;
+        cropImageSourceAsync(fullSource, rel).then(cBase => {
+          photo.croppedBase = cBase;
+          if (cropperInstance && !isFreeCroppingActive) {
+            reloadStudioCropper(cBase, () => {
+              fitStudioImageToContainer(false);
+              setStudioInteractionMode('move');
+              applyStudioFilterPreview();
+            });
+          }
+        }).catch(() => {});
+      }
       document.getElementById('photoStudioModal').classList.remove('hidden');
 
       reloadStudioCropper(baseSource, () => {
@@ -855,7 +1004,6 @@
         });
 
         if (croppedCanvas) {
-          pushPhotoHistory(currentEditingPhoto, 'Обрезка кадра');
           const cleanCroppedUrl = croppedCanvas.toDataURL('image/jpeg', 0.94);
 
           // 1. Фиксируем точные координаты рамки на полном кадре, чтобы детали старого изображения всегда можно было вернуть
@@ -892,10 +1040,14 @@
           currentEditingPhoto.isCropped = true;
           currentEditingPhoto.isProcessed = true;
 
+          // Записываем шаг в историю (после обновления всех полей)
+          recordStudioStep('Обрезка кадра');
+
           renderPool();
           renderActiveBookSlots();
           scheduleAutoSave();
 
+          isFreeCroppingActive = false;
           reloadStudioCropper(cleanCroppedUrl, () => {
             fitStudioImageToContainer(false);
             setStudioInteractionMode('move');
@@ -904,12 +1056,13 @@
             applyStudioFilterPreview();
             updateCropResetButtonVisibility();
             updateStudioHistoryUI();
-            showToast('✂️ Картинка сохранена в области среза!');
+            showToast('✂️ Картинка зафиксирована в области среза!');
           });
           return;
         }
       }
 
+      isFreeCroppingActive = false;
       setStudioInteractionMode('move');
     }
 
@@ -968,6 +1121,11 @@
     }
 
     function closePhotoStudio(saveBeforeClose = false) {
+      // Если закрываем модалку находясь в режиме кадрирования с рамкой — фиксируем обрезку
+      if (isFreeCroppingActive && cropperInstance && cropperInstance.cropped) {
+        commitStudioCrop();
+      }
+
       if (saveBeforeClose && currentEditingPhoto && cropperInstance && hasUnsavedStudioChanges) {
         saveStudioChanges(null, false);
         return;
@@ -1066,6 +1224,13 @@
 
         proceedWithCrop();
       } else {
+        // Если переходим в режим перемещения из активного режима кадрирования с рамкой —
+        // фиксируем картинку в рамке!
+        if (isFreeCroppingActive && cropperInstance && cropperInstance.cropped) {
+          commitStudioCrop();
+          return;
+        }
+
         isFreeCroppingActive = false;
         cropperInstance.setDragMode('move');
 
@@ -1526,7 +1691,6 @@
     }
 
     function applyStudioPreset(presetName) {
-      pushPhotoHistory(currentEditingPhoto, 'Пресет: ' + presetName);
       if (presetName === 'sharp_text') {
         studioState.whiten = 0;
         studioState.brightness = 3;
@@ -1555,7 +1719,11 @@
       document.getElementById('sliderSaturation').value = studioState.saturation;
       updateStudioBadges();
       applyStudioFilterPreview();
-      markStudioChanged('Пресет: ' + presetName);
+
+      updateCurrentPhotoPreviewFromStudio(() => {
+        recordStudioStep('Пресет: ' + presetName);
+        markStudioChanged('Пресет: ' + presetName);
+      });
     }
 
     function setStudioRotation(deg, fitToContainer = false, pushHistory = false) {
@@ -2412,16 +2580,18 @@
       }
 
       try {
-        const tempCanvas = cropperInstance.getCroppedCanvas({
-          fillColor: '#ffffff',
-          imageSmoothingQuality: 'high'
-        });
-        const baseSource = tempCanvas ? tempCanvas.toDataURL('image/jpeg', 0.90) : (currentEditingPhoto.croppedBase || currentEditingPhoto.cameraOriginal || currentEditingPhoto.rawOriginal || currentEditingPhoto.preview);
+        // Берем полный исходник для чистого удаления фона нейросетью rembg
+        const fullSource = getPhotoFullSource(currentEditingPhoto);
+        const sourceToProcess = fullSource || currentEditingPhoto.cameraOriginal || currentEditingPhoto.rawOriginal || currentEditingPhoto.preview;
 
         const res = await fetch('/api/ai_process_photo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: baseSource })
+          body: JSON.stringify({
+            image: sourceToProcess,
+            force_rembg: true,
+            role: currentEditingPhoto.assignedSlot || 'cover_front'
+          })
         });
         const data = await res.json();
         if (!data.success || !data.image) {
@@ -2431,56 +2601,57 @@
         if (!currentEditingPhoto.cameraOriginal) {
           currentEditingPhoto.cameraOriginal = currentEditingPhoto.rawOriginal || currentEditingPhoto.preview;
         }
+
+        // Сохраняем новый чистый белый оригинал
         currentEditingPhoto.aiWhiteOriginal = data.image;
-        currentEditingPhoto.croppedBase = null;
-        currentEditingPhoto.isCropped = false;
-        currentEditingPhoto.preview = data.image;
-        currentEditingPhoto.data = (typeof data.image === 'string' && data.image.includes(',')) ? data.image.split(',')[1] : data.image;
-        currentEditingPhoto.aiCropRelative = data.crop_relative || null;
-        currentEditingPhoto.whiten = 0;
         currentEditingPhoto.isProcessed = true;
         currentEditingPhoto.isAiProcessed = true;
 
-        studioState.whiten = 0;
-        const whitenSlider = document.getElementById('sliderWhiten');
-        if (whitenSlider) whitenSlider.value = 0;
-        updateStudioBadges();
-        applyStudioFilterPreview();
+        // Определяем относительные координаты рамки кадрирования:
+        // Либо уже заданная рамка пользователя, либо авто-рамка контура книги от ИИ
+        let effectiveCropRel = currentEditingPhoto.cropRelative || currentEditingPhoto.aiCropRelative || data.crop_relative;
+        if (effectiveCropRel) {
+          currentEditingPhoto.cropRelative = effectiveCropRel;
+          currentEditingPhoto.aiCropRelative = effectiveCropRel;
+        }
 
-        studioBaseCardinal = 0;
-        setStudioRotation(0, false, false);
+        // Если рамка есть, сразу нарезаем новое изображение с белым фоном под эту рамку
+        let newCroppedBase = null;
+        if (effectiveCropRel && typeof cropImageSourceAsync === 'function') {
+          try {
+            newCroppedBase = await cropImageSourceAsync(data.image, effectiveCropRel);
+          } catch (e) {
+            console.warn('Не удалось нарезать кадр с белым фоном:', e);
+          }
+        }
 
-        cropRatio = 'none';
-        updateCropRatioButtons(null);
-        resetCropStateUI();
+        if (newCroppedBase) {
+          currentEditingPhoto.croppedBase = newCroppedBase;
+          currentEditingPhoto.isCropped = true;
+        }
 
-        pushPhotoHistory(currentEditingPhoto, 'ИИ белый фон (rembg)');
+        // Применяем активные фильтры студии к новому кадру
+        const previewBase = currentEditingPhoto.croppedBase || data.image;
+        const filteredDataUrl = await applyFiltersToImageAsync(previewBase, studioState);
+        currentEditingPhoto.preview = filteredDataUrl;
+        currentEditingPhoto.data = filteredDataUrl.includes(',') ? filteredDataUrl.split(',')[1] : filteredDataUrl;
+        currentEditingPhoto.mime = 'image/jpeg';
 
-        reloadStudioCropper(data.image, () => {
+        // Записываем шаг в историю (для гарантированного отката по кнопке «Шаг назад»)
+        recordStudioStep('ИИ белый фон (rembg)');
+
+        // Отображаем НОВОЕ изображение в редакторе, зафиксированным в рамке в режиме перемещения
+        isFreeCroppingActive = false;
+        reloadStudioCropper(previewBase, () => {
           fitStudioImageToContainer(false);
           setStudioInteractionMode('move');
-          if (data.crop_relative) {
-            try {
-              const canvasData = cropperInstance.getCanvasData();
-              const rel = data.crop_relative;
-              cropperInstance.crop();
-              isProgrammaticCropBoxUpdate = true;
-              cropperInstance.setCropBoxData({
-                left: canvasData.left + rel.x * canvasData.width,
-                top: canvasData.top + rel.y * canvasData.height,
-                width: rel.w * canvasData.width,
-                height: rel.h * canvasData.height
-              });
-              isProgrammaticCropBoxUpdate = false;
-              captureCropBoxOnOriginal();
-              zoomStudioToCropBox();
-            } catch (err) {}
-          }
           updateZoomBadge();
           updateCropResolution();
+          applyStudioFilterPreview();
           updateCropResetButtonVisibility();
           updateStudioHistoryUI();
         });
+
         markStudioChanged('ИИ белый фон (rembg)');
         renderPool();
         renderActiveBookSlots();
