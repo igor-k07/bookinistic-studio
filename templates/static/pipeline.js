@@ -688,9 +688,16 @@
           photo.aiCropRelative = effectiveCropRel;
         }
 
-        // Если рамка есть, сразу нарезаем новое изображение с белым фоном под эту рамку
+        // Если рамка есть, сразу нарезаем новое изображение с белым фоном с учетом текущего угла поворота
+        const rot = photo.rotation || 0;
         let croppedUrl = null;
-        if (effectiveCropRel && typeof window.cropImageSourceAsync === 'function') {
+        if (effectiveCropRel && typeof window.renderCroppedFromFullSourceAsync === 'function') {
+          try {
+            croppedUrl = await window.renderCroppedFromFullSourceAsync(data.image, rot, effectiveCropRel);
+          } catch (err) {
+            console.warn('Ошибка обрезки при быстром ИИ:', err);
+          }
+        } else if (effectiveCropRel && typeof window.cropImageSourceAsync === 'function') {
           try {
             croppedUrl = await window.cropImageSourceAsync(data.image, effectiveCropRel);
           } catch (err) {
@@ -703,7 +710,13 @@
           photo.isCropped = true;
         }
 
-        const previewBase = photo.croppedBase || data.image;
+        let previewBase = photo.croppedBase || data.image;
+        if (!photo.croppedBase && Math.abs(rot) > 0.05 && typeof window.renderCroppedFromFullSourceAsync === 'function') {
+          try {
+            previewBase = await window.renderCroppedFromFullSourceAsync(data.image, rot, null);
+          } catch (err) {}
+        }
+
         const filters = {
           whiten: photo.whiten || 0,
           brightness: photo.brightness || 0,
@@ -719,6 +732,8 @@
         photo.preview = filteredUrl;
         photo.data = filteredUrl.includes(',') ? filteredUrl.split(',')[1] : filteredUrl;
         photo.mime = 'image/jpeg';
+        photo.is_s3_uploaded = false;
+        photo.s3_url = null;
 
         // Добавляем шаг истории без затирания предыдущих действий
         if (!Array.isArray(photo.history)) photo.history = [];
@@ -727,35 +742,40 @@
           timestamp: Date.now(),
           preview: photo.preview,
           data: photo.data,
-          croppedBase: photo.croppedBase,
+          croppedBase: photo.croppedBase || null,
           rawOriginal: photo.rawOriginal,
           cameraOriginal: photo.cameraOriginal,
           aiWhiteOriginal: photo.aiWhiteOriginal,
-          isCropped: photo.isCropped,
+          isCropped: Boolean(photo.isCropped),
           isAiProcessed: true,
+          inCropMode: false,
           hasCropBox: Boolean(photo.isCropped),
           cropBoxOnOriginal: photo.cropBoxOnOriginal || null,
-          cropRelative: photo.cropRelative || null,
+          cropRelative: photo.cropRelative ? { ...photo.cropRelative } : null,
           cropRatio: 'none',
           whiten: photo.whiten || 0,
           brightness: photo.brightness || 0,
           contrast: photo.contrast || 0,
           saturation: photo.saturation || 0,
-          rotation: photo.rotation || 0,
-          cardinal: 0
+          rotation: rot,
+          cardinal: Math.round(rot / 90) * 90 % 360
         });
         photo.historyIndex = photo.history.length - 1;
 
         if (typeof currentEditingPhoto !== 'undefined' && currentEditingPhoto && currentEditingPhoto.id === photo.id && typeof isStudioOpen !== 'undefined' && isStudioOpen) {
           const displaySrc = photo.croppedBase || data.image;
+          const displayType = photo.croppedBase ? 'cropped' : 'full';
           if (typeof reloadStudioCropper === 'function') {
             reloadStudioCropper(displaySrc, () => {
+              if (displayType === 'full' && rot !== 0 && typeof cropperInstance !== 'undefined' && cropperInstance) {
+                cropperInstance.rotateTo(rot);
+              }
               if (typeof fitStudioImageToContainer === 'function') fitStudioImageToContainer(false);
               if (typeof setStudioInteractionMode === 'function') setStudioInteractionMode('move');
               if (typeof updateZoomBadge === 'function') updateZoomBadge();
               if (typeof updateCropResolution === 'function') updateCropResolution();
               if (typeof updateStudioHistoryUI === 'function') updateStudioHistoryUI();
-            });
+            }, displayType);
           }
         }
 

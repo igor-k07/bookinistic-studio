@@ -982,11 +982,7 @@
 
     if (window.isStudioOpen) {
       if (e.key === 'Escape') {
-        if (window.cropperInstance && window.cropperInstance.cropped) {
-          if (typeof window.resetCropToOriginal === 'function') window.resetCropToOriginal();
-        } else {
-          if (typeof window.closePhotoStudio === 'function') window.closePhotoStudio(false);
-        }
+        if (typeof window.closePhotoStudio === 'function') window.closePhotoStudio(false);
         e.preventDefault();
         return;
       }
@@ -1044,7 +1040,7 @@
         }
         if (e.key.toLowerCase() === 'w') {
           e.preventDefault();
-          if (typeof window.applyStudioPreset === 'function') window.applyStudioPreset('studio_white');
+          if (typeof window.applyStudioPreset === 'function') window.applyStudioPreset('clean_white');
           if (typeof window.showToast === 'function') window.showToast('✨ Применен пресет: Студия Ozon (белый фон)');
           return;
         }
