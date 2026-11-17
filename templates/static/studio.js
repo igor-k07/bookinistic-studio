@@ -357,6 +357,19 @@
         return;
       }
 
+      // Если мы фиксируем обрезку (inCropMode: false) с теми же координатами рамки,
+      // что и на последнем шаге правки рамки (inCropMode: true) — обновляем этот шаг на месте,
+      // чтобы «Шаг назад» откатывал сразу в 1 клик, а не в 2!
+      if (lastState && lastState.inCropMode && !newState.inCropMode &&
+          cropRelativesEqual(lastState.cropRelative, newState.cropRelative) &&
+          Math.abs((lastState.rotation || 0) - (newState.rotation || 0)) < 0.1 &&
+          lastState.aiWhiteOriginal === newState.aiWhiteOriginal) {
+        currentEditingPhoto.history[currentEditingPhoto.historyIndex] = newState;
+        updateStudioHistoryUI();
+        markStudioChanged(label, false);
+        return;
+      }
+
       currentEditingPhoto.history.push(newState);
       if (currentEditingPhoto.history.length > 40) {
         currentEditingPhoto.history.shift();
@@ -955,10 +968,18 @@
 
       const activateCropOnFull = () => {
         isFreeCroppingActive = true;
+        // Сначала показываем панель пропорций, чтобы контейнер принял финальную высоту ДО позиционирования рамки
+        updateStudioModeUI('crop');
+        if (cropperInstance) {
+          cropperInstance.resize();
+          if (studioCurrentRotation !== 0) {
+            cropperInstance.rotateTo(studioCurrentRotation);
+          }
+          fitStudioImageToContainer(false);
+        }
         applyCropAspectRatioToInstance(cropRatio);
         restoreCropFrameOnFullSource(true);
         cropperInstance.setDragMode('move');
-        updateStudioModeUI('crop');
         applyStudioFilterPreview();
         updateCropResolution();
         updateZoomBadge();
@@ -973,10 +994,6 @@
       }
 
       reloadStudioCropper(fullSource, () => {
-        if (studioCurrentRotation !== 0) {
-          cropperInstance.rotateTo(studioCurrentRotation);
-        }
-        fitStudioImageToContainer(false);
         activateCropOnFull();
       }, 'full');
     }
@@ -1466,6 +1483,42 @@
     }
 
     let studioResizeObserver = null;
+    let lastObservedContainerW = 0;
+    let lastObservedContainerH = 0;
+
+    function handleStudioContainerResize() {
+      if (!isStudioOpen || !cropperInstance) return;
+      const savedRel = (currentEditingPhoto && (currentEditingPhoto.cropRelative || currentEditingPhoto.aiCropRelative))
+        ? { ...(currentEditingPhoto.cropRelative || currentEditingPhoto.aiCropRelative) }
+        : null;
+      const wasCropping = Boolean(isFreeCroppingActive && studioLoadedSourceType === 'full');
+
+      // cropper.resize() при restore:false сбрасывает холст и рамку на 80% по умолчанию,
+      // поэтому сразу восстанавливаем угол поворота и сохраненную рамку!
+      cropperInstance.resize();
+
+      if (studioLoadedSourceType === 'full' && studioCurrentRotation !== 0) {
+        cropperInstance.rotateTo(studioCurrentRotation);
+      }
+
+      if (wasCropping) {
+        fitStudioImageToContainer(false);
+        if (savedRel && currentEditingPhoto) {
+          currentEditingPhoto.cropRelative = { ...savedRel };
+          currentEditingPhoto.aiCropRelative = { ...savedRel };
+        }
+        applyCropAspectRatioToInstance(cropRatio);
+        restoreCropFrameOnFullSource(true);
+        cropperInstance.setDragMode('move');
+      } else {
+        fitStudioImageToContainer(false);
+        if (cropperInstance.cropped) cropperInstance.clear();
+      }
+      applyStudioFilterPreview();
+      updateZoomBadge();
+      updateCropResolution();
+    }
+
     function setupStudioResizeObserver() {
       const container = document.getElementById('studioCropperContainer');
       if (!container || studioResizeObserver) return;
@@ -1474,13 +1527,12 @@
       studioResizeObserver = new ResizeObserver((entries) => {
         if (!isStudioOpen || !cropperInstance) return;
         for (const entry of entries) {
-          if (entry.contentRect.width > 50 && entry.contentRect.height > 50) {
-            cropperInstance.resize();
-            if (cropperInstance.cropped) {
-              zoomStudioToCropBox();
-            } else {
-              fitStudioImageToContainer(false);
-            }
+          const w = Math.round(entry.contentRect.width);
+          const h = Math.round(entry.contentRect.height);
+          if (w > 50 && h > 50 && (w !== lastObservedContainerW || h !== lastObservedContainerH)) {
+            lastObservedContainerW = w;
+            lastObservedContainerH = h;
+            handleStudioContainerResize();
           }
         }
       });
@@ -1505,8 +1557,8 @@
 
     function centerStudioImage() {
       if (!cropperInstance) return;
-      if (cropperInstance.cropped) {
-        zoomStudioToCropBox();
+      if (cropperInstance.cropped && isFreeCroppingActive) {
+        zoomStudioToCropBox(currentEditingPhoto ? currentEditingPhoto.cropRelative : null);
       } else {
         fitStudioImageToContainer(false);
       }
@@ -2372,14 +2424,7 @@
     }
 
     window.addEventListener('resize', () => {
-      if (isStudioOpen && cropperInstance) {
-        cropperInstance.resize();
-        if (cropperInstance.cropped && isFreeCroppingActive) {
-          zoomStudioToCropBox(currentEditingPhoto ? currentEditingPhoto.cropRelative : null);
-        } else {
-          fitStudioImageToContainer(false);
-        }
-      }
+      handleStudioContainerResize();
     });
 
     function applyPixelFiltersToCanvas(canvas, state) {
