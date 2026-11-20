@@ -253,8 +253,172 @@
     scheduleAutoSave();
   }
 
+  async function fetchDbNextArticle() {
+    try {
+      const res = window.ApiClient
+        ? await window.ApiClient.getNextArticle()
+        : await fetch('/api/get_next_article').then(r => r.json());
+      if (res && res.success && res.article) {
+        return res.article;
+      }
+    } catch (e) {
+      console.warn('Failed to fetch /api/get_next_article:', e);
+    }
+    return null;
+  }
+
+  function formatArticleInput(val) {
+    const clean = String(val || '').trim();
+    const m = clean.match(/DP-B-(\d+)/i) || clean.match(/(\d+)/);
+    const num = m ? parseInt(m[1], 10) : 1;
+    const padded = String(num).padStart(5, '0');
+    return `DP-B-${padded}`;
+  }
+
+  async function openNewSessionModal() {
+    const modal = document.getElementById('newSessionModal');
+    if (!modal) return;
+
+    // Сначала показываем модалку, чтобы интерфейс мгновенно реагировал
+    modal.classList.remove('hidden');
+
+    const input = document.getElementById('newSessionStartArticleInput');
+    if (input) {
+      // Подставляем временное значение пока ждем запрос
+      if (!input.value) input.value = 'DP-B-02884';
+      input.focus();
+      input.select();
+    }
+
+    // Получаем актуальный следующий свободный артикул из базы
+    let nextArt = await fetchDbNextArticle();
+    if (!nextArt) {
+      nextArt = await calculateNextArticle(0);
+    }
+
+    if (input && nextArt) {
+      input.value = nextArt;
+      input.focus();
+      input.select();
+    }
+  }
+
+  function closeNewSessionModal() {
+    const modal = document.getElementById('newSessionModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  async function refreshNewSessionNextArticle() {
+    const spinner = document.getElementById('newSessionRefreshSpinner');
+    if (spinner) spinner.classList.add('animate-spin');
+    try {
+      let nextArt = await fetchDbNextArticle();
+      if (!nextArt) nextArt = await calculateNextArticle(0);
+      const input = document.getElementById('newSessionStartArticleInput');
+      if (input && nextArt) {
+        input.value = nextArt;
+        input.select();
+      }
+    } finally {
+      if (spinner) {
+        setTimeout(() => spinner.classList.remove('animate-spin'), 350);
+      }
+    }
+  }
+
+  async function executeStartNewSession() {
+    const input = document.getElementById('newSessionStartArticleInput');
+    const rawVal = input ? input.value.trim() : '';
+    const formattedArt = formatArticleInput(rawVal);
+    const numPart = formattedArt.replace(/\D/g, '').slice(-5);
+    const newBarcode = window.BookCalculators
+      ? window.BookCalculators.generateEan13FromArticle(formattedArt)
+      : (window.generateEan13FromArticle ? window.generateEan13FromArticle(formattedArt) : '2978470000012');
+
+    // 1. Закрываем модальное окно
+    closeNewSessionModal();
+
+    // 2. Если открыта Photo Studio — закрываем её без сохранения
+    if (typeof window.closePhotoStudio === 'function') {
+      try { window.closePhotoStudio(true); } catch (e) {}
+    }
+
+    // 3. Очищаем черновик и временные фото на сервере
+    try {
+      if (window.ApiClient && typeof window.ApiClient.clearSessionDraft === 'function') {
+        await window.ApiClient.clearSessionDraft();
+      } else {
+        await fetch('/api/clear_session_draft', { method: 'POST' });
+      }
+    } catch (err) {
+      console.warn('Failed to clear session draft on server:', err);
+    }
+
+    // 4. Очищаем локальный пул фотографий
+    window.photoPool = [];
+    window.selectedPoolPhotoId = null;
+
+    // 5. Инициализируем ровно одну чистую книгу с выбранным артикулом
+    window.booksSession = [{
+      id: 1,
+      article: formattedArt,
+      title: 'Книга #1',
+      slots: {
+        cover_front: null,
+        cover_back: [],
+        info_pages: [],
+        illustrations: [],
+        mantra_defects: []
+      },
+      formData: {
+        article: formattedArt,
+        article_number: numPart,
+        barcode: newBarcode,
+        auto_package_adder: true,
+        template_mode: window.currentTemplateMode || 'pre2011'
+      }
+    }];
+    window.activeBookId = 1;
+
+    // 6. Очищаем форму книги и выставляем стартовые реквизиты
+    if (typeof window.clearForm === 'function') {
+      await window.clearForm(formattedArt);
+    }
+    syncArticleInputs(formattedArt);
+
+    const barcodeEl = document.getElementById('barcode');
+    if (barcodeEl) barcodeEl.value = newBarcode;
+
+    const pkgCheck = document.getElementById('autoPackageAdder');
+    if (pkgCheck) pkgCheck.checked = true;
+
+    // 7. Обновляем стартовый артикул в панели авто-конвейера
+    const batchStartInput = document.getElementById('batchStartArticle');
+    if (batchStartInput) batchStartInput.value = formattedArt;
+
+    // 8. Сбрасываем ID мобильных событий, чтобы слушать только новые фото
+    if (typeof window.lastMobileEventId !== 'undefined') {
+      window.lastMobileEventId = 0;
+    }
+
+    // 9. Перерисовываем интерфейс (пул, слоты, вкладки)
+    renderBooksTabs();
+    if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
+    if (typeof window.renderPool === 'function') window.renderPool();
+    if (typeof window.autoCalcDimensions === 'function') window.autoCalcDimensions();
+    if (typeof window.autoDetectCountry === 'function') window.autoDetectCountry();
+
+    // 10. Сохраняем чистый начальный черновик
+    scheduleAutoSave();
+
+    // 11. Оповещаем пользователя
+    if (typeof window.showToast === 'function') {
+      window.showToast(`🚀 Новая сессия начата! Пул очищен, стартовый артикул: ${formattedArt}`);
+    }
+  }
+
   async function resetWholeSession() {
-    return resetCurrentBook();
+    return openNewSessionModal();
   }
 
   async function initBatchArticleInput() {
@@ -279,8 +443,18 @@
     }
 
     if (maxSessionNum > 0) {
-      const nextNum = maxSessionNum + 1;
+      const nextNum = maxSessionNum + 1 + offset;
       return `DP-B-${String(nextNum).padStart(5, '0')}`;
+    }
+
+    // Проверяем глобальный артикул из БД и архива books_vault
+    const dbArt = await fetchDbNextArticle();
+    if (dbArt) {
+      const digits = String(dbArt).replace(/\D/g, '');
+      if (digits) {
+        const val = parseInt(digits, 10);
+        return `DP-B-${String(val + offset).padStart(5, '0')}`;
+      }
     }
 
     try {
@@ -600,6 +774,12 @@
   window.relinkSessionPhotos = relinkSessionPhotos;
   window.resetCurrentBook = resetCurrentBook;
   window.resetWholeSession = resetWholeSession;
+  window.fetchDbNextArticle = fetchDbNextArticle;
+  window.formatArticleInput = formatArticleInput;
+  window.openNewSessionModal = openNewSessionModal;
+  window.closeNewSessionModal = closeNewSessionModal;
+  window.refreshNewSessionNextArticle = refreshNewSessionNextArticle;
+  window.executeStartNewSession = executeStartNewSession;
   window.initBatchArticleInput = initBatchArticleInput;
   window.calculateNextArticle = calculateNextArticle;
   window.addNewBook = addNewBook;

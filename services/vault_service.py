@@ -332,7 +332,7 @@ def save_session_draft_file(draft_data: Dict[str, Any]) -> Dict[str, Dict[str, s
 
 
 def clear_session_draft_storage():
-    """Удаляет файл черновика и очищает временные фотографии сессии."""
+    """Удаляет файл черновика и очищает временные фотографии сессии и неразобранного инбокса."""
     if os.path.exists(DRAFT_FILE):
         try:
             os.remove(DRAFT_FILE)
@@ -348,5 +348,18 @@ def clear_session_draft_storage():
                     os.remove(fpath)
         except Exception:
             pass
+    from config import INBOX_DIR
+    if os.path.exists(INBOX_DIR):
+        try:
+            for fname in os.listdir(INBOX_DIR):
+                if fname.startswith(".") or fname.lower() in ("card.png", "card.jpg"):
+                    continue
+                if fname.startswith("mobile_batch_") or fname.startswith("temp_"):
+                    fpath = os.path.join(INBOX_DIR, fname)
+                    if os.path.isfile(fpath) or os.path.islink(fpath):
+                        os.remove(fpath)
+        except Exception:
+            pass
+
 
 

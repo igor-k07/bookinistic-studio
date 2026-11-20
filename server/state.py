@@ -110,3 +110,14 @@ def check_mobile_events(last_id: int) -> Dict[str, Any]:
             }
         else:
             return {"has_new": False, "event_id": last_id}
+
+
+def reset_mobile_state() -> None:
+    """Сбрасывает очередь мобильных событий и незавершенные сессии загрузки."""
+    global _latest_mobile_event, _upload_sessions
+    with _event_lock:
+        _latest_mobile_event["images"] = []
+        _latest_mobile_event["timestamp"] = int(time.time())
+        _latest_mobile_event["event_id"] += 1
+        _upload_sessions.clear()
+

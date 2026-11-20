@@ -61,7 +61,10 @@ def get_session_draft(ctx: RequestContext) -> Any:
 
 
 def clear_session_draft(ctx: RequestContext) -> Dict[str, Any]:
-    """POST /api/clear_session_draft: Очистка черновика сессии."""
+    """POST /api/clear_session_draft: Очистка черновика сессии и сброс мобильной очереди."""
+    from server.state import reset_mobile_state
+    reset_mobile_state()
     clear_session_draft_storage()
     return {"success": True}
+
 

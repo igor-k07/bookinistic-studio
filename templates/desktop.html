@@ -206,6 +206,12 @@
       </div>
 
       <div class="flex items-center gap-3">
+        <!-- КНОПКА НОВОЙ СЕССИИ -->
+        <button type="button" onclick="openNewSessionModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer" title="Начать новую сессию: очистить остатки пула и задать стартовый артикул">
+          <span>🚀</span>
+          <span>Новая сессия</span>
+        </button>
+
         <!-- КНОПКА QR ДЛЯ СМАРТФОНА -->
         <button type="button" id="btnOpenQrModal" onclick="openQrModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold shadow-md shadow-amber-600/20 transition flex items-center gap-1.5 animate-pulse cursor-pointer">
           <span>📱</span>
@@ -281,6 +287,11 @@
             <span>📁 С диска</span>
           </button>
           <input type="file" id="poolFileInput" multiple accept="image/*" class="hidden" onchange="handlePoolFiles(event)">
+
+          <!-- Новая сессия -->
+          <button type="button" onclick="openNewSessionModal()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5 border border-emerald-500/40" title="Начать новую сессию: очистить остатки фото и задать стартовый артикул">
+            <span>🚀 Новая сессия</span>
+          </button>
 
           <!-- Очистить пул -->
           <button type="button" onclick="clearPool()" class="px-2.5 py-1.5 rounded-xl hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 text-xs transition border border-transparent hover:border-rose-900">
@@ -439,6 +450,9 @@
         </div>
 
         <div class="flex items-center gap-2">
+          <button type="button" onclick="openNewSessionModal()" class="px-2.5 py-1 rounded-xl bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 text-xs font-semibold transition flex items-center gap-1 shadow-sm" title="Начать новую сессию: очистить остатки фото и задать начальный артикул">
+            <span>🚀 Новая сессия</span>
+          </button>
           <button type="button" onclick="clearCurrentBookSlots()" class="px-2.5 py-1 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 text-xs transition font-medium" title="Очистить слоты текущей книги (фото вернутся в пул)">
             🧹 Очистить слоты
           </button>
@@ -1391,6 +1405,75 @@
         </div>
         <button type="button" onclick="closeMemosModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Закрыть</button>
       </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: НАЧАТЬ НОВУЮ РАБОЧУЮ СЕССИЮ -->
+  <div id="newSessionModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closeNewSessionModal()">
+    <div class="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      
+      <!-- ШАПКА -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">🚀</span>
+          <div>
+            <h3 class="text-sm font-bold text-white">Начать новую рабочую сессию</h3>
+            <p class="text-[11px] text-emerald-400 font-medium">Очистка остатков пула и настройка стартового артикула</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeNewSessionModal()" class="text-slate-400 hover:text-white text-base">✕</button>
+      </div>
+
+      <!-- ИНФОРМАЦИЯ О ДЕЙСТВИЯХ -->
+      <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 space-y-2 text-xs">
+        <div class="flex items-start gap-2.5 text-slate-300 leading-relaxed">
+          <span class="text-base shrink-0">🗑️</span>
+          <div>
+            <b class="text-white">Очистка остатков:</b> все неразобранные фото в ленте пула и карточках текущей сессии будут удалены, а черновик на сервере очищен.
+          </div>
+        </div>
+        <div class="flex items-start gap-2.5 text-slate-300 leading-relaxed">
+          <span class="text-base shrink-0">🛡️</span>
+          <div>
+            <b class="text-white">База в безопасности:</b> ранее сохраненные книги в таблицах Excel (<code class="text-amber-400 font-mono">ready_tables/</code>) и базе данных SQLite сохраняются.
+          </div>
+        </div>
+      </div>
+
+      <!-- ВЫБОР СТАРТОВОГО АРТИКУЛА -->
+      <div class="space-y-2">
+        <label for="newSessionStartArticleInput" class="block text-xs font-semibold text-slate-200">
+          С какого артикула начинаем сегодня работу?
+        </label>
+        
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <input type="text" id="newSessionStartArticleInput" value="" placeholder="DP-B-02884" 
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();executeStartNewSession();}"
+                   class="w-full bg-slate-950 border-2 border-emerald-500/50 focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-amber-300 font-mono font-bold text-base tracking-wide focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition shadow-inner">
+          </div>
+          <button type="button" onclick="refreshNewSessionNextArticle()" class="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1.5 shrink-0" title="Получить следующий свободный артикул из базы данных">
+            <span id="newSessionRefreshSpinner" class="inline-block transition-transform">🔄</span>
+            <span class="hidden sm:inline">След. свободный</span>
+          </button>
+        </div>
+
+        <p class="text-[11px] text-slate-400 leading-normal">
+          💡 Можно ввести номер с префиксом (например <code class="text-amber-300 font-mono font-semibold">DP-B-02884</code>) или просто число (например <code class="text-amber-300 font-mono font-semibold">2884</code>). Система автоматически добавит префикс <span class="font-mono text-slate-300">DP-B-</span> и сгенерирует штрихкод.
+        </p>
+      </div>
+
+      <!-- КНОПКИ ДЕЙСТВИЯ -->
+      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+        <button type="button" onclick="closeNewSessionModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">
+          Отмена
+        </button>
+        <button type="button" id="btnExecuteNewSession" onclick="executeStartNewSession()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition flex items-center gap-1.5 cursor-pointer">
+          <span>🚀</span>
+          <span>Начать новую сессию</span>
+        </button>
+      </div>
+
     </div>
   </div>
 

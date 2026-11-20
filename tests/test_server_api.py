@@ -89,6 +89,20 @@ class TestServerAPI(unittest.TestCase):
         self.assertEqual(handler.status_code, 500)
         self.assertFalse(handler.response_data.get("success"))
 
+    def test_clear_session_draft_endpoint(self):
+        handler = MockHTTPHandler("/api/clear_session_draft", method="POST", body=b"{}")
+        ok = self.router.dispatch(handler, "POST")
+        self.assertTrue(ok)
+        self.assertEqual(handler.status_code, 200)
+        self.assertTrue(handler.response_data.get("success"))
+
+    def test_reset_mobile_state(self):
+        from server.state import reset_mobile_state, _latest_mobile_event
+        reset_mobile_state()
+        self.assertEqual(_latest_mobile_event["images"], [])
+        self.assertGreater(_latest_mobile_event["event_id"], 0)
+
+
 
 if __name__ == "__main__":
     unittest.main()

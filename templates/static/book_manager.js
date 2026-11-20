@@ -1071,6 +1071,7 @@
     }
 
     if (e.key === 'Escape') {
+      if (typeof window.closeNewSessionModal === 'function') window.closeNewSessionModal();
       if (typeof window.closePhotoStudio === 'function') window.closePhotoStudio(false);
       if (typeof window.closeQrModal === 'function') window.closeQrModal();
       if (typeof window.closeKeyModal === 'function') window.closeKeyModal();
