@@ -63,31 +63,35 @@ function resolveOzonGenre(genre, title = '', annotation = '') {
   return g;
 }
 
-// Глобальное реактивное состояние сессии
+// Глобальное реактивное состояние сессии (синхронизировано с BookStore)
 var photoPool = []; // Массив всех фото: { id, name, mime, preview, cameraOriginal, ... }
-var booksSession = [
-  {
-    id: 1,
-    article: "",
-    title: "Книга #1",
-    isEditMode: false,
-    isReopened: false,
-    slots: {
-      cover_front: null,
-      cover_back: [],
-      info_pages: [],
-      illustrations: [],
-      mantra_defects: []
-    },
-    formData: {
-      article: "",
-      article_number: "",
-      barcode: "",
-      auto_package_adder: true
-    }
-  }
-];
-var activeBookId = 1;
+var booksSession = (typeof window !== 'undefined' && window.BookStore && window.BookStore.isInitialized)
+  ? window.BookStore.getBooks()
+  : [
+      {
+        id: 1,
+        article: "",
+        title: "Книга #1",
+        isEditMode: false,
+        isReopened: false,
+        slots: {
+          cover_front: null,
+          cover_back: [],
+          info_pages: [],
+          illustrations: [],
+          mantra_defects: []
+        },
+        formData: {
+          article: "",
+          article_number: "",
+          barcode: "",
+          auto_package_adder: true
+        }
+      }
+    ];
+var activeBookId = (typeof window !== 'undefined' && window.BookStore && window.BookStore.isInitialized)
+  ? window.BookStore.activeId
+  : 1;
 var selectedPoolPhotoId = null;
 var currentApiKey = (typeof localStorage !== 'undefined' && localStorage.getItem('gemini_api_key')) || '';
 var currentMobileUrl = '';
@@ -155,6 +159,9 @@ function findPhotoById(photoId) {
 }
 
 function getActiveBook() {
+  if (typeof window !== 'undefined' && window.BookStore && typeof window.BookStore.getActiveBook === 'function') {
+    return window.BookStore.getActiveBook();
+  }
   const session = (typeof window !== 'undefined' && window.booksSession) ? window.booksSession : booksSession;
   const curId = (typeof window !== 'undefined' && window.activeBookId !== undefined) ? window.activeBookId : activeBookId;
   return session.find(b => b.id === curId) || session[0];

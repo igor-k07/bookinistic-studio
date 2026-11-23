@@ -197,9 +197,13 @@
       }
 
       if (draft && draft.booksSession && draft.booksSession.length > 0) {
-        window.booksSession = draft.booksSession;
+        if (window.BookStore) {
+          window.BookStore.init(draft.booksSession, draft.activeBookId || draft.booksSession[0].id);
+        } else {
+          window.booksSession = draft.booksSession;
+          window.activeBookId = draft.activeBookId || window.booksSession[0].id;
+        }
         window.photoPool = draft.photoPool || [];
-        window.activeBookId = draft.activeBookId || window.booksSession[0].id;
 
         // Санитизация аннотаций: убираем предупреждения только если нет дефектов И состояние не ухудшено вручную
         window.booksSession.forEach(b => {
@@ -449,26 +453,34 @@
     window.selectedPoolPhotoId = null;
 
     // 5. Инициализируем ровно одну чистую книгу с выбранным артикулом
-    window.booksSession = [{
-      id: 1,
-      article: formattedArt,
-      title: 'Книга #1',
-      slots: {
-        cover_front: null,
-        cover_back: [],
-        info_pages: [],
-        illustrations: [],
-        mantra_defects: []
-      },
-      formData: {
+    if (window.BookStore) {
+      const b1 = window.BookStore.createDefaultBook(1, formattedArt);
+      b1.formData.article_number = numPart;
+      b1.formData.barcode = newBarcode;
+      b1.formData.template_mode = window.currentTemplateMode || 'pre2011';
+      window.BookStore.init([b1], 1);
+    } else {
+      window.booksSession = [{
+        id: 1,
         article: formattedArt,
-        article_number: numPart,
-        barcode: newBarcode,
-        auto_package_adder: true,
-        template_mode: window.currentTemplateMode || 'pre2011'
-      }
-    }];
-    window.activeBookId = 1;
+        title: 'Книга #1',
+        slots: {
+          cover_front: null,
+          cover_back: [],
+          info_pages: [],
+          illustrations: [],
+          mantra_defects: []
+        },
+        formData: {
+          article: formattedArt,
+          article_number: numPart,
+          barcode: newBarcode,
+          auto_package_adder: true,
+          template_mode: window.currentTemplateMode || 'pre2011'
+        }
+      }];
+      window.activeBookId = 1;
+    }
 
     // 6. Очищаем форму книги и выставляем стартовые реквизиты
     if (typeof window.clearForm === 'function') {
@@ -760,35 +772,44 @@
 
   async function addNewBook() {
     saveCurrentFormToActiveBook();
-    const books = window.booksSession || [];
-    const nextId = books.length > 0 ? Math.max(...books.map(b => b.id)) + 1 : 1;
     const nextArt = await calculateNextArticle(1);
     const nextBarcode = window.BookCalculators
       ? window.BookCalculators.generateEan13FromArticle(nextArt)
       : (window.generateEan13FromArticle ? window.generateEan13FromArticle(nextArt) : '2978470000012');
     const numPart = nextArt.replace(/\D/g, '').slice(-5);
-    const newBook = {
-      id: nextId,
-      article: nextArt,
-      title: `Книга #${nextId}`,
-      isEditMode: false,
-      isReopened: false,
-      slots: {
-        cover_front: null,
-        cover_back: [],
-        info_pages: [],
-        illustrations: [],
-        mantra_defects: []
-      },
-      formData: {
+
+    if (window.BookStore) {
+      const newBook = window.BookStore.addBook(nextArt);
+      newBook.formData.article_number = numPart;
+      newBook.formData.barcode = nextBarcode;
+      window.BookStore.syncLegacyGlobals();
+    } else {
+      const books = window.booksSession || [];
+      const nextId = books.length > 0 ? Math.max(...books.map(b => b.id)) + 1 : 1;
+      const newBook = {
+        id: nextId,
         article: nextArt,
-        article_number: numPart,
-        barcode: nextBarcode,
-        auto_package_adder: true
-      }
-    };
-    books.push(newBook);
-    window.activeBookId = nextId;
+        title: `Книга #${nextId}`,
+        isEditMode: false,
+        isReopened: false,
+        slots: {
+          cover_front: null,
+          cover_back: [],
+          info_pages: [],
+          illustrations: [],
+          mantra_defects: []
+        },
+        formData: {
+          article: nextArt,
+          article_number: numPart,
+          barcode: nextBarcode,
+          auto_package_adder: true
+        }
+      };
+      books.push(newBook);
+      window.activeBookId = nextId;
+    }
+
     renderBooksTabs();
     if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
     if (typeof window.clearForm === 'function') window.clearForm(nextArt);
@@ -821,9 +842,13 @@
       }
     }
 
-    window.booksSession = (window.booksSession || []).filter(b => b.id !== id);
-    if (window.activeBookId === id && window.booksSession.length > 0) {
-      window.activeBookId = window.booksSession[0].id;
+    if (window.BookStore) {
+      window.BookStore.removeBook(id);
+    } else {
+      window.booksSession = (window.booksSession || []).filter(b => b.id !== id);
+      if (window.activeBookId === id && window.booksSession.length > 0) {
+        window.activeBookId = window.booksSession[0].id;
+      }
     }
 
     if (typeof window.renderPool === 'function') window.renderPool();
@@ -948,6 +973,9 @@
   }
 
   function onTitleInput(val) {
+    if (window.BookStore) {
+      window.BookStore.setField('title', val);
+    }
     const book = typeof getActiveBook === 'function' ? getActiveBook() : null;
     if (!book) return;
     if (!book.formData) book.formData = {};
@@ -962,10 +990,16 @@
     if (!book.formData) book.formData = {};
     FORM_FIELD_IDS.forEach(id => {
       const el = document.getElementById(id);
-      if (el) book.formData[id] = el.value;
+      if (el) {
+        book.formData[id] = el.value;
+        if (window.BookStore) {
+          window.BookStore.setField(id, el.value, book.id);
+        }
+      }
     });
     if (document.getElementById('autoPackageAdder')) {
       book.formData.auto_package_adder = document.getElementById('autoPackageAdder').checked;
+      if (window.BookStore) window.BookStore.setField('auto_package_adder', book.formData.auto_package_adder, book.id);
     }
     const rawY = parseInt(document.getElementById('year')?.value, 10);
     if (!isNaN(rawY) && rawY > 1000 && rawY < 2100) {
@@ -973,6 +1007,7 @@
     } else {
       book.formData.template_mode = window.currentTemplateMode || 'pre2011';
     }
+    if (window.BookStore) window.BookStore.setField('template_mode', book.formData.template_mode, book.id);
     if (book.formData.article) book.article = book.formData.article;
     if (book.formData.title) book.title = book.formData.title;
   }
@@ -1075,11 +1110,16 @@
   }
 
   function switchBook(id) {
-    if (window.activeBookId === id) return;
+    const targetId = Number(id);
+    if (window.activeBookId === targetId) return;
     saveCurrentFormToActiveBook();
-    window.activeBookId = id;
+    if (window.BookStore) {
+      window.BookStore.switchActiveBook(targetId);
+    } else {
+      window.activeBookId = targetId;
+    }
 
-    const newActiveBook = (window.booksSession || []).find(b => b.id === id);
+    const newActiveBook = (window.booksSession || []).find(b => b.id === targetId);
     window.isBookAiRecognizing = Boolean(newActiveBook && newActiveBook.isAiRecognizing);
 
     // Гарантированно сбрасываем залипшую кнопку сохранения предыдущей книги
