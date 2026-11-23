@@ -109,9 +109,9 @@
      */
     getActiveBook() {
       if (!this.books || this.books.length === 0) {
-        this.books = [this.createDefaultBook(1)];
+        return null;
       }
-      return this.books.find(b => b.id === this.activeId) || this.books[0];
+      return this.books.find(b => b.id === this.activeId) || this.books[0] || null;
     }
 
     /**
@@ -251,19 +251,28 @@
     }
 
     /**
-     * Удаление книги из сессии
+     * Удаление книги из сессии (допускается закрытие всех вкладок до 0)
      */
     removeBook(id) {
       const targetId = Number(id);
-      if (this.books.length <= 1) return false;
-
       this.books = this.books.filter(b => b.id !== targetId);
       if (this.activeId === targetId) {
-        this.activeId = this.books[0] ? this.books[0].id : 1;
+        this.activeId = this.books.length > 0 ? this.books[0].id : null;
       }
 
       this.syncLegacyGlobals();
       this.emit('book:removed', { removedId: targetId, activeId: this.activeId });
+      return true;
+    }
+
+    /**
+     * Закрыть сразу все открытые вкладки книг (очистить сессию до 0)
+     */
+    removeAllBooks() {
+      this.books = [];
+      this.activeId = null;
+      this.syncLegacyGlobals();
+      this.emit('book:all_removed', {});
       return true;
     }
 

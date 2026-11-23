@@ -639,7 +639,11 @@
         const book = getActiveBook();
         const article = (book && book.formData && book.formData.article) || (book && book.article) || document.getElementById('article')?.value?.trim();
         if (!article) return;
-        const title = (book && book.formData && book.formData.title) || document.getElementById('title')?.value?.trim() || 'book';
+        const title = (book && book.formData && book.formData.title) || document.getElementById('title')?.value?.trim();
+        // Защита: не создаем в S3 временную безымянную папку, пока реальное название книги неизвестно
+        if (!title || title.trim().toLowerCase() === 'book' || title.trim() === 'Без названия') {
+          return;
+        }
 
         let photoIndex = 1;
         if (['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].includes(photo.assignedSlot)) {
@@ -1197,7 +1201,8 @@
         `;
       };
 
-      renderSingle('slot_cover_front', book.slots.cover_front, 'Перетащите сюда фото обложки или нажмите [1]');
+      const slots = (book && book.slots) ? book.slots : {};
+      renderSingle('slot_cover_front', slots.cover_front, 'Перетащите сюда фото обложки или нажмите [1]');
 
       // Множественные слоты (Задник, Титул, Иллюстрации, Дефекты)
       const renderMulti = (slotId, photos, placeholderText) => {
@@ -1280,11 +1285,11 @@
         }).join('');
       };
 
-      const backPhotos = Array.isArray(book.slots.cover_back) ? book.slots.cover_back : (book.slots.cover_back ? [book.slots.cover_back] : []);
+      const backPhotos = Array.isArray(slots.cover_back) ? slots.cover_back : (slots.cover_back ? [slots.cover_back] : []);
       renderMulti('slot_cover_back', backPhotos, 'Перетащите задник книги (или нескольких) или нажмите [2]');
-      renderMulti('slot_info_pages', book.slots.info_pages, 'Перетащите титул / оборот / колофон (ИИ считает данные) или нажмите [3]');
-      renderMulti('slot_illustrations', book.slots.illustrations, 'Перетащите иллюстрации и развороты сюда или нажмите [4]');
-      renderMulti('slot_mantra_defects', book.slots.mantra_defects, 'Только фото повреждений (надрывы, пометки) или нажмите [5]');
+      renderMulti('slot_info_pages', slots.info_pages, 'Перетащите титул / оборот / колофон (ИИ считает данные) или нажмите [3]');
+      renderMulti('slot_illustrations', slots.illustrations, 'Перетащите иллюстрации и развороты сюда или нажмите [4]');
+      renderMulti('slot_mantra_defects', slots.mantra_defects, 'Только фото повреждений (надрывы, пометки) или нажмите [5]');
 
       // Синхронизируем обязательную плашку-предупреждение в аннотации в зависимости от слота [5. Дефекты]
       syncAnnotationWarningWithDefectsSlot();

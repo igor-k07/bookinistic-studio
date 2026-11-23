@@ -95,4 +95,29 @@ assert.strictEqual(store.getActiveBook().formData.year, '1967', 'Новые по
 assert.strictEqual(store.getActiveBook().formData.pages, '450');
 console.log('✓ 6. Применение данных Gemini AI без конфликтов подтверждено');
 
+// 7. Тест закрытия вкладок до 0 штук и removeAllBooks
+const okRemove2 = store.removeBook(2);
+assert.strictEqual(okRemove2, true, 'Удаление книги 2 должно вернуть true');
+assert.strictEqual(store.books.length, 1, 'Должна остаться 1 книга');
+
+const okRemove1 = store.removeBook(1);
+assert.strictEqual(okRemove1, true, 'Удаление последней книги должно быть разрешено');
+assert.strictEqual(store.books.length, 0, 'В сессии должно остаться 0 книг');
+assert.strictEqual(store.getActiveBook(), null, 'getActiveBook() при 0 книг должен возвращать null');
+assert.strictEqual(store.activeId, null, 'activeId должен быть null');
+
+// Добавление новой книги после 0
+const newB = store.addBook('DP-B-00003');
+assert.strictEqual(store.books.length, 1, 'Создана 1 книга после пустого состояния');
+assert.strictEqual(store.activeId, 1);
+assert.strictEqual(store.getActiveBook().article, 'DP-B-00003');
+
+// Тест removeAllBooks
+store.addBook('DP-B-00004');
+assert.strictEqual(store.books.length, 2);
+store.removeAllBooks();
+assert.strictEqual(store.books.length, 0, 'removeAllBooks должен очистить все книги');
+assert.strictEqual(store.getActiveBook(), null);
+console.log('✓ 7. Закрытие вкладок до 0 штук и removeAllBooks работают корректно');
+
 console.log('\n🎉 Все тесты BookStore успешно пройдены!');

@@ -835,19 +835,21 @@
     // Удаляем из photoPool любые фото, привязанные к закрываемой вкладке:
     window.photoPool = (window.photoPool || []).filter(p => p.assignedBookId !== id);
 
-    if (books.length <= 1) {
-      // Если это была единственная открытая вкладка, создаем чистую новую книгу
-      if (typeof window.addNewBook === 'function') {
-        window.addNewBook();
-      }
-    }
-
     if (window.BookStore) {
       window.BookStore.removeBook(id);
     } else {
       window.booksSession = (window.booksSession || []).filter(b => b.id !== id);
-      if (window.activeBookId === id && window.booksSession.length > 0) {
-        window.activeBookId = window.booksSession[0].id;
+      if (window.activeBookId === id) {
+        window.activeBookId = window.booksSession.length > 0 ? window.booksSession[0].id : null;
+      }
+    }
+
+    if ((window.booksSession || []).length === 0) {
+      window.activeBookId = null;
+      if (window.BookForm && window.BookForm.initialized) {
+        window.BookForm.clearForm();
+      } else if (typeof window.clearForm === 'function') {
+        window.clearForm('');
       }
     }
 
@@ -859,7 +861,50 @@
     scheduleAutoSave();
 
     if (typeof window.showToast === 'function') {
-      window.showToast(`✕ Вкладка <b>${art}</b> закрыта.`);
+      const remaining = (window.booksSession || []).length;
+      window.showToast(`✕ Вкладка <b>${art}</b> закрыта. (Осталось: ${remaining})`);
+    }
+  }
+
+  function closeAllBookTabs() {
+    const books = window.booksSession || [];
+    if (!books || books.length === 0) {
+      if (typeof window.showToast === 'function') {
+        window.showToast('Вкладок для закрытия нет.', 'info');
+      }
+      return;
+    }
+
+    const count = books.length;
+    const confirmMsg = `Закрыть сразу все открытые вкладки книг (${count} шт.)?\n\nСохраненные карточки остаются в базе данных и каталоге.`;
+    if (!confirm(confirmMsg)) return;
+
+    // Очищаем привязки фото закрытых книг
+    const bookIds = new Set(books.map(b => b.id));
+    window.photoPool = (window.photoPool || []).filter(p => !bookIds.has(p.assignedBookId));
+
+    if (window.BookStore) {
+      window.BookStore.removeAllBooks();
+    } else {
+      window.booksSession = [];
+      window.activeBookId = null;
+    }
+
+    if (window.BookForm && window.BookForm.initialized) {
+      window.BookForm.clearForm();
+    } else if (typeof window.clearForm === 'function') {
+      window.clearForm('');
+    }
+
+    if (typeof window.renderPool === 'function') window.renderPool();
+    renderBooksTabs();
+    restoreFormFromActiveBook();
+    if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
+    if (typeof window.updateCardModeBanner === 'function') window.updateCardModeBanner();
+    scheduleAutoSave();
+
+    if (typeof window.showToast === 'function') {
+      window.showToast(`✕ Все вкладки (${count} шт.) успешно закрыты.`, 'success');
     }
   }
 
@@ -1161,9 +1206,27 @@
   function renderBooksTabs() {
     const container = document.getElementById('booksTabsContainer');
     if (!container) return;
-    const anyBackgroundAi = (window.booksSession || []).some(b => b.isAiRecognizing && b.id !== window.activeBookId);
+    const titleEl = document.getElementById('activeBookTitle');
 
-    container.innerHTML = (window.booksSession || []).map(b => {
+    const books = window.booksSession || [];
+    if (books.length === 0) {
+      container.innerHTML = `
+        <div class="flex items-center gap-2 py-1.5 px-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-400 shadow-sm">
+          <span>📭 Все вкладки закрыты (0 открытых книг).</span>
+          <button type="button" onclick="addNewBook()" class="text-amber-400 hover:text-amber-300 font-bold hover:underline flex items-center gap-1">
+            <span>+ Создать книгу</span>
+          </button>
+        </div>
+      `;
+      if (titleEl) {
+        titleEl.innerHTML = '📚 <span class="text-slate-500 font-mono">[Нет активной книги]</span>';
+      }
+      return;
+    }
+
+    const anyBackgroundAi = books.some(b => b.isAiRecognizing && b.id !== window.activeBookId);
+
+    container.innerHTML = books.map(b => {
       const isActive = b.id === window.activeBookId;
       const art = (b.formData && b.formData.article) || b.article || `Книга #${b.id}`;
       const titleSnippet = (b.formData && b.formData.title) ? ` • ${b.formData.title.substring(0, 16)}` : '';
@@ -1186,32 +1249,33 @@
             <span class="px-1.5 py-0.2 rounded-full text-[10px] ${isActive ? 'bg-slate-950 text-amber-300' : 'bg-slate-900 text-slate-400'} font-mono">${count} фото</span>
             ${b.isAiRecognizing ? '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block"></span>' : ''}
           </button>
-          ${(window.booksSession || []).length > 1 ? `
-            <button type="button" onclick="closeBookTab(${b.id}, event)" class="px-2 py-1.5 text-xs ${isActive ? 'text-slate-950 hover:bg-amber-400 hover:text-rose-950' : 'text-slate-400 hover:bg-slate-700 hover:text-rose-400'} transition font-bold" title="Закрыть вкладку этой книги">✕</button>
-          ` : ''}
+          <button type="button" onclick="closeBookTab(${b.id}, event)" class="px-2 py-1.5 text-xs ${isActive ? 'text-slate-950 hover:bg-amber-400 hover:text-rose-950' : 'text-slate-400 hover:bg-slate-700 hover:text-rose-400'} transition font-bold" title="Закрыть вкладку этой книги">✕</button>
         </div>
       `;
     }).join('');
 
     const cur = typeof getActiveBook === 'function' ? getActiveBook() : null;
-    const titleEl = document.getElementById('activeBookTitle');
-    if (cur && titleEl) {
-      const curArt = (cur.formData && cur.formData.article) || cur.article || `Книга #${cur.id}`;
-      const isReopened = Boolean(cur.isReopened);
-      const isCurRecognizing = Boolean(cur.isAiRecognizing);
+    if (titleEl) {
+      if (cur) {
+        const curArt = (cur.formData && cur.formData.article) || cur.article || `Книга #${cur.id}`;
+        const isReopened = Boolean(cur.isReopened);
+        const isCurRecognizing = Boolean(cur.isAiRecognizing);
 
-      let statusPill = '';
-      if (isCurRecognizing) {
-        statusPill = '<span class="ml-2 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-bold animate-pulse">⏳ Идет анализ Gemini...</span>';
-      } else if (anyBackgroundAi) {
-        const bgBook = (window.booksSession || []).find(b => b.isAiRecognizing && b.id !== cur.id);
-        const bgArt = bgBook ? ((bgBook.formData && bgBook.formData.article) || bgBook.article || `#${bgBook.id}`) : '';
-        statusPill = `<span class="ml-2 px-2 py-0.5 rounded bg-violet-950/70 text-violet-300 border border-violet-700/60 text-[10px] font-semibold animate-pulse">⚡ [${bgArt}] анализируется в фоне...</span>`;
-      } else if (isReopened) {
-        statusPill = '<span class="ml-1.5 px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-600/60 text-[10px] font-bold">Из каталога</span>';
+        let statusPill = '';
+        if (isCurRecognizing) {
+          statusPill = '<span class="ml-2 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-bold animate-pulse">⏳ Идет анализ Gemini...</span>';
+        } else if (anyBackgroundAi) {
+          const bgBook = (window.booksSession || []).find(b => b.isAiRecognizing && b.id !== cur.id);
+          const bgArt = bgBook ? ((bgBook.formData && bgBook.formData.article) || bgBook.article || `#${bgBook.id}`) : '';
+          statusPill = `<span class="ml-2 px-2 py-0.5 rounded bg-violet-950/70 text-violet-300 border border-violet-700/60 text-[10px] font-semibold animate-pulse">⚡ [${bgArt}] анализируется в фоне...</span>`;
+        } else if (isReopened) {
+          statusPill = '<span class="ml-1.5 px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-600/60 text-[10px] font-bold">Из каталога</span>';
+        }
+
+        titleEl.innerHTML = `📚 <span class="font-mono text-white">[${curArt}]</span>: Слоты категорий ${statusPill}`;
+      } else {
+        titleEl.innerHTML = '📚 <span class="text-slate-500 font-mono">[Нет активной книги]</span>';
       }
-
-      titleEl.innerHTML = `📚 <span class="font-mono text-white">[${curArt}]</span>: Слоты категорий ${statusPill}`;
     }
   }
 
@@ -1261,6 +1325,7 @@
   window.cancelEditModeAndCreateNew = cancelEditModeAndCreateNew;
   window.addNewBook = addNewBook;
   window.closeBookTab = closeBookTab;
+  window.closeAllBookTabs = closeAllBookTabs;
   window.deleteBookSession = deleteBookSession;
   window.syncArticleInputs = syncArticleInputs;
   window.onArticleNumberInput = onArticleNumberInput;

@@ -164,7 +164,7 @@ function getActiveBook() {
   }
   const session = (typeof window !== 'undefined' && window.booksSession) ? window.booksSession : booksSession;
   const curId = (typeof window !== 'undefined' && window.activeBookId !== undefined) ? window.activeBookId : activeBookId;
-  return session.find(b => b.id === curId) || session[0];
+  return session.find(b => b.id === curId) || (session.length > 0 ? session[0] : null);
 }
 
 function isPhotoProcessed(photo) {

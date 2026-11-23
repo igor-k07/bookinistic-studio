@@ -128,7 +128,7 @@ class TestSaveBookUseCaseOzonIntegration(unittest.TestCase):
 
         use_case = SaveBookUseCase()
         payload = {
-            "article": "DP-B-00001",
+            "article": "DP-B-99991",
             "title": "Мцыри",
             "author": "Михаил Лермонтов",
             "price": "350",
@@ -139,7 +139,7 @@ class TestSaveBookUseCaseOzonIntegration(unittest.TestCase):
         res = use_case.execute(payload)
 
         self.assertTrue(res["success"])
-        self.assertEqual(res["article"], "DP-B-00001")
+        self.assertEqual(res["article"], "DP-B-99991")
         self.assertIsNotNone(res.get("ozon_info"))
         self.assertTrue(res["ozon_info"]["published"])
         self.assertEqual(res["ozon_info"]["task_id"], 999111)

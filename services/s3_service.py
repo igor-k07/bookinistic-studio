@@ -128,7 +128,10 @@ def upload_single_slot_photo(
     if not data:
         return None
 
-    clean_title = re.sub(r"[^\w\s-]", "", title or "book").strip().replace(" ", "_")[:30]
+    clean_title = re.sub(r"[^\w\s-]", "", title or "").strip().replace(" ", "_")[:30]
+    if not clean_title or clean_title.lower() in ("book", "без_названия"):
+        # Защита: не создаем безымянную папку в S3 до определения реального названия книги
+        return None
     folder = f"{article}_{clean_title}".strip("_")
 
     if slot == "info_pages":
@@ -166,7 +169,10 @@ def upload_book_photos(
     import time
     v_tag = f"?v={int(time.time())}"
 
-    clean_title = re.sub(r"[^\w\s-]", "", title or "book").strip().replace(" ", "_")[:30]
+    clean_title = re.sub(r"[^\w\s-]", "", title or "").strip().replace(" ", "_")[:30]
+    if not clean_title or clean_title.lower() in ("book", "без_названия"):
+        # Защита: не создаем безымянную папку в S3 до определения реального названия книги
+        return None
     folder = f"{article}_{clean_title}".strip("_")
 
     main_photo_url: Optional[str] = None
@@ -206,7 +212,7 @@ def upload_book_photos(
         cf = slots_photos.get("cover_front")
         if cf:
             existing_s3 = cf.get("s3_url") if isinstance(cf, dict) else None
-            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3 and f"/{folder}/" in existing_s3:
                 main_photo_url = existing_s3
             else:
                 data = _decode_photo(cf)
@@ -220,7 +226,7 @@ def upload_book_photos(
         # 2. Фото дефектов при наличии (первые доп. фото)
         for idx, p in enumerate(slots_photos.get("mantra_defects", []), 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3 and f"/{folder}/" in existing_s3:
                 add_photo_urls.append(existing_s3)
             else:
                 data = _decode_photo(p)
@@ -234,7 +240,7 @@ def upload_book_photos(
         # 3. Фото иллюстраций (если есть, идут перед задником)
         for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3 and f"/{folder}/" in existing_s3:
                 add_photo_urls.append(existing_s3)
             else:
                 data = _decode_photo(p)
@@ -250,7 +256,7 @@ def upload_book_photos(
         cb_list = cb_raw if isinstance(cb_raw, list) else ([cb_raw] if cb_raw else [])
         for idx, p in enumerate(cb_list, 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3 and f"/{folder}/" in existing_s3:
                 add_photo_urls.append(existing_s3)
             else:
                 data = _decode_photo(p)
@@ -264,7 +270,7 @@ def upload_book_photos(
         # Инфо-страницы (титул, оборот) — архивируем в облаке в подпапку archive/, НЕ передаем в Ozon ссылки!
         for idx, p in enumerate(slots_photos.get("info_pages", []), 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if force_upload or not (existing_s3 and "storage.yandexcloud.net" in existing_s3):
+            if force_upload or not (existing_s3 and "storage.yandexcloud.net" in existing_s3 and f"/{folder}/" in existing_s3):
                 data = _decode_photo(p)
                 if data:
                     upload_bytes(f"{folder}/archive/info_page_{idx}.jpg", data)
