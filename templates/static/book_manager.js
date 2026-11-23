@@ -122,7 +122,9 @@
     autoDetectCountry();
     const y = parseInt(val, 10);
     if (!isNaN(y) && y > 1000 && y < 2100) {
-      const targetMode = (y <= 2011) ? 'pre2011' : 'post2011';
+      const targetMode = window.BookValidators
+        ? window.BookValidators.resolveTemplateMode(y)
+        : ((y <= 2011) ? 'pre2011' : 'post2011');
       if (targetMode !== window.currentTemplateMode) {
         setTemplateMode(targetMode, false);
         if (typeof window.switchPreviewTable === 'function') {
@@ -486,9 +488,11 @@
   function calcOldPrice() {
     const priceEl = document.getElementById('price');
     const p = parseFloat(priceEl?.value) || 0;
-    const old = Math.round((p * 1.4) / 10) * 10;
+    const old = window.BookCalculators
+      ? window.BookCalculators.calcOldPrice(p)
+      : Math.max(Math.round((p * 1.4) / 10) * 10, Math.round(p + 50));
     const oldPriceEl = document.getElementById('old_price');
-    if (oldPriceEl) oldPriceEl.value = Math.max(old, p + 50);
+    if (oldPriceEl) oldPriceEl.value = old > 0 ? old : '';
   }
 
   function setCondition(cond, isUserManual = false) {
@@ -616,32 +620,37 @@
     const rawH = (hEl && parseInt(hEl.value, 10)) || 22;
     const rawWt = (wtEl && parseInt(wtEl.value, 10)) || 300;
 
-    const pkgW = isPkgAdder ? (rawW + 10) : rawW;
-    const pkgL = isPkgAdder ? (rawL + 10) : rawL;
-    const pkgH = isPkgAdder ? (rawH + 10) : rawH;
-    const pkgWt = isPkgAdder ? (rawWt + 30) : rawWt;
+    const pkg = window.BookCalculators
+      ? window.BookCalculators.calcPackageDimensions(rawW, rawL, rawH, rawWt, isPkgAdder)
+      : {
+          width: isPkgAdder ? (rawW + 10) : rawW,
+          length: isPkgAdder ? (rawL + 10) : rawL,
+          height: isPkgAdder ? (rawH + 10) : rawH,
+          weight: isPkgAdder ? (rawWt + 30) : rawWt,
+          dimensions: `${isPkgAdder ? (rawW + 10) : rawW}х${isPkgAdder ? (rawL + 10) : rawL}х${isPkgAdder ? (rawH + 10) : rawH}`,
+        };
 
-    const dimStr = `${pkgW}х${pkgL}х${pkgH}`;
+    const dimStr = pkg.dimensions;
     const dimEl = document.getElementById('dimensions');
     if (dimEl) dimEl.value = dimStr;
 
-    if (document.getElementById('width_package')) document.getElementById('width_package').value = pkgW;
-    if (document.getElementById('length_package')) document.getElementById('length_package').value = pkgL;
-    if (document.getElementById('height_package')) document.getElementById('height_package').value = pkgH;
-    if (document.getElementById('weight_package')) document.getElementById('weight_package').value = pkgWt;
+    if (document.getElementById('width_package')) document.getElementById('width_package').value = pkg.width;
+    if (document.getElementById('length_package')) document.getElementById('length_package').value = pkg.length;
+    if (document.getElementById('height_package')) document.getElementById('height_package').value = pkg.height;
+    if (document.getElementById('weight_package')) document.getElementById('weight_package').value = pkg.weight;
 
     const wHint = document.getElementById('pkgWidthHint');
     const lHint = document.getElementById('pkgLengthHint');
     const hHint = document.getElementById('pkgHeightHint');
     const wtHint = document.getElementById('pkgWeightHint');
-    if (wHint) wHint.textContent = isPkgAdder ? `упак: ${pkgW} мм (+10)` : `упак: ${pkgW} мм`;
-    if (lHint) lHint.textContent = isPkgAdder ? `упак: ${pkgL} мм (+10)` : `упак: ${pkgL} мм`;
-    if (hHint) hHint.textContent = isPkgAdder ? `упак: ${pkgH} мм (+10)` : `упак: ${pkgH} мм`;
-    if (wtHint) wtHint.textContent = isPkgAdder ? `упак: ${pkgWt} г (+30)` : `упак: ${pkgWt} г`;
+    if (wHint) wHint.textContent = isPkgAdder ? `упак: ${pkg.width} мм (+10)` : `упак: ${pkg.width} мм`;
+    if (lHint) lHint.textContent = isPkgAdder ? `упак: ${pkg.length} мм (+10)` : `упак: ${pkg.length} мм`;
+    if (hHint) hHint.textContent = isPkgAdder ? `упак: ${pkg.height} мм (+10)` : `упак: ${pkg.height} мм`;
+    if (wtHint) wtHint.textContent = isPkgAdder ? `упак: ${pkg.weight} г (+30)` : `упак: ${pkg.weight} г`;
 
     const badge = document.getElementById('dimensionsPreviewBadge');
     if (badge) {
-      badge.textContent = `В Ozon: ${pkgW} × ${pkgL} × ${pkgH} мм · ${pkgWt} г`;
+      badge.textContent = `В Ozon: ${pkg.width} × ${pkg.length} × ${pkg.height} мм · ${pkg.weight} г`;
     }
 
     if (typeof window.saveCurrentFormToActiveBook === 'function') window.saveCurrentFormToActiveBook();
@@ -672,36 +681,18 @@
 
     let w = (widthEl && parseInt(widthEl.value, 10)) || 130;
     let l = (lengthEl && parseInt(lengthEl.value, 10)) || 205;
-    if (w > l) { const tmp = w; w = l; l = tmp; }
 
-    const coverVal = (document.getElementById('cover_type')?.value || 'Твердый переплет').toLowerCase();
-    const isHard = coverVal.includes('тверд') || coverVal.includes('интегральн') || coverVal.includes('бумвинил') || coverVal.includes('кож') || coverVal.includes('тканев');
+    const coverVal = document.getElementById('cover_type')?.value || 'Твердый переплет';
+    const paperVal = document.getElementById('paper_type')?.value || 'Офсетная';
 
-    const paperVal = (document.getElementById('paper_type')?.value || 'Офсетная').toLowerCase();
-    let pDens = 80;
-    if (paperVal.includes('мелован')) pDens = 115;
-    else if (paperVal.includes('газетн')) pDens = 50;
-    else if (paperVal.includes('типограф') || paperVal.includes('пухл')) pDens = 65;
+    const calculated = window.BookCalculators
+      ? window.BookCalculators.calculateDimensionsAndWeight({ pages, coverType: coverVal, paperType: paperVal, width: w, length: l })
+      : { width: w, length: l, height: 22, weight: 300 };
 
-    const areaM2 = (w / 1000.0) * (l / 1000.0);
-    const sheets = pages / 2.0;
-    const blockWt = sheets * areaM2 * pDens;
-
-    let coverWt, spine;
-    if (isHard) {
-      coverWt = 2 * areaM2 * 1200 + 4 * areaM2 * 120 + 20;
-      spine = Math.max(8, Math.round(pages * 0.048 + 3.5));
-    } else {
-      coverWt = 2 * areaM2 * 250 + 5;
-      spine = Math.max(4, Math.round(pages * 0.048 + 1.0));
-    }
-
-    const bookWeight = Math.max(50, Math.round(blockWt + coverWt));
-
-    if (widthEl && (force || !widthEl.value || widthEl.value === '0')) widthEl.value = w;
-    if (lengthEl && (force || !lengthEl.value || lengthEl.value === '0')) lengthEl.value = l;
-    if (heightEl && (force || !heightEl.value || heightEl.value === '0')) heightEl.value = spine;
-    if (weightEl && (force || !weightEl.value || weightEl.value === '0')) weightEl.value = bookWeight;
+    if (widthEl && (force || !widthEl.value || widthEl.value === '0')) widthEl.value = calculated.width;
+    if (lengthEl && (force || !lengthEl.value || lengthEl.value === '0')) lengthEl.value = calculated.length;
+    if (heightEl && (force || !heightEl.value || heightEl.value === '0')) heightEl.value = calculated.height;
+    if (weightEl && (force || !weightEl.value || weightEl.value === '0')) weightEl.value = calculated.weight;
 
     onDimensionChange();
   }
@@ -772,19 +763,16 @@
 
   function deriveBarcodeFromIsbn() {
     const isbn = document.getElementById('isbn')?.value?.trim() || '';
-    const digits = isbn.replace(/\D/g, '');
-    let finalBarcode = '';
-    if (digits.length === 13) {
-      finalBarcode = digits;
-    } else if (digits.length === 10) {
-      const base12 = '978' + digits.substring(0, 9);
-      const chk = window.BookCalculators ? window.BookCalculators.calcEan13Checksum(base12) : '0';
-      finalBarcode = base12 + chk;
-    } else {
-      alert(`В поле ISBN должно быть 10 или 13 цифр (например: 978-5-17-147716-5)! Сейчас там: "${isbn}"`);
+    const res = window.BookCalculators
+      ? window.BookCalculators.deriveBarcodeFromIsbn(isbn)
+      : { success: false, error: 'Калькулятор штрихкодов не инициализирован' };
+
+    if (!res.success) {
+      alert(res.error || `В поле ISBN должно быть 10 или 13 цифр (например: 978-5-17-147716-5)! Сейчас там: "${isbn}"`);
       return;
     }
 
+    const finalBarcode = res.barcode;
     const bcEl = document.getElementById('barcode');
     if (bcEl) {
       bcEl.value = finalBarcode;
@@ -983,17 +971,21 @@
     const rawHeight = parseInt(document.getElementById('height')?.value, 10) || 22;
     const rawWeight = parseInt(document.getElementById('weight')?.value, 10) || 300;
 
-    const pkgWidth = isPkgAdder ? (rawWidth + 10) : rawWidth;
-    const pkgLength = isPkgAdder ? (rawLength + 10) : rawLength;
-    const pkgHeight = isPkgAdder ? (rawHeight + 10) : rawHeight;
-    const pkgWeight = isPkgAdder ? (rawWeight + 30) : rawWeight;
-    const dimStr = `${pkgWidth}х${pkgLength}х${pkgHeight}`;
+    const pkgDims = window.BookCalculators
+      ? window.BookCalculators.calcPackageDimensions(rawWidth, rawLength, rawHeight, rawWeight, isPkgAdder)
+      : { width: isPkgAdder ? rawWidth + 10 : rawWidth, length: isPkgAdder ? rawLength + 10 : rawLength, height: isPkgAdder ? rawHeight + 10 : rawHeight, weight: isPkgAdder ? rawWeight + 30 : rawWeight, dimensions: `${rawWidth}х${rawLength}х${rawHeight}` };
+
+    const pkgWidth = pkgDims.width;
+    const pkgLength = pkgDims.length;
+    const pkgHeight = pkgDims.height;
+    const pkgWeight = pkgDims.weight;
+    const dimStr = pkgDims.dimensions;
 
     const rawYearVal = document.getElementById('year')?.value?.trim() || '';
     const yInt = parseInt(rawYearVal, 10);
-    const resolvedTemplateMode = (!isNaN(yInt) && yInt > 1000 && yInt < 2100)
-      ? (yInt <= 2011 ? 'pre2011' : 'post2011')
-      : (window.currentTemplateMode || 'pre2011');
+    const resolvedTemplateMode = window.BookValidators
+      ? window.BookValidators.resolveTemplateMode(yInt)
+      : ((!isNaN(yInt) && yInt > 1000 && yInt < 2100) ? (yInt <= 2011 ? 'pre2011' : 'post2011') : (window.currentTemplateMode || 'pre2011'));
     if (resolvedTemplateMode !== window.currentTemplateMode && typeof setTemplateMode === 'function') {
       try { setTemplateMode(resolvedTemplateMode, false); } catch (e) {}
     }

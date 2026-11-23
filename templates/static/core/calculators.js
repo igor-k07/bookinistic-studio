@@ -1,9 +1,10 @@
 /**
- * calculators.js: Чистые функции расчета габаритов ГОСТ, штрихкодов EAN-13 и сохранности Ozon.
+ * calculators.js: Чистые функции расчета габаритов ГОСТ, упаковки, цен, штрихкодов EAN-13 и сохранности Ozon.
  * Инкапсулирует бизнес-формулы спецификации и устраняет дублирование кода в UI.
+ * Работает как в браузере (window.BookCalculators), так и в среде тестирования Node.js.
  */
 
-(function (window) {
+(function (global) {
   'use strict';
 
   const STORE_BARCODE_PREFIX = "297847"; // 29 (внутренний GS1) + 78 (СПб) + 47 (Другой Петербург)
@@ -24,18 +25,18 @@
   };
 
   /**
-   * Распознает код типографского формата книги из строки.
+   * Распознает код типографского формата книги из строки (например "84x108/32").
    */
   function parseFormatCode(text) {
     if (!text) return null;
-    const m = text.match(/(\d{2,3})\s*[xх*×]\s*(\d{2,3})\s*(?:(?:1\/|\/)\s*(\d{1,2}))/i);
+    const m = String(text).match(/(\d{2,3})\s*[xх*×]\s*(\d{2,3})\s*(?:(?:1\/|\/)\s*(\d{1,2}))/i);
     if (m) {
       const key = `${m[1]}x${m[2]}/${m[3]}`.toLowerCase();
       if (SOVIET_FORMAT_MAP[key]) {
         return { key, width: SOVIET_FORMAT_MAP[key][0], length: SOVIET_FORMAT_MAP[key][1] };
       }
     }
-    const mDirect = text.match(/(\d{2,3})\s*[xх*×]\s*(\d{2,3})/i);
+    const mDirect = String(text).match(/(\d{2,3})\s*[xх*×]\s*(\d{2,3})/i);
     if (mDirect) {
       let w = parseInt(mDirect[1], 10);
       let l = parseInt(mDirect[2], 10);
@@ -96,6 +97,94 @@
   }
 
   /**
+   * Точный расчет толщины корешка и физического веса книги по количеству страниц,
+   * типу переплета и плотности бумаги.
+   */
+  function calculateDimensionsAndWeight(options = {}) {
+    const pages = Math.max(1, parseInt(options.pages, 10) || 200);
+    let w = parseInt(options.width, 10) || 130;
+    let l = parseInt(options.length, 10) || 205;
+
+    if (options.formatCode) {
+      const parsed = parseFormatCode(options.formatCode);
+      if (parsed) {
+        w = parsed.width;
+        l = parsed.length;
+      }
+    }
+    if (w > l) { const tmp = w; w = l; l = tmp; }
+
+    const coverVal = (options.coverType || 'Твердый переплет').toLowerCase();
+    const isHard = coverVal.includes('тверд') || coverVal.includes('интегральн') || coverVal.includes('бумвинил') || coverVal.includes('кож') || coverVal.includes('тканев');
+
+    const paperVal = (options.paperType || 'Офсетная').toLowerCase();
+    let pDens = 80;
+    if (paperVal.includes('мелован')) pDens = 115;
+    else if (paperVal.includes('газетн')) pDens = 50;
+    else if (paperVal.includes('типограф') || paperVal.includes('пухл')) pDens = 65;
+
+    const areaM2 = (w / 1000.0) * (l / 1000.0);
+    const sheets = pages / 2.0;
+    const blockWt = sheets * areaM2 * pDens;
+
+    let coverWt, spine;
+    if (isHard) {
+      coverWt = 2 * areaM2 * 1200 + 4 * areaM2 * 120 + 20;
+      spine = Math.max(8, Math.round(pages * 0.048 + 3.5));
+    } else {
+      coverWt = 2 * areaM2 * 250 + 5;
+      spine = Math.max(4, Math.round(pages * 0.048 + 1.0));
+    }
+
+    const weight = Math.max(50, Math.round(blockWt + coverWt));
+
+    return {
+      width: w,
+      length: l,
+      height: spine,
+      weight: weight,
+    };
+  }
+
+  /**
+   * Расчет габаритов и веса в упаковке (+10 мм по осям, +30 г для бандероли/пупырки Ozon).
+   */
+  function calcPackageDimensions(rawW, rawL, rawH, rawWt, isPkgAdder = true) {
+    const w = parseInt(rawW, 10) || 130;
+    const l = parseInt(rawL, 10) || 205;
+    const h = parseInt(rawH, 10) || 22;
+    const wt = parseInt(rawWt, 10) || 300;
+
+    const pkgW = isPkgAdder ? (w + 10) : w;
+    const pkgL = isPkgAdder ? (l + 10) : l;
+    const pkgH = isPkgAdder ? (h + 10) : h;
+    const pkgWt = isPkgAdder ? (wt + 30) : wt;
+
+    return {
+      width: pkgW,
+      length: pkgL,
+      height: pkgH,
+      weight: pkgWt,
+      dimensions: `${pkgW}х${pkgL}х${pkgH}`,
+      rawWidth: w,
+      rawLength: l,
+      rawHeight: h,
+      rawWeight: wt,
+    };
+  }
+
+  /**
+   * Расчет старой цены (до скидки) для Ozon с психологическим округлением до десятков.
+   * По умолчанию наценка 40% (x1.4), но не менее чем цена + 50 руб.
+   */
+  function calcOldPrice(price, markupRatio = 1.4) {
+    const p = parseFloat(price) || 0;
+    if (p <= 0) return 0;
+    const calculated = Math.round((p * markupRatio) / 10) * 10;
+    return Math.max(calculated, Math.round(p + 50));
+  }
+
+  /**
    * Расчет сохранности книги (п. 5.3 спецификации).
    */
   function calculateBookCondition(hasDefects, manualCondition = '') {
@@ -132,6 +221,27 @@
     const base12 = `${STORE_BARCODE_PREFIX}${numPart}`.slice(-12);
     const check = calcEan13Checksum(base12);
     return `${base12}${check}`;
+  }
+
+  /**
+   * Получение штрихкода EAN-13 из ISBN (10 или 13 символов).
+   */
+  function deriveBarcodeFromIsbn(isbn) {
+    const s = String(isbn || '').trim();
+    const digits = s.replace(/\D/g, '');
+    if (digits.length === 13) {
+      return { success: true, barcode: digits };
+    }
+    if (digits.length === 10) {
+      const base12 = '978' + digits.substring(0, 9);
+      const chk = calcEan13Checksum(base12);
+      return { success: true, barcode: base12 + chk };
+    }
+    return {
+      success: false,
+      barcode: '',
+      error: `В поле ISBN должно быть 10 или 13 цифр! Получено: "${s}"`,
+    };
   }
 
   /**
@@ -199,12 +309,25 @@
     `;
   }
 
-  window.BookCalculators = {
+  const BookCalculators = {
+    SOVIET_FORMAT_MAP,
+    STORE_BARCODE_PREFIX,
+    parseFormatCode,
     calculateGostDimensions,
+    calculateDimensionsAndWeight,
+    calcPackageDimensions,
+    calcOldPrice,
     calculateBookCondition,
     calcEan13Checksum,
     generateEan13FromArticle,
+    deriveBarcodeFromIsbn,
     generateEan13Svg,
-    parseFormatCode,
   };
-})(window);
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = BookCalculators;
+  }
+  if (typeof global !== 'undefined') {
+    global.BookCalculators = BookCalculators;
+  }
+})(typeof window !== 'undefined' ? window : global);
