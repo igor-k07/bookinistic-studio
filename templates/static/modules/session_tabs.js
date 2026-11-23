@@ -988,19 +988,29 @@
     const book = typeof getActiveBook === 'function' ? getActiveBook() : null;
     if (!book) return;
     if (!book.formData) book.formData = {};
-    FORM_FIELD_IDS.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        book.formData[id] = el.value;
-        if (window.BookStore) {
-          window.BookStore.setField(id, el.value, book.id);
-        }
+
+    if (window.BookForm && window.BookForm.initialized) {
+      const data = window.BookForm.readForm();
+      Object.assign(book.formData, data);
+      if (window.BookStore) {
+        window.BookStore.updateFields(data, book.id);
       }
-    });
-    if (document.getElementById('autoPackageAdder')) {
-      book.formData.auto_package_adder = document.getElementById('autoPackageAdder').checked;
-      if (window.BookStore) window.BookStore.setField('auto_package_adder', book.formData.auto_package_adder, book.id);
+    } else {
+      FORM_FIELD_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          book.formData[id] = el.value;
+          if (window.BookStore) {
+            window.BookStore.setField(id, el.value, book.id);
+          }
+        }
+      });
+      if (document.getElementById('autoPackageAdder')) {
+        book.formData.auto_package_adder = document.getElementById('autoPackageAdder').checked;
+        if (window.BookStore) window.BookStore.setField('auto_package_adder', book.formData.auto_package_adder, book.id);
+      }
     }
+
     const rawY = parseInt(document.getElementById('year')?.value, 10);
     if (!isNaN(rawY) && rawY > 1000 && rawY < 2100) {
       book.formData.template_mode = (rawY <= 2011) ? 'pre2011' : 'post2011';
@@ -1017,18 +1027,22 @@
     if (!book) return;
     if (!book.formData) book.formData = {};
 
-    FORM_FIELD_IDS.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        let val = (book.formData[id] !== undefined && book.formData[id] !== null) ? String(book.formData[id]) : '';
-        if (id === 'dimensions' && val.includes('[object')) {
-          val = '';
+    if (window.BookForm && window.BookForm.initialized) {
+      window.BookForm.populateForm(book.formData, { force: true });
+    } else {
+      FORM_FIELD_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          let val = (book.formData[id] !== undefined && book.formData[id] !== null) ? String(book.formData[id]) : '';
+          if (id === 'dimensions' && val.includes('[object')) {
+            val = '';
+          }
+          el.value = val;
         }
-        el.value = val;
+      });
+      if (document.getElementById('autoPackageAdder')) {
+        document.getElementById('autoPackageAdder').checked = (book.formData.auto_package_adder !== false);
       }
-    });
-    if (document.getElementById('autoPackageAdder')) {
-      document.getElementById('autoPackageAdder').checked = (book.formData.auto_package_adder !== false);
     }
     // Нормализация жанра: исключаем 'Детская литература' из черновиков
     if (book.formData['genre'] === 'Детская литература' || (book.formData['genre'] && String(book.formData['genre']).toLowerCase().includes('детск'))) {

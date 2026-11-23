@@ -652,9 +652,9 @@
                 </div>
                 <div class="flex items-center group relative">
                   <span class="inline-flex items-center px-3 py-2 rounded-l-xl border border-r-0 border-slate-700 bg-slate-900 text-amber-400 font-mono font-bold text-xs select-none shadow-inner">DP-B-</span>
-                  <input type="text" id="article_number" oninput="onArticleNumberInput(this.value)" onblur="onArticleNumberBlur()" class="w-full bg-slate-950 border border-slate-700 rounded-r-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition tracking-widest font-bold pr-7" placeholder="03098" maxlength="6" title="Введите только номер книги (например 03098)">
+                  <input type="text" id="article_number" data-field="article_number" oninput="onArticleNumberInput(this.value)" onblur="onArticleNumberBlur()" class="w-full bg-slate-950 border border-slate-700 rounded-r-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition tracking-widest font-bold pr-7" placeholder="03098" maxlength="6" title="Введите только номер книги (например 03098)">
                   <span id="articleLockIcon" class="hidden absolute right-2.5 text-xs text-slate-400 pointer-events-none" title="Артикул зафиксирован в режиме редактирования">🔒</span>
-                  <input type="hidden" id="article" value="">
+                  <input type="hidden" id="article" data-field="article" value="">
                 </div>
               </div>
 
@@ -669,7 +669,7 @@
                     <button type="button" onclick="openBarcodeModal()" class="text-[10px] text-cyan-400 hover:text-cyan-300 font-medium" title="Открыть просмотр и печать термоэтикетки 58×40">🖨️ Этикетка</button>
                   </div>
                 </div>
-                <input type="text" id="barcode" oninput="onBarcodeInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition" placeholder="2978470000012">
+                <input type="text" id="barcode" data-field="barcode" oninput="onBarcodeInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition" placeholder="2978470000012">
                 <p class="text-[10px] text-slate-400 mt-1 leading-snug">
                   <span class="text-amber-400 font-semibold">ℹ️ Для Ozon:</span> Если ISBN книги уже есть на Ozon у других продавцов, Ozon не привяжет дубль штрихкода при импорте. В таком случае сгенерируйте штрихкод в кабинете Ozon («Товары» → «Штрихкоды») или используйте наш уникальный штрихкод магазина <span class="text-emerald-400">⚡ Ген. EAN-13</span>.
                 </p>
@@ -684,7 +684,7 @@
                 </label>
                 <button type="button" onclick="document.getElementById('isbn').value='978-5-0000-0000-0'" class="text-[10px] text-amber-400 hover:text-amber-300">Заглушка СССР (до 1987)</button>
               </div>
-              <input type="text" id="isbn" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition" placeholder="Необязательно для книг до 2011 г.">
+              <input type="text" id="isbn" data-field="isbn" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition" placeholder="Необязательно для книг до 2011 г.">
             </div>
 
             <div>
@@ -694,7 +694,7 @@
                   <span>🌐</span> Сверить с базой FantLab
                 </button>
               </div>
-              <input type="text" id="title" oninput="onTitleInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:border-amber-500 focus:outline-none transition font-semibold" placeholder="например: Всадник без головы">
+              <input type="text" id="title" data-field="title" oninput="onTitleInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:border-amber-500 focus:outline-none transition font-semibold" placeholder="например: Всадник без головы">
             </div>
 
             <div>
@@ -702,13 +702,13 @@
                 Оригинальное название (для переводных изданий):
                 <span class="text-[10px] text-amber-400/90 font-normal ml-1">на языке оригинала</span>
               </label>
-              <input type="text" id="original_title" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition font-sans" placeholder="например: Emil i Lönneberga, The Headless Horseman">
+              <input type="text" id="original_title" data-field="original_title" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition font-sans" placeholder="например: Emil i Lönneberga, The Headless Horseman">
               <p class="text-[10px] text-slate-500 mt-0.5">Только для зарубежных книг (латиницей как в оригинале). Для русских авторов оставить пустым.</p>
             </div>
 
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Серия книги (если есть):</label>
-              <input type="text" id="series" data-autocomplete="series" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="например: Библиотека приключений, ЖЗЛ">
+              <input type="text" id="series" data-field="series" data-autocomplete="series" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="например: Библиотека приключений, ЖЗЛ">
             </div>
           </div>
 
@@ -719,12 +719,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Автор на обложке: <span class="text-rose-400">*</span></label>
-                <input type="text" id="author_cover" data-autocomplete="authors" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Майн Рид (как напечатано)">
+                <input type="text" id="author_cover" data-field="author_cover" data-autocomplete="authors" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Майн Рид (как напечатано)">
                 <p class="text-[10px] text-slate-500 mt-0.5">Строго как на обложке (обычно Имя Фамилия)</p>
               </div>
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Автор по паспорту (ФИО): <span class="text-rose-400">*</span></label>
-                <input type="text" id="author" data-autocomplete="authors" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Рид Томас Майн">
+                <input type="text" id="author" data-field="author" data-autocomplete="authors" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Рид Томас Майн">
                 <p class="text-[10px] text-slate-500 mt-0.5">Строго Фамилия Имя Отчество</p>
               </div>
             </div>
@@ -732,11 +732,11 @@
             <div class="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <label class="block text-slate-400 mb-1">Иллюстратор:</label>
-                <input type="text" id="illustrator" data-autocomplete="illustrators" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Художник">
+                <input type="text" id="illustrator" data-field="illustrator" data-autocomplete="illustrators" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Художник">
               </div>
               <div>
                 <label class="block text-slate-400 mb-1">Переводчик:</label>
-                <input type="text" id="translator" data-autocomplete="translators" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Перевод с языка">
+                <input type="text" id="translator" data-field="translator" data-autocomplete="translators" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" placeholder="Перевод с языка">
               </div>
             </div>
           </div>
@@ -751,7 +751,7 @@
                   <label class="text-xs font-medium text-slate-300">Издательство:</label>
                   <button type="button" onclick="document.getElementById('publisher').value='Художественная литература'; syncBrandWithPublisher('Художественная литература');" class="text-[10px] text-amber-400 hover:text-amber-300">«Худлит»</button>
                 </div>
-                <input type="text" id="publisher" data-autocomplete="publishers" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
+                <input type="text" id="publisher" data-field="publisher" data-autocomplete="publishers" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Художественная литература">
               </div>
 
               <div>
@@ -759,19 +759,19 @@
                   <label class="text-xs font-medium text-slate-300">Бренд Ozon: <span class="text-rose-400">*</span></label>
                   <button type="button" onclick="document.getElementById('brand').value='Нет бренда'" class="text-[10px] text-amber-400 hover:text-amber-300 font-bold">«Нет бренда»</button>
                 </div>
-                <input type="text" id="brand" data-autocomplete="brands" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Нет бренда">
+                <input type="text" id="brand" data-field="brand" data-autocomplete="brands" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="Нет бренда">
               </div>
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Год выпуска:</label>
-                <input type="number" id="year" oninput="onYearInput(this.value)" onchange="onYearInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="1984">
+                <input type="number" id="year" data-field="year" oninput="onYearInput(this.value)" onchange="onYearInput(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="1984">
               </div>
             </div>
 
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Страна:</label>
-                <select id="country" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                <select id="country" data-field="country" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
                   <option value="Россия">Россия</option>
                   <option value="СССР">СССР</option>
                 </select>
@@ -779,12 +779,12 @@
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Страниц:</label>
-                <input type="number" id="pages" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="384">
+                <input type="number" id="pages" data-field="pages" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition" placeholder="384">
               </div>
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Переплет:</label>
-                <select id="cover_type" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                <select id="cover_type" data-field="cover_type" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
                   <option value="Твердый переплет">Твердый переплет</option>
                   <option value="Твердый переплет, суперобложка">Твердый переплет, суперобложка</option>
                   <option value="Мягкая обложка">Мягкая обложка</option>
@@ -808,7 +808,7 @@
             <div class="grid grid-cols-3 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Бумага: <span class="text-rose-400">*</span></label>
-                <select id="paper_type" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                <select id="paper_type" data-field="paper_type" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
                   <option value="">-- Выберите тип бумаги --</option>
                   <option value="Типографская">Типографская</option>
                   <option value="Офсетная">Офсетная</option>
@@ -827,7 +827,7 @@
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Жанр Ozon: <span class="text-rose-400">*</span></label>
-                <select id="genre" onchange="handleGenreChange()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                <select id="genre" data-field="genre" onchange="handleGenreChange()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
                   <option value="Проза">Проза</option>
                   <option value="История">История</option>
                   <option value="Фантастика">Фантастика</option>
@@ -879,7 +879,7 @@
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Возраст Ozon:</label>
-                <select id="age_limit" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
+                <select id="age_limit" data-field="age_limit" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none transition">
                   <option value="">— Не указан —</option>
                   <option value="0+">0+</option>
                   <option value="6+">6+</option>
@@ -890,7 +890,7 @@
               </div>
             </div>
 
-            <input type="hidden" id="target_audience" value="">
+            <input type="hidden" id="target_audience" data-field="target_audience" value="">
           </div>
 
         </div>
@@ -909,19 +909,19 @@
                 <button type="button" onclick="setCondition('Хорошая', true)" data-val="Хорошая" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Хорошее</button>
                 <button type="button" onclick="setCondition('Удовлетворительная', true)" data-val="Удовлетворительная" class="cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center">Удовл.</button>
               </div>
-              <input type="hidden" id="condition" value="Очень хорошая">
+              <input type="hidden" id="condition" data-field="condition" value="Очень хорошая">
             </div>
 
             <div>
               <label class="block text-xs font-medium text-slate-300 mb-1">Аннотация книги (пойдет в карточку Ozon):</label>
-              <textarea id="annotation" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-amber-500 focus:outline-none transition leading-relaxed" placeholder="Текст аннотации книги..."></textarea>
+              <textarea id="annotation" data-field="annotation" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-amber-500 focus:outline-none transition leading-relaxed" placeholder="Текст аннотации книги..."></textarea>
               <p class="text-xs mt-1.5 transition-all text-slate-400 font-medium flex items-center gap-1.5" id="annotationNoticeHint">
                 <span>💡</span> <span>Плашка «ВНИМАНИЕ! КНИГА НЕ НОВАЯ...» добавляется строго при наличии фото в слоте [5. Только дефекты].</span>
               </p>
             </div>
 
             <!-- Скрытые хештеги Ozon (не проставляются по требованию) -->
-            <input type="hidden" id="hashtags" value="">
+            <input type="hidden" id="hashtags" data-field="hashtags" value="">
           </div>
 
           <!-- СЕКЦИЯ 5: ЦЕНЫ И ГАБАРИТЫ ТОВАРА (ГАБАРИТЫ УПАКОВКИ УЧТЕНЫ В РАЗМЕРАХ ТОВАРА) -->
@@ -931,7 +931,7 @@
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Цена продажи (₽): <span class="text-rose-400">*</span></label>
-                <input type="number" id="price" oninput="calcOldPrice()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-emerald-400 font-bold focus:border-amber-500 focus:outline-none transition font-mono" placeholder="Введите цену">
+                <input type="number" id="price" data-field="price" oninput="calcOldPrice()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-emerald-400 font-bold focus:border-amber-500 focus:outline-none transition font-mono" placeholder="Введите цену">
                 <div class="flex gap-1 mt-1.5">
                   <button type="button" onclick="setPrice(250)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300">250</button>
                   <button type="button" onclick="setPrice(350)" class="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300">350</button>
@@ -942,7 +942,7 @@
 
               <div>
                 <label class="block text-xs font-medium text-slate-300 mb-1">Старая цена (₽):</label>
-                <input type="number" id="old_price" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-slate-400 focus:border-amber-500 focus:outline-none transition font-mono" placeholder="не заполнено">
+                <input type="number" id="old_price" data-field="old_price" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-base text-slate-400 focus:border-amber-500 focus:outline-none transition font-mono" placeholder="не заполнено">
                 <p class="text-[10px] text-slate-500 mt-1">Автоскидка ~40%</p>
               </div>
             </div>
@@ -960,7 +960,7 @@
               <!-- Чекбокс включения прибавки упаковки (+10 мм / +30 г) -->
               <div class="flex items-center justify-between bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 text-[11px]">
                 <label class="flex items-center gap-2 cursor-pointer text-slate-300 font-medium">
-                  <input type="checkbox" id="autoPackageAdder" checked onchange="onDimensionChange()" class="w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-950">
+                  <input type="checkbox" id="autoPackageAdder" data-field="auto_package_adder" checked onchange="onDimensionChange()" class="w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-950">
                   <span>Прибавлять упаковку: <span class="text-amber-400 font-mono font-semibold">+10 мм</span> к габаритам и <span class="text-amber-400 font-mono font-semibold">+30 г</span> к весу</span>
                 </label>
                 <span class="text-[10px] text-emerald-400 font-medium">Для склада Ozon</span>
@@ -970,25 +970,25 @@
               <div class="grid grid-cols-4 gap-2 text-xs">
                 <div>
                   <label class="block text-[10px] text-slate-400 mb-1 font-medium" title="Ширина самой книги по линейке">Ширина книги:</label>
-                  <input type="number" id="width" value="130" min="10" max="1000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="130">
+                  <input type="number" id="width" data-field="width" value="130" min="10" max="1000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="130">
                   <div id="pkgWidthHint" class="text-[9px] text-amber-400/90 text-center mt-1 font-mono">упак: 140 мм (+10)</div>
                 </div>
 
                 <div>
                   <label class="block text-[10px] text-slate-400 mb-1 font-medium" title="Высота книги по вертикали / Длина Ozon">Длина книги:</label>
-                  <input type="number" id="length" value="205" min="10" max="1000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="205">
+                  <input type="number" id="length" data-field="length" value="205" min="10" max="1000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="205">
                   <div id="pkgLengthHint" class="text-[9px] text-amber-400/90 text-center mt-1 font-mono">упак: 215 мм (+10)</div>
                 </div>
 
                 <div>
                   <label class="block text-[10px] text-slate-400 mb-1 font-medium" title="Толщина корешка книги">Толщина корешка:</label>
-                  <input type="number" id="height" value="22" min="1" max="500" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="22">
+                  <input type="number" id="height" data-field="height" value="22" min="1" max="500" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="22">
                   <div id="pkgHeightHint" class="text-[9px] text-amber-400/90 text-center mt-1 font-mono">упак: 32 мм (+10)</div>
                 </div>
 
                 <div>
                   <label class="block text-[10px] text-slate-400 mb-1 font-medium" title="Вес книги на весах в граммах">Вес книги (нетто):</label>
-                  <input type="number" id="weight" value="300" min="10" max="10000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="300">
+                  <input type="number" id="weight" data-field="weight" value="300" min="10" max="10000" oninput="onDimensionChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-semibold focus:border-amber-500 focus:outline-none transition text-center" placeholder="300">
                   <div id="pkgWeightHint" class="text-[9px] text-amber-400/90 text-center mt-1 font-mono">упак: 330 г (+30)</div>
                 </div>
               </div>
@@ -1021,11 +1021,11 @@
             </div>
 
             <!-- Скрытые синхронизируемые поля для полной совместимости с Ozon -->
-            <input type="hidden" id="dimensions" value="140х215х32">
-            <input type="hidden" id="width_package" value="140">
-            <input type="hidden" id="length_package" value="215">
-            <input type="hidden" id="height_package" value="32">
-            <input type="hidden" id="weight_package" value="330">
+            <input type="hidden" id="dimensions" data-field="dimensions" value="140х215х32">
+            <input type="hidden" id="width_package" data-field="width_package" value="140">
+            <input type="hidden" id="length_package" data-field="length_package" value="215">
+            <input type="hidden" id="height_package" data-field="height_package" value="32">
+            <input type="hidden" id="weight_package" data-field="weight_package" value="330">
           </div>
 
           <!-- СЕКЦИЯ 6: ТЕХНИЧЕСКИЕ ПАРАМЕТРЫ OZON (АВТОМАТИЧЕСКИЕ БЕЙДЖИ) -->
@@ -2193,6 +2193,7 @@
   <script src="/static/modules/barcode_modal.js"></script>
   <script src="/static/modules/preview_table.js"></script>
   <script src="/static/modules/system_modals.js"></script>
+  <script src="/static/modules/book_form.js"></script>
   <script src="/static/modules/session_tabs.js"></script>
   <script src="/static/studio.js"></script>
   <script src="/static/pipeline.js"></script>

@@ -791,31 +791,47 @@
       }
     }
 
-    ['title', 'original_title', 'author_cover', 'author', 'series', 'illustrator', 'translator', 'publisher', 'year', 'pages', 'price', 'old_price'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-    const antEl = document.getElementById('annotation');
-    if (antEl) antEl.value = '';
+    if (window.BookForm && window.BookForm.initialized) {
+      window.BookForm.clearForm({
+        brand: 'Нет бренда',
+        auto_package_adder: true,
+        isbn: (window.currentTemplateMode === 'pre2011') ? '' : '978-5-0000-0000-0',
+        country: 'Россия',
+        cover_type: 'Твердый переплет',
+        paper_type: '',
+        genre: 'Проза',
+        age_limit: '',
+        target_audience: '',
+        hashtags: '',
+        condition: 'Очень хорошая'
+      });
+    } else {
+      ['title', 'original_title', 'author_cover', 'author', 'series', 'illustrator', 'translator', 'publisher', 'year', 'pages', 'price', 'old_price'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      const antEl = document.getElementById('annotation');
+      if (antEl) antEl.value = '';
+      const brandEl = document.getElementById('brand');
+      if (brandEl) brandEl.value = 'Нет бренда';
+      if (document.getElementById('autoPackageAdder')) {
+        document.getElementById('autoPackageAdder').checked = true;
+      }
+      const isbnEl = document.getElementById('isbn');
+      if (isbnEl) {
+        isbnEl.value = (window.currentTemplateMode === 'pre2011') ? '' : '978-5-0000-0000-0';
+      }
+      if (document.getElementById('country')) document.getElementById('country').value = 'Россия';
+      if (document.getElementById('cover_type')) document.getElementById('cover_type').value = 'Твердый переплет';
+      if (document.getElementById('paper_type')) document.getElementById('paper_type').value = '';
+      if (document.getElementById('genre')) document.getElementById('genre').value = 'Проза';
+      if (document.getElementById('age_limit')) document.getElementById('age_limit').value = '';
+      if (document.getElementById('target_audience')) document.getElementById('target_audience').value = '';
+      if (document.getElementById('hashtags')) document.getElementById('hashtags').value = '';
+    }
     if (typeof window.syncAnnotationWarningWithDefectsSlot === 'function') {
       window.syncAnnotationWarningWithDefectsSlot();
     }
-    const brandEl = document.getElementById('brand');
-    if (brandEl) brandEl.value = 'Нет бренда';
-    if (document.getElementById('autoPackageAdder')) {
-      document.getElementById('autoPackageAdder').checked = true;
-    }
-    const isbnEl = document.getElementById('isbn');
-    if (isbnEl) {
-      isbnEl.value = (window.currentTemplateMode === 'pre2011') ? '' : '978-5-0000-0000-0';
-    }
-    if (document.getElementById('country')) document.getElementById('country').value = 'Россия';
-    if (document.getElementById('cover_type')) document.getElementById('cover_type').value = 'Твердый переплет';
-    if (document.getElementById('paper_type')) document.getElementById('paper_type').value = '';
-    if (document.getElementById('genre')) document.getElementById('genre').value = 'Проза';
-    if (document.getElementById('age_limit')) document.getElementById('age_limit').value = '';
-    if (document.getElementById('target_audience')) document.getElementById('target_audience').value = '';
-    if (document.getElementById('hashtags')) document.getElementById('hashtags').value = '';
 
     let art = customArt;
     if (!art && book && (book.article || (book.formData && book.formData.article))) {
@@ -990,6 +1006,7 @@
       try { setTemplateMode(resolvedTemplateMode, false); } catch (e) {}
     }
 
+    const formData = (window.BookForm && window.BookForm.initialized) ? window.BookForm.readForm() : {};
     const payload = {
       template_mode: resolvedTemplateMode,
       article: article,
@@ -998,28 +1015,28 @@
       barcode: barcodeVal,
       isbn: (resolvedTemplateMode === 'pre2011') ? isbnVal : (isbnVal || '978-5-0000-0000-0'),
       title: title,
-      original_title: (document.getElementById('original_title')?.value || '').trim(),
-      series: document.getElementById('series')?.value?.trim() || '',
+      original_title: String(formData.original_title !== undefined ? formData.original_title : (document.getElementById('original_title')?.value || '')).trim(),
+      series: String(formData.series !== undefined ? formData.series : (document.getElementById('series')?.value || '')).trim(),
       author_cover: authorCover,
       author: author,
-      illustrator: document.getElementById('illustrator')?.value?.trim() || '',
-      translator: document.getElementById('translator')?.value?.trim() || '',
+      illustrator: String(formData.illustrator !== undefined ? formData.illustrator : (document.getElementById('illustrator')?.value || '')).trim(),
+      translator: String(formData.translator !== undefined ? formData.translator : (document.getElementById('translator')?.value || '')).trim(),
       publisher: publisherVal,
-      brand: document.getElementById('brand')?.value?.trim() || 'Нет бренда',
-      year: document.getElementById('year')?.value?.trim() || '',
-      pages: document.getElementById('pages')?.value?.trim() || '',
-      country: document.getElementById('country')?.value || 'Россия',
-      cover_type: document.getElementById('cover_type')?.value || 'Твердый переплет',
+      brand: String(formData.brand !== undefined ? formData.brand : (document.getElementById('brand')?.value || '')).trim() || 'Нет бренда',
+      year: String(formData.year !== undefined ? formData.year : (document.getElementById('year')?.value || '')).trim(),
+      pages: String(formData.pages !== undefined ? formData.pages : (document.getElementById('pages')?.value || '')).trim(),
+      country: formData.country || document.getElementById('country')?.value || 'Россия',
+      cover_type: formData.cover_type || document.getElementById('cover_type')?.value || 'Твердый переплет',
       paper_type: paperType,
-      genre: document.getElementById('genre')?.value || 'Проза',
-      age_limit: document.getElementById('age_limit')?.value || '',
+      genre: formData.genre || document.getElementById('genre')?.value || 'Проза',
+      age_limit: formData.age_limit || document.getElementById('age_limit')?.value || '',
       target_audience: '',
-      condition: document.getElementById('condition')?.value || 'Очень хорошая',
+      condition: formData.condition || document.getElementById('condition')?.value || 'Очень хорошая',
       defects: '',
-      annotation: document.getElementById('annotation')?.value?.trim() || '',
+      annotation: String(formData.annotation !== undefined ? formData.annotation : (document.getElementById('annotation')?.value || '')).trim(),
       hashtags: '',
       price: String(priceVal),
-      old_price: document.getElementById('old_price')?.value?.trim() || '',
+      old_price: String(formData.old_price !== undefined ? formData.old_price : (document.getElementById('old_price')?.value || '')).trim(),
       dimensions: dimStr,
       weight: rawWeight,
       width: rawWidth,
