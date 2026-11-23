@@ -228,10 +228,14 @@ def get_ozon_config() -> Optional[dict]:
     return None
 
 
-def save_ozon_config(client_id: str, api_key: str) -> None:
+def save_ozon_config(client_id: str, api_key: str, profile_name: Optional[str] = None) -> None:
     """Сохраняет Ozon credentials в файл .ozon_credentials (и дублирует в credentials/)."""
     import json
-    data = {"client_id": str(client_id).strip(), "api_key": str(api_key).strip()}
+    data = {
+        "client_id": str(client_id).strip(),
+        "api_key": str(api_key).strip(),
+        "active_profile": profile_name or ("test" if str(client_id).strip() == "2727930" else "primary"),
+    }
     with open(OZON_CREDENTIALS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     cred_file = os.path.join(CREDENTIALS_DIR, ".ozon_credentials")
@@ -240,6 +244,57 @@ def save_ozon_config(client_id: str, api_key: str) -> None:
             json.dump(data, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
+
+
+def get_ozon_profiles() -> dict:
+    """Возвращает список сохраненных профилей магазинов Ozon и текущий активный профиль."""
+    import json
+    cur = get_ozon_config() or {}
+    cur_id = str(cur.get("client_id", "")).strip()
+
+    profiles = []
+    for prof_key, prof_filename, default_name in [
+        ("primary", "ozon_primary.json", "Основной магазин"),
+        ("test", "ozon_test.json", "Тестовый магазин"),
+    ]:
+        p_path = os.path.join(CREDENTIALS_DIR, prof_filename)
+        if os.path.exists(p_path):
+            try:
+                with open(p_path, "r", encoding="utf-8") as f:
+                    p_data = json.load(f)
+                    profiles.append({
+                        "key": prof_key,
+                        "name": p_data.get("name", default_name),
+                        "client_id": str(p_data.get("client_id", "")),
+                        "is_active": (str(p_data.get("client_id", "")) == cur_id),
+                    })
+            except Exception:
+                pass
+
+    active_key = "test" if cur_id == "2727930" else "primary"
+    return {
+        "active_key": active_key,
+        "active_client_id": cur_id,
+        "profiles": profiles,
+    }
+
+
+def switch_ozon_profile(profile_key: str) -> bool:
+    """Переключает активный магазин Ozon (primary или test)."""
+    import json
+    prof_filename = f"ozon_{profile_key}.json"
+    p_path = os.path.join(CREDENTIALS_DIR, prof_filename)
+    if not os.path.exists(p_path):
+        return False
+
+    with open(p_path, "r", encoding="utf-8") as f:
+        p_data = json.load(f)
+        client_id = p_data.get("client_id")
+        api_key = p_data.get("api_key")
+        if client_id and api_key:
+            save_ozon_config(client_id, api_key, profile_name=profile_key)
+            return True
+    return False
 
 
 

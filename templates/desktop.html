@@ -1256,6 +1256,24 @@
 
       <!-- ТАБ 2: OZON SELLER API -->
       <div id="pane_ozon" class="settings-tab-pane hidden space-y-3">
+        <!-- ВЫБОР МАГАЗИНА (ПЕРЕКЛЮЧАТЕЛЬ) -->
+        <div id="ozonStoreProfileCard" class="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-300">🏪 Магазин Ozon:</span>
+            <span id="ozonActiveProfileBadge" class="px-2.5 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              🧪 Тестовый (2727930)
+            </span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="switchOzonStore('test')" id="btnStoreTest" class="py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm">
+              <span>🧪</span> <span>Тестовый (2727930)</span>
+            </button>
+            <button type="button" onclick="switchOzonStore('primary')" id="btnStorePrimary" class="py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-slate-800 border-slate-750 text-slate-400 hover:text-white hover:bg-slate-700">
+              <span>🏢</span> <span>Основной (870997)</span>
+            </button>
+          </div>
+        </div>
+
         <!-- СТАТУС ПОДКЛЮЧЕНИЯ -->
         <div id="ozonConnectionCard" class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
           <div class="flex items-center justify-between">

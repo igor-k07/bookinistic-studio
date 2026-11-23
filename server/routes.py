@@ -79,6 +79,7 @@ def build_router() -> Router:
     router.get("/api/ozon/task_status")(system_controller.ozon_task_status)
     router.get("/api/ozon/import_status")(system_controller.ozon_import_status)
     router.post("/api/ozon/save_keys")(system_controller.ozon_save_keys)
+    router.post("/api/ozon/switch_profile")(system_controller.ozon_switch_profile)
     router.post("/api/ozon/start_import")(system_controller.ozon_start_import)
     router.post("/api/sync/smart_s3")(system_controller.smart_s3_sync_start)
     router.get("/api/sync/smart_s3/status")(system_controller.smart_s3_sync_status)

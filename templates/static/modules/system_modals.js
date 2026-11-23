@@ -293,6 +293,31 @@
     if (nextArtVal) {
       nextArtVal.textContent = data.next_article || '—';
     }
+
+    const activeProfBadge = document.getElementById('ozonActiveProfileBadge');
+    const btnTest = document.getElementById('btnStoreTest');
+    const btnPrimary = document.getElementById('btnStorePrimary');
+
+    const activeProf = data?.active_profile || (data?.raw_client_id === '2727930' ? 'test' : 'primary');
+    if (activeProfBadge) {
+      if (activeProf === 'test') {
+        activeProfBadge.className = 'px-2.5 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+        activeProfBadge.textContent = '🧪 Тестовый (2727930)';
+      } else {
+        activeProfBadge.className = 'px-2.5 py-0.5 rounded text-[11px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30';
+        activeProfBadge.textContent = '🏢 Основной (870997)';
+      }
+    }
+
+    if (btnTest && btnPrimary) {
+      if (activeProf === 'test') {
+        btnTest.className = 'py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm';
+        btnPrimary.className = 'py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-slate-800 border-slate-750 text-slate-400 hover:text-white hover:bg-slate-700';
+      } else {
+        btnTest.className = 'py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-slate-800 border-slate-750 text-slate-400 hover:text-white hover:bg-slate-700';
+        btnPrimary.className = 'py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-sky-600/30 border-sky-500 text-sky-200 shadow-sm';
+      }
+    }
   }
 
   function openOzonModal() {
@@ -340,6 +365,38 @@
       }
     } catch (e) {
       alert('❌ Сбой запроса сохранения ключей Ozon: ' + e.message);
+    }
+  }
+
+  async function switchOzonStore(profileKey) {
+    try {
+      const data = window.ApiClient
+        ? await window.ApiClient.switchOzonProfile(profileKey)
+        : await fetch('/api/ozon/switch_profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile: profileKey })
+          }).then(r => r.json());
+
+      if (data && data.success) {
+        const storeTitle = profileKey === 'test' ? 'Тестовый (2727930)' : 'Основной (870997)';
+        if (window.showToast) {
+          window.showToast(`Магазин Ozon переключен на: ${storeTitle}`, 'success');
+        } else {
+          alert(`✅ Активный магазин переключен на: ${storeTitle}`);
+        }
+        await loadOzonStatus();
+      } else {
+        const errMsg = data?.error || 'Неизвестная ошибка';
+        if (window.showToast) {
+          window.showToast(`Ошибка переключения: ${errMsg}`, 'error');
+        } else {
+          alert(`❌ Ошибка переключения: ${errMsg}`);
+        }
+      }
+    } catch (e) {
+      console.error('Ошибка switchOzonStore:', e);
+      alert('❌ Сбой переключения магазина Ozon: ' + e.message);
     }
   }
 
@@ -471,6 +528,7 @@
   window.closeOzonModal = closeOzonModal;
   window.refreshOzonStatus = refreshOzonStatus;
   window.saveOzonKeysFromModal = saveOzonKeysFromModal;
+  window.switchOzonStore = switchOzonStore;
   window.checkOzonImportStatus = checkOzonImportStatus;
   window.renderOzonImportProgress = renderOzonImportProgress;
   window.startOzonCatalogImport = startOzonCatalogImport;

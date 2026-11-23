@@ -250,12 +250,14 @@ def reveal_file(ctx: RequestContext) -> Dict[str, Any]:
 
 def ozon_status(ctx: RequestContext) -> Dict[str, Any]:
     """GET /api/ozon/status"""
+    from config import get_ozon_profiles
     cfg = get_ozon_config()
     if not cfg or not cfg.get("client_id") or not cfg.get("api_key"):
         return {
             "configured": False,
             "message": "Ключи Ozon Seller API не настроены",
             "next_article": get_next_article_number(),
+            "profiles_data": get_ozon_profiles(),
         }
     status_res = ozon_service.check_ozon_connection()
     cid = str(cfg.get("client_id", ""))
@@ -263,9 +265,26 @@ def ozon_status(ctx: RequestContext) -> Dict[str, Any]:
     return {
         "configured": True,
         "client_id": masked_cid,
+        "raw_client_id": cid,
+        "active_profile": cfg.get("active_profile", "test" if cid == "2727930" else "primary"),
+        "profiles_data": get_ozon_profiles(),
         "next_article": get_next_article_number(),
         **status_res,
     }
+
+
+def ozon_switch_profile(ctx: RequestContext) -> Dict[str, Any]:
+    """POST /api/ozon/switch_profile: Переключение между основным и тестовым магазинами Ozon."""
+    from config import switch_ozon_profile
+    body = ctx.get_json()
+    prof_key = (body.get("profile") or "").strip().lower()
+    if not prof_key:
+        return {"success": False, "error": "Не указан профиль магазина (primary/test)"}
+    ok = switch_ozon_profile(prof_key)
+    if ok:
+        conn = ozon_service.check_ozon_connection()
+        return {"success": True, "active_profile": prof_key, "connection": conn}
+    return {"success": False, "error": f"Профиль магазина '{prof_key}' не найден"}
 
 
 def ozon_save_keys(ctx: RequestContext) -> Dict[str, Any]:

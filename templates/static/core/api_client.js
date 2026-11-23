@@ -161,6 +161,10 @@
       return this.get('/api/ozon/status');
     }
 
+    switchOzonProfile(profileKey) {
+      return this.post('/api/ozon/switch_profile', { profile: profileKey });
+    }
+
     saveOzonKeys(clientId, apiKey) {
       return this.post('/api/ozon/save_keys', { client_id: clientId, api_key: apiKey });
     }
