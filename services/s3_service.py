@@ -3,14 +3,43 @@ s3_service.py: Интеграция с Yandex Object Storage (S3) для выг�
 """
 
 import base64
+import json
 import os
 import re
+import subprocess
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 from botocore.config import Config
 
 from config import get_card_image_path, get_s3_config
+from core.domain.rules import get_canonical_photo_filename
+
+# Надежный обход VPN-перехвата (utun4) для Yandex Cloud Object Storage
+def _apply_direct_yandex_route():
+    try:
+        out = subprocess.check_output(['ifconfig', 'en0'], text=True)
+        m = re.search(r'inet\s+(\d+\.\d+\.\d+\.\d+)', out)
+        wifi_ip = m.group(1) if m else None
+    except Exception:
+        wifi_ip = None
+
+    try:
+        import urllib3.util.connection as urllib3_conn
+        _orig_conn = urllib3_conn.create_connection
+        def _patched_conn(address, *args, **kwargs):
+            host, port = address
+            if host in ('storage.yandexcloud.net', '213.180.193.243'):
+                if wifi_ip:
+                    kwargs['source_address'] = (wifi_ip, 0)
+                return _orig_conn(('213.180.193.243', port), *args, **kwargs)
+            return _orig_conn(address, *args, **kwargs)
+        urllib3_conn.create_connection = _patched_conn
+    except Exception:
+        pass
+
+_apply_direct_yandex_route()
 
 _s3_client = None
 _s3_bucket = None
@@ -102,19 +131,10 @@ def upload_single_slot_photo(
     clean_title = re.sub(r"[^\w\s-]", "", title or "book").strip().replace(" ", "_")[:30]
     folder = f"{article}_{clean_title}".strip("_")
 
-    if slot == "cover_front":
-        filename = "01_cover_front.jpg"
-    elif slot == "mantra_defects":
-        filename = f"02_defect_{photo_index}.jpg"
-    elif slot == "illustrations":
-        filename = f"03_illustration_{photo_index}.jpg"
-    elif slot == "cover_back":
-        suffix = f"_{photo_index}" if photo_index > 1 else ""
-        filename = f"04_cover_back{suffix}.jpg"
-    elif slot == "info_pages":
-        filename = f"archive/info_page_{photo_index}.jpg"
+    if slot == "info_pages":
+        filename = f"archive/{get_canonical_photo_filename(slot, photo_index)}"
     else:
-        filename = f"photo_{photo_index}.jpg"
+        filename = get_canonical_photo_filename(slot, photo_index, is_multi=photo_index > 1)
 
     key = f"{folder}/{filename}"
     url = upload_bytes(key, data)
@@ -129,19 +149,22 @@ def upload_single_slot_photo(
 def upload_book_photos(
     article: str,
     title: str,
-    slots_photos: Optional[Dict[str, Any]]
+    slots_photos: Optional[Dict[str, Any]],
+    force_upload: bool = False
 ) -> Tuple[Optional[str], str]:
     """
     Выгружает фото книги в Yandex S3 бакет under /{article}/...
-    Если фото уже было выгружено упреждающе (имеет валидный s3_url), использует его без повторной заливки.
-    Возвращает (main_photo_url, add_photo_urls_str):
-    - main_photo_url: ссылка на 01_cover_front.jpg
-    - add_photo_urls_str: разделенные пробелом ссылки на доп. фото (задник, иллюстрации, дефекты, card.png)
-    * Замечание: служебные титулы (info_pages) сохраняются в {article}/archive/, но НЕ включаются в Ozon ссылки!
+    Если force_upload=False и фото уже было выгружено (имеет валидный s3_url), использует его.
+    Если force_upload=True (например, при точечном обновлении фото товара), всегда выгружает
+    свежие отредактированные байты и добавляет query-параметр версии ?v=... для сброса кэша CDN Ozon.
+    Возвращает (main_photo_url, add_photo_urls_str).
     """
     client, bucket = get_s3_client()
     if not client or not bucket:
         return None, ""
+
+    import time
+    v_tag = f"?v={int(time.time())}"
 
     clean_title = re.sub(r"[^\w\s-]", "", title or "book").strip().replace(" ", "_")[:30]
     folder = f"{article}_{clean_title}".strip("_")
@@ -155,66 +178,113 @@ def upload_book_photos(
         from services.vault_service import resolve_photo_bytes
         return resolve_photo_bytes(photo_obj)
 
+    def _archive_raw_source_s3(slot_tag: str, photo_obj: Any, idx: int = 1):
+        if not isinstance(photo_obj, dict):
+            return
+        pid = photo_obj.get("id") or ""
+        raw_bytes = None
+        if pid and str(pid).startswith("ast_"):
+            try:
+                import services.asset_service as asset_service
+                asset = asset_service.get_asset(pid)
+                if asset and asset.original_path and os.path.exists(asset.original_path):
+                    with open(asset.original_path, "rb") as f_orig:
+                        raw_bytes = f_orig.read()
+            except Exception:
+                pass
+        if not raw_bytes:
+            raw_val = photo_obj.get("cameraOriginal") or photo_obj.get("rawOriginal")
+            if raw_val:
+                from services.vault_service import resolve_photo_bytes
+                raw_bytes = resolve_photo_bytes(raw_val)
+
+        if raw_bytes:
+            upload_bytes(f"{folder}/raw_sources/{slot_tag}_{idx}_raw.jpg", raw_bytes)
+
     if slots_photos:
         # 1. Обложка (главное фото для Ozon)
         cf = slots_photos.get("cover_front")
         if cf:
             existing_s3 = cf.get("s3_url") if isinstance(cf, dict) else None
-            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
                 main_photo_url = existing_s3
             else:
                 data = _decode_photo(cf)
                 if data:
-                    url = upload_bytes(f"{folder}/01_cover_front.jpg", data)
+                    fname = get_canonical_photo_filename("cover_front")
+                    url = upload_bytes(f"{folder}/{fname}", data)
                     if url:
-                        main_photo_url = url
+                        main_photo_url = f"{url}{v_tag}"
+            _archive_raw_source_s3("cover_front", cf, 1)
 
         # 2. Фото дефектов при наличии (первые доп. фото)
         for idx, p in enumerate(slots_photos.get("mantra_defects", []), 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
                 add_photo_urls.append(existing_s3)
             else:
                 data = _decode_photo(p)
                 if data:
-                    url = upload_bytes(f"{folder}/02_defect_{idx}.jpg", data)
+                    fname = get_canonical_photo_filename("mantra_defects", idx)
+                    url = upload_bytes(f"{folder}/{fname}", data)
                     if url:
-                        add_photo_urls.append(url)
+                        add_photo_urls.append(f"{url}{v_tag}")
+            _archive_raw_source_s3("defect", p, idx)
 
         # 3. Фото иллюстраций (если есть, идут перед задником)
         for idx, p in enumerate(slots_photos.get("illustrations", []), 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
                 add_photo_urls.append(existing_s3)
             else:
                 data = _decode_photo(p)
                 if data:
-                    url = upload_bytes(f"{folder}/03_illustration_{idx}.jpg", data)
+                    fname = get_canonical_photo_filename("illustrations", idx)
+                    url = upload_bytes(f"{folder}/{fname}", data)
                     if url:
-                        add_photo_urls.append(url)
+                        add_photo_urls.append(f"{url}{v_tag}")
+            _archive_raw_source_s3("illustration", p, idx)
 
         # 4. Фото задников книги (в конце перед карточкой; для комплектов — задник каждой книги)
         cb_raw = slots_photos.get("cover_back")
         cb_list = cb_raw if isinstance(cb_raw, list) else ([cb_raw] if cb_raw else [])
         for idx, p in enumerate(cb_list, 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if existing_s3 and "storage.yandexcloud.net" in existing_s3:
+            if not force_upload and existing_s3 and "storage.yandexcloud.net" in existing_s3:
                 add_photo_urls.append(existing_s3)
             else:
                 data = _decode_photo(p)
                 if data:
-                    suffix = f"_{idx}" if len(cb_list) > 1 else ""
-                    url = upload_bytes(f"{folder}/04_cover_back{suffix}.jpg", data)
+                    fname = get_canonical_photo_filename("cover_back", idx, is_multi=len(cb_list) > 1)
+                    url = upload_bytes(f"{folder}/{fname}", data)
                     if url:
-                        add_photo_urls.append(url)
+                        add_photo_urls.append(f"{url}{v_tag}")
+            _archive_raw_source_s3("cover_back", p, idx)
 
         # Инфо-страницы (титул, оборот) — архивируем в облаке в подпапку archive/, НЕ передаем в Ozon ссылки!
         for idx, p in enumerate(slots_photos.get("info_pages", []), 1):
             existing_s3 = p.get("s3_url") if isinstance(p, dict) else None
-            if not (existing_s3 and "storage.yandexcloud.net" in existing_s3):
+            if force_upload or not (existing_s3 and "storage.yandexcloud.net" in existing_s3):
                 data = _decode_photo(p)
                 if data:
                     upload_bytes(f"{folder}/archive/info_page_{idx}.jpg", data)
+            _archive_raw_source_s3("info_page", p, idx)
+
+        # Сохраняем слепок book_state.json в S3 для точного восстановления
+        try:
+            state_data = {
+                "article": article,
+                "title": title,
+                "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "slots_photos": slots_photos,
+            }
+            upload_bytes(
+                f"{folder}/book_state.json",
+                json.dumps(state_data, ensure_ascii=False, indent=2).encode("utf-8"),
+                content_type="application/json"
+            )
+        except Exception as st_err:
+            print(f"⚠️ Ошибка выгрузки book_state.json в S3: {st_err}")
 
     # 5. Шаблонное фото с предупреждением (card.png) для каждой книги — всегда в самом конце
     card_path = get_card_image_path()

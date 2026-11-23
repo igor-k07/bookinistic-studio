@@ -14,7 +14,12 @@ from typing import Any, Dict, List, Optional
 
 from config import DB_PATH, READY_TABLES_DIR
 from core.constants import normalize_genre
-from core.domain.rules import calculate_book_condition, format_annotation_with_warning
+from core.domain.rules import (
+    calculate_book_condition,
+    clean_publisher_name,
+    format_annotation_with_warning,
+    normalize_author_name,
+)
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -47,6 +52,34 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_books_mode ON books(template_mode);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_books_status ON books(status);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_books_created ON books(created_at);")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS assets (
+                id                  TEXT PRIMARY KEY,
+                book_id             INTEGER,
+                book_article        TEXT,
+                slot                TEXT,
+                slot_order          INTEGER DEFAULT 0,
+                status              TEXT NOT NULL DEFAULT 'UPLOADED',
+                status_message      TEXT,
+                original_path       TEXT NOT NULL,
+                preview_path        TEXT NOT NULL,
+                ai_white_path       TEXT,
+                final_render_path   TEXT,
+                transformations     TEXT DEFAULT '{}',
+                s3_url              TEXT,
+                s3_etag             TEXT,
+                version             INTEGER DEFAULT 1,
+                file_size_bytes     INTEGER DEFAULT 0,
+                width               INTEGER DEFAULT 0,
+                height              INTEGER DEFAULT 0,
+                created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_book ON assets(book_article);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_status ON assets(status);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_created ON assets(created_at);")
         conn.commit()
 
 
@@ -84,6 +117,43 @@ def clean_book_data_for_db(book: Dict[str, Any]) -> Dict[str, Any]:
     raw_genre = str(clean.get("genre") or "").strip()
     clean["genre"] = normalize_genre(raw_genre, str(clean.get("title") or ""), str(clean.get("annotation") or ""))
 
+    # Санитизация габаритов и веса книги и упаковки
+    w = clean.get("width") if (clean.get("width") is not None and str(clean.get("width")).strip() != "") else clean.get("width_mm")
+    l = clean.get("length") if (clean.get("length") is not None and str(clean.get("length")).strip() != "") else clean.get("length_mm")
+    h = clean.get("height") if (clean.get("height") is not None and str(clean.get("height")).strip() != "") else clean.get("height_mm")
+    wt = clean.get("weight") if (clean.get("weight") is not None and str(clean.get("weight")).strip() != "") else clean.get("weight_g")
+    try:
+        w_int = int(w or 130)
+        l_int = int(l or 205)
+        h_int = int(h or 15)
+        wt_int = int(wt or 250)
+    except Exception:
+        w_int, l_int, h_int, wt_int = 130, 205, 15, 250
+
+    is_adder = clean.get("auto_package_adder") is not False
+    try:
+        wp_int = int(clean.get("width_package") or ((w_int + 10) if is_adder else w_int))
+        lp_int = int(clean.get("length_package") or ((l_int + 10) if is_adder else l_int))
+        hp_int = int(clean.get("height_package") or ((h_int + 10) if is_adder else h_int))
+        wtp_int = int(clean.get("weight_package") or ((wt_int + 30) if is_adder else wt_int))
+    except Exception:
+        wp_int, lp_int, hp_int, wtp_int = w_int + 10, l_int + 10, h_int + 10, wt_int + 30
+
+    clean["width"] = w_int
+    clean["length"] = l_int
+    clean["height"] = h_int
+    clean["weight"] = wt_int
+    clean["width_mm"] = w_int
+    clean["length_mm"] = l_int
+    clean["height_mm"] = h_int
+    clean["weight_g"] = wt_int
+    clean["width_package"] = wp_int
+    clean["length_package"] = lp_int
+    clean["height_package"] = hp_int
+    clean["weight_package"] = wtp_int
+    clean["dimensions"] = f"{wp_int}х{lp_int}х{hp_int}"
+    clean["auto_package_adder"] = is_adder
+
     # Если в slots_photos были base64-данные, сохраняем только имена файлов
     if "slots_photos" in clean and isinstance(clean["slots_photos"], dict):
         compact_slots = {}
@@ -119,7 +189,12 @@ def save_book_to_db(book: Dict[str, Any], sync_s3: bool = True) -> Dict[str, Any
         book["article"] = article
 
     title = str(book.get("title") or "Без названия").strip()
-    author = str(book.get("author") or book.get("author_cover") or "").strip()
+    author = normalize_author_name(book.get("author") or book.get("author_cover") or "")
+    book["author"] = author
+    if book.get("author_cover"):
+        book["author_cover"] = normalize_author_name(book.get("author_cover"))
+    if book.get("publisher"):
+        book["publisher"] = clean_publisher_name(book.get("publisher"))
 
     year_val = None
     try:
@@ -136,10 +211,12 @@ def save_book_to_db(book: Dict[str, Any], sync_s3: bool = True) -> Dict[str, Any
     except Exception:
         pass
 
-    mode = str(book.get("template_mode") or "").strip()
-    if not mode:
-        mode = "pre2011" if (year_val and year_val <= 2011) else "post2011"
-        book["template_mode"] = mode
+    if year_val:
+        mode = "pre2011" if year_val <= 2011 else "post2011"
+    else:
+        raw_mode = str(book.get("template_mode") or "").strip().lower()
+        mode = "post2011" if raw_mode in ("post2011", "post") else "pre2011"
+    book["template_mode"] = mode
 
     status = str(book.get("status") or "ready").strip()
     clean_data = clean_book_data_for_db(book)
@@ -194,6 +271,10 @@ def get_book_from_db(article: str) -> Optional[Dict[str, Any]]:
         full_data["status"] = row["status"]
         full_data["created_at"] = row["created_at"]
         return full_data
+
+
+# Алиас для обратной совместимости
+get_book_by_article = get_book_from_db
 
 
 def delete_book_from_db(article: str) -> bool:
@@ -257,10 +338,81 @@ def get_all_books_from_db(
     return result
 
 
-def get_next_article_number() -> str:
+def check_article_exists(article: str, check_ozon: bool = True) -> Dict[str, Any]:
+    """
+    Проверяет, существует ли артикул:
+    1. В SQLite catalog.db
+    2. В локальном хранилище storage/books_vault
+    3. На Ozon через get_products_info_batch(offer_ids=[...])
+    """
+    init_db()
+    raw = str(article or "").strip().upper()
+    if not raw:
+        return {"exists": False, "article": "", "source": None, "title": None, "book": None}
+
+    clean_art = raw
+    if not clean_art.startswith("DP-B-") and clean_art.isdigit():
+        clean_art = f"DP-B-{int(clean_art):05d}"
+
+    # 1. Проверка в SQLite catalog.db
+    db_book = get_book_from_db(clean_art)
+    if db_book:
+        return {
+            "exists": True,
+            "article": clean_art,
+            "source": "db",
+            "title": db_book.get("title", "Книга"),
+            "price": db_book.get("price"),
+            "book": db_book,
+        }
+
+    # 2. Проверка в локальном books_vault
+    from config import VAULT_DIR
+    if os.path.exists(VAULT_DIR):
+        for fname in os.listdir(VAULT_DIR):
+            if fname == clean_art or fname.startswith(f"{clean_art}_"):
+                t_str = fname.split("_", 1)[1] if "_" in fname else "Книга в архиве"
+                return {
+                    "exists": True,
+                    "article": clean_art,
+                    "source": "vault",
+                    "title": t_str,
+                    "book": None,
+                }
+
+    # 3. Проверка на Ozon (если подключен Ozon API)
+    if check_ozon:
+        try:
+            import services.ozon_service as ozon_service
+            conn = ozon_service.check_ozon_connection()
+            if conn.get("connected"):
+                items = ozon_service.get_products_info_batch(offer_ids=[clean_art])
+                if items:
+                    oz_item = items[0]
+                    return {
+                        "exists": True,
+                        "article": clean_art,
+                        "source": "ozon",
+                        "title": oz_item.get("name", "Товар на Ozon"),
+                        "price": oz_item.get("price"),
+                        "book": None,
+                    }
+        except Exception as oz_err:
+            print(f"⚠️ [check_article_exists] Ошибка запроса Ozon: {oz_err}")
+
+    return {
+        "exists": False,
+        "article": clean_art,
+        "source": None,
+        "title": None,
+        "book": None,
+    }
+
+
+def get_next_article_number(verify_ozon: bool = False) -> str:
     """
     Определяет следующий свободный номер артикула (DP-B-xxxxx) на основе всех книг в базе
-    и существующих архивов в books_vault.
+    и существующих архивов в books_vault, с возможностью гарантированной проверки на Ozon.
     """
     init_db()
     max_num = 2600
@@ -298,7 +450,25 @@ def get_next_article_number() -> str:
                     except Exception:
                         pass
 
-    return f"DP-B-{(max_num + 1):05d}"
+    candidate_num = max_num + 1
+
+    # 3. При необходимости проверяем на Ozon, чтобы исключить коллизии
+    if verify_ozon:
+        try:
+            import services.ozon_service as ozon_service
+            conn = ozon_service.check_ozon_connection()
+            if conn.get("connected"):
+                while candidate_num < 10000:
+                    cand_art = f"DP-B-{candidate_num:05d}"
+                    items = ozon_service.get_products_info_batch(offer_ids=[cand_art])
+                    if not items:
+                        break
+                    print(f"ℹ️ [get_next_article] Артикул {cand_art} уже зарегистрирован на Ozon, пропускаем...")
+                    candidate_num += 1
+        except Exception:
+            pass
+
+    return f"DP-B-{candidate_num:05d}"
 
 
 def migrate_existing_excel_to_db():
@@ -520,7 +690,9 @@ def get_catalog_references(force_reload: bool = False) -> Dict[str, List[str]]:
         raw_author = str(d.get("author") or "").strip()
         for a in raw_author.split(";"):
             a = a.strip()
-            if a and a.lower() not in ("не указан", "нет автора", "none", "null"):
+            if a.lower() in ("автор не указан", "не указан", "нет автора", "неизвестен"):
+                authors_set.add("не указан")
+            elif a and a.lower() not in ("none", "null", "—", "-"):
                 authors_set.add(a)
 
         raw_trans = str(d.get("translator") or "").strip()
@@ -537,7 +709,9 @@ def get_catalog_references(force_reload: bool = False) -> Dict[str, List[str]]:
 
         pub = str(d.get("publisher") or "").strip()
         if pub and pub.lower() not in ("none", "null"):
-            publishers_set.add(pub)
+            cleaned_pub = clean_publisher_name(pub)
+            if cleaned_pub:
+                publishers_set.add(cleaned_pub)
 
         ser = str(d.get("series") or "").strip()
         if ser and ser.lower() not in ("none", "null"):
@@ -548,12 +722,14 @@ def get_catalog_references(force_reload: bool = False) -> Dict[str, List[str]]:
             brands_set.add(br)
 
     brands_set.add("Нет бренда")
+    authors_set.add("не указан")
 
-    # Сортировка: бренды с "Нет бренда" на первом месте
+    # Сортировка: бренды с "Нет бренда" на первом месте, авторы с "не указан" на первом месте
     sorted_brands = sorted(list(brands_set), key=lambda x: (x != "Нет бренда", x.lower()))
+    sorted_authors = sorted(list(authors_set), key=lambda x: (x != "не указан", x.lower()))
 
     _REF_CACHE = {
-        "authors": sorted(list(authors_set), key=lambda x: x.lower()),
+        "authors": sorted_authors,
         "translators": sorted(list(translators_set), key=lambda x: x.lower()),
         "illustrators": sorted(list(illustrators_set), key=lambda x: x.lower()),
         "publishers": sorted(list(publishers_set), key=lambda x: x.lower()),
@@ -643,12 +819,19 @@ def reconcile_with_references(book_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # 1. Автор официальный (author)
     raw_author = str(book_data.get("author") or "").strip()
-    if raw_author and raw_author.lower() not in ("не указан", "нет автора"):
+    if raw_author and raw_author.lower() not in ("не указан", "нет автора", "автор не указан", "неизвестен"):
         matched_authors = []
         for part in raw_author.split(";"):
             m = _match_person(part, authors_ref)
             matched_authors.append(m)
         book_data["author"] = ";".join(matched_authors)
+    elif not raw_author or raw_author.lower() in ("не указан", "нет автора", "автор не указан", "неизвестен"):
+        book_data["author"] = "не указан"
+
+    if book_data.get("author_cover"):
+        cov = str(book_data["author_cover"]).strip()
+        if not cov or cov.lower() in ("не указан", "нет автора", "автор не указан", "неизвестен"):
+            book_data["author_cover"] = "не указан"
 
     # 2. Переводчик (translator)
     raw_trans = str(book_data.get("translator") or "").strip()
@@ -671,7 +854,8 @@ def reconcile_with_references(book_data: Dict[str, Any]) -> Dict[str, Any]:
     # 4. Издательство (publisher)
     raw_pub = str(book_data.get("publisher") or "").strip()
     if raw_pub:
-        book_data["publisher"] = _match_title_or_org(raw_pub, publishers_ref)
+        clean_pub = clean_publisher_name(raw_pub)
+        book_data["publisher"] = _match_title_or_org(clean_pub, publishers_ref) or clean_pub
 
     # 5. Серия (series)
     raw_ser = str(book_data.get("series") or "").strip()

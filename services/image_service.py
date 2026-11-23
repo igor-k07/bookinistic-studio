@@ -160,6 +160,10 @@ def _process_image_worker(image_bytes: bytes) -> dict:
     raw_img = Image.open(io.BytesIO(image_bytes))
     raw_img = ImageOps.exif_transpose(raw_img)
 
+    # Оптимизация скорости ИИ: ограничение сверхвысокого разрешения (>2200px) для мгновенной обработки без подвисаний
+    if max(raw_img.size) > 2200:
+        raw_img.thumbnail((2200, 2200), Image.Resampling.LANCZOS)
+
     # 2. Авто-поворот отключен: кадр сохраняет оригинальную ориентацию камеры
     rot_deg = 0
 

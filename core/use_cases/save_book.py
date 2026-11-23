@@ -9,8 +9,20 @@ from typing import Any, Dict, List, Optional
 from config import PORT, SESSION_PHOTOS_DIR, INBOX_DIR
 from core.domain.enums import TemplateMode
 from core.domain.models import Book
-from services.db_service import get_next_article_number, reconcile_with_references, save_book_to_db
-from services.excel_service import append_book_to_excel
+from core.domain.rules import (
+    SLOT_CARD,
+    SLOT_COVER_FRONT,
+    SLOT_INFO_PAGES,
+    classify_filename_to_slot,
+    get_canonical_photo_filename,
+)
+from services.db_service import (
+    check_article_exists,
+    get_next_article_number,
+    reconcile_with_references,
+    save_book_to_db,
+)
+from services.excel_service import append_book_to_excel, sync_book_to_excel
 from services.s3_service import upload_book_photos as s3_upload_book_photos
 import services.tunnel_service as tunnel_service
 from services.vault_service import save_book_vault_photos
@@ -38,9 +50,27 @@ class SaveBookUseCase:
         except Exception as rec_err:
             print(f"⚠️ [SaveBookUseCase] Ошибка канонизации: {rec_err}", flush=True)
 
-        # 3. Гарантия уникального артикула DP-B-XXXXX
+        is_edit = bool(
+            book_input.get("is_edit")
+            or book_input.get("isReopened")
+            or book_input.get("is_saved_to_excel")
+            or book_input.get("mode") == "edit"
+        )
+
+        # 3. Гарантия уникального артикула DP-B-XXXXX и защита от случайной перезаписи
         if not book.article:
-            book.article = get_next_article_number()
+            book.article = get_next_article_number(verify_ozon=True)
+        else:
+            if not is_edit:
+                art_check = check_article_exists(book.article, check_ozon=True)
+                if art_check.get("exists"):
+                    existing_title = art_check.get("title") or "существующий товар"
+                    suggested = get_next_article_number(verify_ozon=True)
+                    raise ValueError(
+                        f"Артикул {book.article} уже занят («{existing_title}»)! Перезапись заблокирована. "
+                        f"Для создания новой книги используйте свободный артикул {suggested}, "
+                        f"либо включите режим редактирования карточки."
+                    )
 
         # 4. Применение чистых доменных правил (сохранность, ГОСТ-габариты, аннотация)
         book.sanitize_domain_rules(allow_overwrite_manual_dims=False)
@@ -100,14 +130,25 @@ class SaveBookUseCase:
                 tunnel_url = tunnel_service.start_tunnel(PORT)
 
             if tunnel_url and book.article and saved_files:
-                main_photo = "01_cover_front.jpg" if "01_cover_front.jpg" in saved_files else saved_files[0]
-                book.main_photo_url = f"{tunnel_url}/vault/{book.article}/{main_photo}"
+                non_card_files = [f for f in saved_files if classify_filename_to_slot(f) != SLOT_CARD]
+                canonical_cover = get_canonical_photo_filename("cover_front")
+                if canonical_cover in saved_files:
+                    main_photo = canonical_cover
+                elif non_card_files:
+                    main_photo = non_card_files[0]
+                else:
+                    main_photo = None
+
+                if main_photo:
+                    book.main_photo_url = f"{tunnel_url}/vault/{book.article}/{main_photo}"
+                else:
+                    book.main_photo_url = ""
 
                 add_files = [
                     f for f in saved_files
                     if f != main_photo
                     and not f.startswith(f"{book.article}")
-                    and not f.startswith("info_page")
+                    and classify_filename_to_slot(f) != SLOT_INFO_PAGES
                 ]
                 card_file = "99_card.jpg" if "99_card.jpg" in add_files else None
                 add_files_no_card = [f for f in add_files if f != "99_card.jpg"]
@@ -122,14 +163,75 @@ class SaveBookUseCase:
         # 7. Сохранение книги в локальную базу данных SQLite (catalog.db)
         save_book_to_db(book.to_dict())
 
-        # 8. Запись книги в официальную таблицу Excel Ozon (pre2011 или post2011)
-        excel_result = append_book_to_excel(book.to_dict())
+        # 7.1. Помечаем ассеты книги в SQLite статусом ARCHIVED
+        if slots_photos:
+            try:
+                from services.db_service import get_db_connection
+                with get_db_connection() as conn:
+                    for s_name, s_val in slots_photos.items():
+                        p_items = s_val if isinstance(s_val, list) else ([s_val] if s_val else [])
+                        for itm in p_items:
+                            if isinstance(itm, dict) and itm.get("id"):
+                                conn.execute(
+                                    "UPDATE assets SET status = 'ARCHIVED', book_article = ? WHERE id = ?",
+                                    (book.article, str(itm["id"])),
+                                )
+                    conn.commit()
+            except Exception as ast_err:
+                print(f"⚠️ [SaveBookUseCase] Ошибка архивации ассетов в SQLite: {ast_err}")
+
+        # 8. Синхронизация книги с официальной таблицей Excel Ozon (и для новых, и для обновляемых книг)
+        excel_result = sync_book_to_excel(book.to_dict())
+
+        # 8.1. Выгрузка / обновление в Ozon Seller API (если подключено)
+        ozon_info = None
+        if is_edit:
+            # Обновление фото на Ozon через Seller API
+            if s3_main_url:
+                try:
+                    import services.ozon_service as ozon_service
+                    imgs = [u for u in (book.add_photo_urls or "").split() if u]
+                    ozon_service.update_ozon_product_pictures(book.article, s3_main_url, imgs)
+                except Exception as e_p:
+                    print(f"⚠️ [SaveBookUseCase] Ошибка update_ozon_product_pictures: {e_p}")
+
+            # Обновление атрибутов книги на Ozon
+            try:
+                import services.ozon_service as ozon_service
+                conn_status = ozon_service.check_ozon_connection()
+                if conn_status.get("connected"):
+                    ok_ozon, ozon_res = ozon_service.publish_product_to_ozon(book.to_dict())
+                    t_id = (ozon_res if isinstance(ozon_res, dict) else {}).get("task_id")
+                    ozon_info = {"published": ok_ozon, "task_id": t_id, "result": ozon_res}
+            except Exception as e_oz:
+                ozon_info = {"published": False, "error": str(e_oz)}
+        else:
+            try:
+                import services.ozon_service as ozon_service
+                conn_status = ozon_service.check_ozon_connection()
+                if conn_status.get("connected"):
+                    ok_ozon, ozon_res = ozon_service.publish_product_to_ozon(book.to_dict())
+                    if ok_ozon:
+                        t_id = (ozon_res if isinstance(ozon_res, dict) else {}).get("task_id")
+                        ozon_info = {
+                            "published": True,
+                            "task_id": t_id,
+                            "result": ozon_res,
+                        }
+                        print(f"🚀 [SaveBookUseCase] Карточка {book.article} успешно создана на Ozon (task_id: {t_id})")
+                    else:
+                        ozon_info = {"published": False, "error": str(ozon_res)}
+                        print(f"⚠️ [SaveBookUseCase] Ошибка создания карточки на Ozon: {ozon_res}")
+            except Exception as ozon_err:
+                ozon_info = {"published": False, "error": str(ozon_err)}
+                print(f"⚠️ [SaveBookUseCase] Сбой обращения к Ozon API: {ozon_err}")
 
         # 9. Авто-очистка временных файлов сессии с диска Mac (п. 6.2 спецификации)
         self._cleanup_temporary_session_photos(slots_photos)
 
         # 10. Формирование ответа
         response_data = dict(excel_result)
+        response_data["is_edit"] = is_edit
         response_data["article"] = book.article
         response_data["title"] = book.title
         response_data["saved_photos"] = saved_files
@@ -138,6 +240,19 @@ class SaveBookUseCase:
         response_data["main_photo_url"] = book.main_photo_url
         response_data["add_photo_urls"] = book.add_photo_urls
         response_data["s3_enabled"] = bool(s3_main_url)
+        response_data["ozon_info"] = ozon_info
+        if is_edit:
+            response_data["message"] = f"Карточка {book.article} успешно обновлена в таблице Excel и в базе!"
+
+        # Получаем постоянные объекты слотов из vault (вечные ссылки /vault/ и S3 взамен очищенных временных файлов)
+        try:
+            from services.vault_service import reopen_book_from_vault
+            reopened = reopen_book_from_vault(book.article)
+            if reopened and "slots" in reopened:
+                response_data["slots"] = reopened["slots"]
+        except Exception as reopen_err:
+            print(f"⚠️ [SaveBookUseCase] Не удалось получить слоты из vault: {reopen_err}")
+
         return response_data
 
     def _cleanup_temporary_session_photos(self, slots_photos: Dict[str, Any]) -> None:

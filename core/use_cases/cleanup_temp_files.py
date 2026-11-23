@@ -62,6 +62,7 @@ class CleanupTempFilesUseCase:
             ("inbox", self.inbox_dir)
         ]
 
+        # 1. Очистка временных папок сессии
         for dir_name, dir_path in dirs_to_clean:
             if not os.path.exists(dir_path):
                 continue
@@ -91,6 +92,35 @@ class CleanupTempFilesUseCase:
                         kept_count += 1
                 except Exception as e:
                     errors.append(f"{fname}: {str(e)}")
+
+        # 2. Очистка старых локальных папок книг в books_vault (старше 7 дней, если выгружены в S3)
+        vault_dir = os.path.join(self.base_dir, "storage", "books_vault")
+        vault_ttl_seconds = 7 * 86400.0  # 7 дней
+        if os.path.exists(vault_dir):
+            import shutil
+            try:
+                from services.db_service import get_book_from_db
+            except Exception:
+                get_book_from_db = lambda a: None
+
+            for book_folder in os.listdir(vault_dir):
+                b_dir = os.path.join(vault_dir, book_folder)
+                if not os.path.isdir(b_dir):
+                    continue
+                try:
+                    st = os.stat(b_dir)
+                    if now - st.st_mtime > vault_ttl_seconds:
+                        art = book_folder.split("_")[0]
+                        db_b = get_book_from_db(art) if callable(get_book_from_db) else None
+                        # Удаляем локальный кэш только если книга подтверждена в базе и в S3
+                        if db_b and db_b.get("main_photo_url") and "storage.yandexcloud.net" in str(db_b.get("main_photo_url")):
+                            dir_size = sum(os.path.getsize(os.path.join(root, f)) for root, _, files in os.walk(b_dir) for f in files)
+                            if not dry_run:
+                                shutil.rmtree(b_dir)
+                            deleted_count += 1
+                            deleted_bytes += dir_size
+                except Exception as e:
+                    errors.append(f"vault {book_folder}: {str(e)}")
 
         freed_mb = round(deleted_bytes / (1024.0 * 1024.0), 2)
         logger.info(f"Garbage collection ({'dry-run' if dry_run else 'applied'}): "

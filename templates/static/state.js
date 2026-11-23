@@ -68,8 +68,10 @@ var photoPool = []; // Массив всех фото: { id, name, mime, preview
 var booksSession = [
   {
     id: 1,
-    article: "DP-B-00001",
+    article: "",
     title: "Книга #1",
+    isEditMode: false,
+    isReopened: false,
     slots: {
       cover_front: null,
       cover_back: [],
@@ -78,9 +80,10 @@ var booksSession = [
       mantra_defects: []
     },
     formData: {
-      article: "DP-B-00001",
-      article_number: "00001",
-      barcode: "2978470000012"
+      article: "",
+      article_number: "",
+      barcode: "",
+      auto_package_adder: true
     }
   }
 ];
@@ -152,7 +155,9 @@ function findPhotoById(photoId) {
 }
 
 function getActiveBook() {
-  return booksSession.find(b => b.id === activeBookId) || booksSession[0];
+  const session = (typeof window !== 'undefined' && window.booksSession) ? window.booksSession : booksSession;
+  const curId = (typeof window !== 'undefined' && window.activeBookId !== undefined) ? window.activeBookId : activeBookId;
+  return session.find(b => b.id === curId) || session[0];
 }
 
 function isPhotoProcessed(photo) {
@@ -184,4 +189,74 @@ function showToast(msg) {
     toast.classList.remove('opacity-100', 'translate-y-0');
     toast.classList.add('opacity-0', 'translate-y-4');
   }, 3500);
+}
+
+// Управление хранилищем фотографий (Photo Engine V2)
+async function loadStorageStats() {
+  try {
+    const res = await fetch('/api/storage/stats');
+    const data = await res.json();
+    if (data.success && data.stats) {
+      const s = data.stats;
+      const totalMb = s.total_mb || 0;
+      const lbl = document.getElementById('storageHeaderLabel');
+      if (lbl) lbl.textContent = `Диск: ${totalMb > 1024 ? (totalMb/1024).toFixed(1) + ' ГБ' : totalMb + ' МБ'}`;
+      const tEl = document.getElementById('storageTotalMbVal');
+      if (tEl) tEl.textContent = `${totalMb > 1024 ? (totalMb/1024).toFixed(2) + ' ГБ' : totalMb + ' МБ'}`;
+      const sessEl = document.getElementById('storageSessionMbVal');
+      if (sessEl) sessEl.textContent = `${s.session_assets_mb || 0} МБ`;
+      const vEl = document.getElementById('storageVaultMbVal');
+      if (vEl) vEl.textContent = `${s.vault_mb || 0} МБ`;
+      const cEl = document.getElementById('storageAssetCountVal');
+      if (cEl) cEl.textContent = `${s.asset_count || 0} фото (${s.archived_asset_count || 0} в архиве)`;
+    }
+  } catch(e) {}
+}
+
+function openStorageModal() {
+  loadStorageStats();
+  const m = document.getElementById('storageModal');
+  if (m) m.classList.remove('hidden');
+}
+
+function closeStorageModal() {
+  const m = document.getElementById('storageModal');
+  if (m) m.classList.add('hidden');
+}
+
+async function executeStorageCleanup() {
+  const btn = document.getElementById('btnRunCleanup');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳ Очистка...</span>';
+  }
+  try {
+    const res = await fetch('/api/storage/cleanup', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`🧹 Сборщик мусора освободил <b>${data.freed_mb || 0} МБ</b> на диске!`);
+      loadStorageStats();
+    }
+  } catch(e) {
+    alert('Ошибка очистки: ' + e.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>🧹 Очистить старый кэш (>24ч)</span>';
+    }
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.getActiveBook = getActiveBook;
+  window.escapeHtml = escapeHtml;
+  window.booksSession = booksSession;
+  window.activeBookId = activeBookId;
+  window.cleanAnnotationText = cleanAnnotationText;
+  window.findPhotoById = findPhotoById;
+  window.isPhotoProcessed = isPhotoProcessed;
+
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(loadStorageStats, 2000);
+  });
 }

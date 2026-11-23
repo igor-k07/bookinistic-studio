@@ -74,6 +74,7 @@ def check_ozon_connection() -> Dict[str, Any]:
         total_items = res.get("total") or res.get("total_items") or len(res.get("items", []))
         return {
             "success": True,
+            "connected": True,
             "message": "Успешное подключение к Ozon Seller API (роль: Товары)",
             "total_products": total_items,
         }
@@ -543,5 +544,46 @@ def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
 
     payload = {"items": [item_payload]}
     return _make_ozon_request("/v3/product/import", payload)
+
+
+def update_ozon_product_pictures(
+    article: str,
+    primary_image: str,
+    images: Optional[List[str]] = None
+) -> Tuple[bool, Any]:
+    """
+    Точечное обновление фотографий товара в Ozon Seller API (POST /v2/product/pictures/import).
+    Обновляет галерею одного товара за 1-2 секунды без перезаливки таблицы.
+    """
+    all_imgs = []
+    if primary_image:
+        all_imgs.append(primary_image)
+    if images:
+        for im in images:
+            if im and im not in all_imgs:
+                all_imgs.append(im)
+
+    if not all_imgs:
+        return False, "Нет фотографий для отправки на Ozon"
+
+    main_photo = primary_image or all_imgs[0]
+    add_photos = [im for im in all_imgs if im != main_photo]
+
+    payload = {
+        "items": [
+            {
+                "offer_id": str(article).strip(),
+                "primary_image": main_photo,
+                "images": add_photos,
+            }
+        ]
+    }
+    return _make_ozon_request("/v2/product/pictures/import", payload)
+
+
+def get_picture_import_status(task_id: int) -> Tuple[bool, Any]:
+    """Проверка статуса асинхронного импорта картинок в Ozon (POST /v1/product/import/info)."""
+    return _make_ozon_request("/v1/product/import/info", {"task_id": task_id})
+
 
 

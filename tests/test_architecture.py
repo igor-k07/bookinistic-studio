@@ -8,9 +8,17 @@ import unittest
 from core.domain.enums import BookCondition, PhotoRole, TemplateMode
 from core.domain.models import Book, Dimensions, PhotoItem
 from core.domain.rules import (
+    SLOT_CARD,
+    SLOT_COVER_BACK,
+    SLOT_COVER_FRONT,
+    SLOT_DEFECTS,
+    SLOT_ILLUSTRATIONS,
+    SLOT_INFO_PAGES,
     calculate_book_condition,
     calculate_gost_dimensions,
+    classify_filename_to_slot,
     format_annotation_with_warning,
+    get_canonical_photo_filename,
     resolve_template_mode,
 )
 from server.router import RequestContext, Router
@@ -35,12 +43,22 @@ class TestDomainRules(unittest.TestCase):
         cond = calculate_book_condition(has_defects=True, manual_condition="Удовлетворительная")
         self.assertEqual(cond, BookCondition.SATISFACTORY)
 
+    def test_condition_manual_good_without_defects(self):
+        """'Хорошая' может быть установлена пользователем вручную даже без дефектов."""
+        cond = calculate_book_condition(has_defects=False, manual_condition="Хорошая")
+        self.assertEqual(cond, BookCondition.GOOD)
+
     def test_annotation_warning_formatting(self):
-        """Предупреждение о дефектах добавляется только при наличии дефектов и не дублируется."""
+        """Предупреждение о дефектах добавляется при наличии дефектов или ручном ухудшении и не дублируется."""
         raw_text = "Интересная советская книга."
-        # Нет дефектов -> чистый текст
+        # Нет дефектов и нет ручного ухудшения -> чистый текст
         clean = format_annotation_with_warning(raw_text, has_defects=False)
         self.assertEqual(clean, raw_text)
+
+        # Нет дефектов, но состояние ухудшено вручную до 'Хорошая' -> текст с предупреждением
+        manual_warn = format_annotation_with_warning(raw_text, has_defects=False, condition="Хорошая")
+        self.assertTrue(manual_warn.startswith("ВНИМАНИЕ! КНИГА НЕ НОВАЯ"))
+        self.assertIn(raw_text, manual_warn)
 
         # Есть дефекты -> текст с предупреждением
         with_warn = format_annotation_with_warning(raw_text, has_defects=True)
@@ -231,6 +249,79 @@ class TestRouter(unittest.TestCase):
         self.assertIn("/api/save_book", r._post_routes)
         self.assertIn("/api/ai_recognize_book", r._post_routes)
         self.assertIn("/api/ai_process_photo", r._post_routes)
+
+
+class TestSlotMappingAndClassification(unittest.TestCase):
+    """Тестирование централизованной классификации и генерации имен файлов."""
+
+    def test_canonical_filenames(self):
+        self.assertEqual(get_canonical_photo_filename("cover_front"), "01_cover_front.jpg")
+        self.assertEqual(get_canonical_photo_filename("mantra_defects", 1), "02_defect_1.jpg")
+        self.assertEqual(get_canonical_photo_filename("illustrations", 3), "03_illustration_3.jpg")
+        self.assertEqual(get_canonical_photo_filename("cover_back", 1, is_multi=False), "04_cover_back.jpg")
+        self.assertEqual(get_canonical_photo_filename("cover_back", 2, is_multi=True), "04_cover_back_2.jpg")
+        self.assertEqual(get_canonical_photo_filename("info_pages", 1), "info_page_1.jpg")
+        self.assertEqual(get_canonical_photo_filename("card"), "99_card.jpg")
+
+    def test_classify_filename_to_slot(self):
+        # 1. Лицевая обложка
+        self.assertEqual(classify_filename_to_slot("01_cover_front.jpg"), SLOT_COVER_FRONT)
+        self.assertEqual(classify_filename_to_slot("front_cover.png"), SLOT_COVER_FRONT)
+        self.assertEqual(classify_filename_to_slot("01_обложка.jpg"), SLOT_COVER_FRONT)
+
+        # 2. Задняя обложка
+        self.assertEqual(classify_filename_to_slot("04_cover_back.jpg"), SLOT_COVER_BACK)
+        self.assertEqual(classify_filename_to_slot("02_cover_back.jpg"), SLOT_COVER_BACK)
+        self.assertEqual(classify_filename_to_slot("back_01.jpg"), SLOT_COVER_BACK)
+        self.assertEqual(classify_filename_to_slot("https://storage.yandexcloud.net/bucket/DP-B-001/02_cover_back.jpg?v=123"), SLOT_COVER_BACK)
+
+        # 3. Дефекты
+        self.assertEqual(classify_filename_to_slot("02_defect_1.jpg"), SLOT_DEFECTS)
+        self.assertEqual(classify_filename_to_slot("05_defect_2.jpg"), SLOT_DEFECTS)
+        self.assertEqual(classify_filename_to_slot("defect_photo.jpg"), SLOT_DEFECTS)
+
+        # 4. Иллюстрации
+        self.assertEqual(classify_filename_to_slot("03_illustration_1.jpg"), SLOT_ILLUSTRATIONS)
+        self.assertEqual(classify_filename_to_slot("04_illustration_2.jpg"), SLOT_ILLUSTRATIONS)
+        self.assertEqual(classify_filename_to_slot("random_page.jpg"), SLOT_ILLUSTRATIONS)
+
+        # 5. Инфо-страницы
+        self.assertEqual(classify_filename_to_slot("info_page_1.jpg"), SLOT_INFO_PAGES)
+        self.assertEqual(classify_filename_to_slot("03_info_page_2.jpg"), SLOT_INFO_PAGES)
+        self.assertEqual(classify_filename_to_slot("title_page.png"), SLOT_INFO_PAGES)
+
+        # 6. Карточка магазина
+        self.assertEqual(classify_filename_to_slot("99_card.jpg"), SLOT_CARD)
+        self.assertEqual(classify_filename_to_slot("card.png"), SLOT_CARD)
+        self.assertEqual(classify_filename_to_slot("https://storage.yandexcloud.net/bucket/DP-B-001/99_card.jpg"), SLOT_CARD)
+
+
+class TestTunnelServiceLayering(unittest.TestCase):
+    """Тестирование переноса логики в services.tunnel_service и обратной совместимости."""
+
+    def test_tunnel_service_functions(self):
+        import services.tunnel_service as ts
+        self.assertTrue(callable(ts.get_tunnel_url))
+        self.assertTrue(callable(ts.get_local_url))
+        self.assertTrue(callable(ts.get_local_ip))
+        self.assertTrue(callable(ts.is_vpn_active))
+        self.assertIsInstance(ts.get_local_ip(), str)
+        self.assertIsInstance(ts.is_vpn_active(), bool)
+
+    def test_tunnel_manager_backward_compatibility(self):
+        import services.tunnel_service as ts
+        import tunnel_manager as tm
+        self.assertTrue(callable(tm.get_tunnel_url))
+        self.assertTrue(callable(tm.get_local_url))
+        self.assertTrue(callable(tm.get_local_ip))
+        self.assertTrue(callable(tm.is_vpn_active))
+        self.assertEqual(tm.get_local_ip(), ts.get_local_ip())
+
+
+    def test_sync_book_to_excel_callable(self):
+        """Проверка наличия функции sync_book_to_excel в excel_service."""
+        from services.excel_service import sync_book_to_excel
+        self.assertTrue(callable(sync_book_to_excel))
 
 
 if __name__ == "__main__":

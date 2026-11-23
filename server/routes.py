@@ -4,6 +4,7 @@ routes.py: Декларативная регистрация всех API-энд
 """
 
 from server.controllers import (
+    asset_controller,
     book_controller,
     photo_controller,
     session_controller,
@@ -16,14 +17,29 @@ def build_router() -> Router:
     """Создает и настраивает главный роутер приложения."""
     router = Router()
 
+    # --- Реестр ассетов и фото-движок V2 (AssetController) ---
+    router.post("/api/assets/upload")(asset_controller.upload_assets)
+    router.get("/api/assets/list")(asset_controller.list_assets_api)
+    router.get("/api/assets/get")(asset_controller.get_asset_api)
+    router.post("/api/assets/assign")(asset_controller.assign_slot_api)
+    router.post("/api/assets/transform")(asset_controller.transform_asset_api)
+    router.post("/api/assets/run_ai")(asset_controller.run_ai_api)
+    router.post("/api/assets/delete")(asset_controller.delete_asset_api)
+    router.get("/api/storage/stats")(asset_controller.storage_stats_api)
+    router.post("/api/storage/cleanup")(asset_controller.cleanup_storage_api)
+    router.post("/api/books/reopen")(asset_controller.reopen_book_api)
+
     # --- Книги и каталог (BookController) ---
     router.get("/api/get_books")(book_controller.get_books)
     router.get("/api/get_next_article")(book_controller.get_next_article)
+    router.get("/api/check_article")(book_controller.check_article)
     router.get("/api/get_db_catalog")(book_controller.get_db_catalog)
     router.post("/api/save_book")(book_controller.save_book)
+    router.post("/api/books/smart_save")(book_controller.smart_save_book)
     router.post("/api/delete_book_row")(book_controller.delete_book_row)
     router.post("/api/clear_excel")(book_controller.clear_excel)
     router.post("/api/ozon/publish_book")(book_controller.publish_ozon_book)
+    router.post("/api/ozon/update_pictures")(book_controller.update_ozon_pictures)
 
     # --- Фотографии и ИИ (PhotoController) ---
     router.post("/api/ai_recognize_book")(photo_controller.recognize_book)
@@ -58,11 +74,13 @@ def build_router() -> Router:
     router.get("/api/download_photos_zip")(system_controller.download_photos_zip)
     router.post("/api/cleanup_temp")(system_controller.cleanup_temp)
 
-    # --- Ozon Seller API ---
+    # --- Ozon Seller API & Smart Cloud Sync ---
     router.get("/api/ozon/status")(system_controller.ozon_status)
     router.get("/api/ozon/import_status")(system_controller.ozon_import_status)
     router.post("/api/ozon/save_keys")(system_controller.ozon_save_keys)
     router.post("/api/ozon/start_import")(system_controller.ozon_start_import)
+    router.post("/api/sync/smart_s3")(system_controller.smart_s3_sync_start)
+    router.get("/api/sync/smart_s3/status")(system_controller.smart_s3_sync_status)
 
     return router
 

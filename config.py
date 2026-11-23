@@ -4,8 +4,20 @@ config.py: Конфигурация и глобальные пути проек�
 
 import os
 import shutil
+import socket
 from datetime import datetime
 from typing import Optional
+
+# Надежный обход DNS-перехвата VPN/Fake-IP (198.18.x.x) для Yandex Cloud Object Storage
+_orig_getaddrinfo = socket.getaddrinfo
+
+def _patched_getaddrinfo(host, port, *args, **kwargs):
+    if host == "storage.yandexcloud.net":
+        # Официальный публичный IP Яндекс Хранилища, доступный напрямую без VPN-задержек
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("213.180.193.243", port))]
+    return _orig_getaddrinfo(host, port, *args, **kwargs)
+
+socket.getaddrinfo = _patched_getaddrinfo
 
 PORT = 8095
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +32,7 @@ READY_TABLES_POST2011_DIR = os.path.join(READY_TABLES_DIR, "с_2011")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 INBOX_DIR = os.path.join(BASE_DIR, "storage/inbox")
 SESSION_PHOTOS_DIR = os.path.join(BASE_DIR, "storage/session_photos")
+SESSION_ASSETS_DIR = os.path.join(BASE_DIR, "storage/session_assets")
 VAULT_DIR = os.path.join(BASE_DIR, "storage/books_vault")
 KEY_FILE = os.path.join(BASE_DIR, ".gemini_api_key")
 DRAFT_FILE = os.path.join(BASE_DIR, "storage/session_draft.json")
@@ -35,6 +48,7 @@ os.makedirs(READY_TABLES_PRE2011_DIR, exist_ok=True)
 os.makedirs(READY_TABLES_POST2011_DIR, exist_ok=True)
 os.makedirs(INBOX_DIR, exist_ok=True)
 os.makedirs(SESSION_PHOTOS_DIR, exist_ok=True)
+os.makedirs(SESSION_ASSETS_DIR, exist_ok=True)
 os.makedirs(VAULT_DIR, exist_ok=True)
 os.makedirs(DOCS_DIR, exist_ok=True)
 os.makedirs(CREDENTIALS_DIR, exist_ok=True)

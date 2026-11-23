@@ -25,8 +25,8 @@ from config import (
 )
 from core.barcode import generate_ean13_from_article
 from core.constants import normalize_genre
-from core.domain.rules import calculate_book_condition
-import tunnel_manager
+from core.domain.rules import calculate_book_condition, clean_publisher_name, normalize_author_name
+import services.tunnel_service as tunnel_service
 
 
 # Межпоточный реентерабельный мьютекс для защиты целостности таблиц Excel Ozon
@@ -92,6 +92,19 @@ def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
                 title = get_val("C")
                 if art.strip() or title.strip():
                     if mode == "pre2011":
+                        w_pkg_raw = get_val("N")
+                        h_pkg_raw = get_val("O")
+                        l_pkg_raw = get_val("P")
+                        wt_pkg_raw = get_val("M")
+                        w_pkg = int(w_pkg_raw) if (w_pkg_raw and str(w_pkg_raw).isdigit()) else 140
+                        h_pkg = int(h_pkg_raw) if (h_pkg_raw and str(h_pkg_raw).isdigit()) else 25
+                        l_pkg = int(l_pkg_raw) if (l_pkg_raw and str(l_pkg_raw).isdigit()) else 215
+                        wt_pkg = int(wt_pkg_raw) if (wt_pkg_raw and str(wt_pkg_raw).isdigit()) else 330
+                        net_w = max(10, w_pkg - 10)
+                        net_h = max(1, h_pkg - 10)
+                        net_l = max(10, l_pkg - 10)
+                        net_wt = max(10, wt_pkg - 30)
+
                         books.append({
                             "row": r_num,
                             "template_mode": "pre2011",
@@ -118,12 +131,19 @@ def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
                             "translator": get_val("AH"),
                             "target_audience": get_val("AB"),
                             "paper_type": get_val("AL"),
-                            "dimensions": f"{get_val('N')}х{get_val('P')}х{get_val('O')}" if (get_val("N") and get_val("P")) else (get_val("AP") or "—"),
-                            "weight": get_val("M") or get_val("AQ") or "",
-                            "weight_package": get_val("M"),
-                            "width_package": get_val("N"),
-                            "height_package": get_val("O"),
-                            "length_package": get_val("P"),
+                            "dimensions": f"{w_pkg}х{l_pkg}х{h_pkg}",
+                            "weight": net_wt,
+                            "weight_package": wt_pkg,
+                            "width": net_w,
+                            "width_package": w_pkg,
+                            "height": net_h,
+                            "height_package": h_pkg,
+                            "length": net_l,
+                            "length_package": l_pkg,
+                            "width_mm": net_w,
+                            "height_mm": net_h,
+                            "length_mm": net_l,
+                            "weight_g": net_wt,
                             "age_limit": get_val("AT"),
                             "country": get_val("BZ"),
                             "original_title": get_val("BY"),
@@ -135,6 +155,19 @@ def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
                             "photo_article": get_val("S"),
                         })
                     else:
+                        w_pkg_raw = get_val("M")
+                        h_pkg_raw = get_val("N")
+                        l_pkg_raw = get_val("O")
+                        wt_pkg_raw = get_val("L")
+                        w_pkg = int(w_pkg_raw) if (w_pkg_raw and str(w_pkg_raw).isdigit()) else 140
+                        h_pkg = int(h_pkg_raw) if (h_pkg_raw and str(h_pkg_raw).isdigit()) else 25
+                        l_pkg = int(l_pkg_raw) if (l_pkg_raw and str(l_pkg_raw).isdigit()) else 215
+                        wt_pkg = int(wt_pkg_raw) if (wt_pkg_raw and str(wt_pkg_raw).isdigit()) else 330
+                        net_w = max(10, w_pkg - 10)
+                        net_h = max(1, h_pkg - 10)
+                        net_l = max(10, l_pkg - 10)
+                        net_wt = max(10, wt_pkg - 30)
+
                         books.append({
                             "row": r_num,
                             "template_mode": "post2011",
@@ -161,12 +194,19 @@ def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
                             "translator": get_val("AH"),
                             "target_audience": get_val("AB"),
                             "paper_type": get_val("AK"),
-                            "dimensions": f"{get_val('M')}х{get_val('O')}х{get_val('N')}" if (get_val("M") and get_val("O")) else (get_val("AO") or "—"),
-                            "weight": get_val("L") or get_val("AP") or "",
-                            "weight_package": get_val("L"),
-                            "width_package": get_val("M"),
-                            "height_package": get_val("N"),
-                            "length_package": get_val("O"),
+                            "dimensions": f"{w_pkg}х{l_pkg}х{h_pkg}",
+                            "weight": net_wt,
+                            "weight_package": wt_pkg,
+                            "width": net_w,
+                            "width_package": w_pkg,
+                            "height": net_h,
+                            "height_package": h_pkg,
+                            "length": net_l,
+                            "length_package": l_pkg,
+                            "width_mm": net_w,
+                            "height_mm": net_h,
+                            "length_mm": net_l,
+                            "weight_g": net_wt,
                             "age_limit": get_val("AR"),
                             "country": get_val("CE"),
                             "original_title": get_val("CD"),
@@ -186,14 +226,14 @@ def get_current_books(mode: str = "pre2011") -> List[Dict[str, Any]]:
 @with_excel_lock
 def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
     """Записывает книгу в соответствующий шаблон Ozon (до 2011 или после 2011 года)."""
-    mode = b.get("template_mode")
-    if not mode:
-        year_val = str(b.get("year", "")).strip()
-        try:
-            y_int = int(year_val)
-            mode = "pre2011" if y_int <= 2011 else "post2011"
-        except Exception:
-            mode = "pre2011"
+    year_val = str(b.get("year", "")).strip()
+    m_year = re.findall(r"\d{4}", year_val)
+    if m_year:
+        mode = "pre2011" if int(m_year[0]) <= 2011 else "post2011"
+    else:
+        raw_mode = str(b.get("template_mode") or "").strip().lower()
+        mode = "post2011" if raw_mode in ("post2011", "post") else "pre2011"
+    b["template_mode"] = mode
 
     target_file = get_target_excel_file(mode)
 
@@ -258,43 +298,35 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
         annotation = (warning_prefix + "\n\n" + annotation).strip()
 
     # Размеры и вес книги (нетто)
-    try:
-        width = int(b.get("width") or 130)
-    except Exception:
-        width = 130
-    try:
-        length = int(b.get("length") or 205)
-    except Exception:
-        length = 205
-    try:
-        height = int(b.get("height") or 25)
-    except Exception:
-        height = 25
-    try:
-        weight = int(b.get("weight") or 300)
-    except Exception:
-        weight = 300
+    def _parse_int_dim(keys: list, default: int) -> int:
+        for k in keys:
+            v = b.get(k)
+            if v is not None and str(v).strip() != "":
+                try:
+                    iv = int(v)
+                    if iv > 0:
+                        return iv
+                except Exception:
+                    pass
+        return default
+
+    width = _parse_int_dim(["width", "width_mm"], 130)
+    length = _parse_int_dim(["length", "length_mm"], 205)
+    height = _parse_int_dim(["height", "height_mm"], 15)
+    weight = _parse_int_dim(["weight", "weight_g"], 250)
 
     # Габариты упаковки (ШхДхВ в мм, вес в граммах) — обязательные поля Ozon
     is_pkg_adder = b.get("auto_package_adder") is not False
-    try:
-        width_pkg = int(b.get("width_package") or ((width + 10) if is_pkg_adder else width))
-    except Exception:
-        width_pkg = (width + 10) if is_pkg_adder else width
-    try:
-        length_pkg = int(b.get("length_package") or ((length + 10) if is_pkg_adder else length))
-    except Exception:
-        length_pkg = (length + 10) if is_pkg_adder else length
-    try:
-        height_pkg = int(b.get("height_package") or ((height + 10) if is_pkg_adder else height))
-    except Exception:
-        height_pkg = (height + 10) if is_pkg_adder else height
-    try:
-        weight_pkg = int(b.get("weight_package") or ((weight + 30) if is_pkg_adder else weight))
-    except Exception:
-        weight_pkg = (weight + 30) if is_pkg_adder else weight
+    width_pkg = _parse_int_dim(["width_package"], (width + 10) if is_pkg_adder else width)
+    length_pkg = _parse_int_dim(["length_package"], (length + 10) if is_pkg_adder else length)
+    height_pkg = _parse_int_dim(["height_package"], (height + 10) if is_pkg_adder else height)
+    weight_pkg = _parse_int_dim(["weight_package"], (weight + 30) if is_pkg_adder else weight)
 
-    dimensions_str = b.get("dimensions") or f"{width_pkg}х{length_pkg}х{height_pkg}"
+    raw_dims = b.get("dimensions")
+    if isinstance(raw_dims, str) and "[object" not in raw_dims and any(sep in raw_dims for sep in ("х", "x", "X", "Х", "*", "×", "/")):
+        dimensions_str = raw_dims.strip()
+    else:
+        dimensions_str = f"{width_pkg}х{length_pkg}х{height_pkg}"
 
     year_val = b.get("year", "")
     try:
@@ -310,7 +342,9 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
         age_lim = ""
     is_18_plus = "Да" if age_lim == "18+" else ""
     genre = normalize_genre(b.get("genre", "Проза"), str(b.get("title") or ""), str(b.get("annotation") or ""))
-    publisher = b.get("publisher", "").strip()
+    publisher = clean_publisher_name(b.get("publisher", ""))
+    author = normalize_author_name(b.get("author", ""))
+    author_cover = normalize_author_name(b.get("author_cover", "")) or author
 
     brand_raw = str(b.get("brand") or "").strip()
     if not brand_raw or brand_raw.lower() in ("нет бренда", "нет", "не указан", "без бренда"):
@@ -341,7 +375,7 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
 
     # Если прямые ссылки на фото не переданы, пробуем найти их в books_vault/{article}*
     if not main_photo_url:
-        tunnel_url = tunnel_manager.get_tunnel_url()
+        tunnel_url = tunnel_service.get_tunnel_url()
         if tunnel_url and os.path.exists(VAULT_DIR):
             for d in os.listdir(VAULT_DIR):
                 if d == article or d.startswith(f"{article}_"):
@@ -394,8 +428,8 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             "Q": ("str", main_photo_url) if main_photo_url else ("empty", ""),
             "R": ("str", add_photo_urls) if add_photo_urls else ("empty", ""),
             "S": ("str", article),
-            "T": ("str", b.get("author_cover") or b.get("author", "")),
-            "U": ("str", b.get("author", "")),
+            "T": ("str", author_cover),
+            "U": ("str", author),
             "V": ("str", b.get("cover_type", "Твердый переплет")),
             "W": ("str", "Second-hand книга"),
             "X": ("str", "Печатная книга"),
@@ -406,8 +440,8 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             "AE": ("str", annotation),
             "AG": ("str", b.get("illustrator", "")),
             "AH": ("str", b.get("translator", "")),
-            "AI": ("str", b.get("series", "")),
-            "AJ": ("str", publisher),
+            "AI": ("str", publisher),
+            "AJ": ("str", b.get("series", "")),
             "AK": ("num", year_val) if str(year_val).isdigit() else ("empty", ""),
             "AL": ("str", b.get("paper_type", "")),
             "AM": ("str", "Русский"),
@@ -474,8 +508,8 @@ def append_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
             "P": ("str", main_photo_url) if main_photo_url else ("empty", ""),
             "Q": ("str", add_photo_urls) if add_photo_urls else ("empty", ""),
             "R": ("str", article),
-            "S": ("str", b.get("author_cover") or b.get("author", "")),
-            "T": ("str", b.get("author", "")),
+            "S": ("str", author_cover),
+            "T": ("str", author),
             "U": ("str", b.get("cover_type", "Твердый переплет")),
             "V": ("str", "Second-hand книга"),
             "W": ("str", "Печатная книга"),
@@ -709,5 +743,35 @@ def delete_book_from_excel(article: str, mode: str = "pre2011") -> dict:
         "remaining_count": len(remaining_books),
         "backup_file": os.path.basename(backup_file)
     }
+
+
+@with_excel_lock
+def sync_book_to_excel(b: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Синхронизирует книгу с официальной таблицей Excel Ozon:
+    - Если строка с таким артикулом уже есть в Excel: обновляет её новыми данными.
+    - Если строки нет (новая книга или строка была ранее удалена): добавляет строку в Excel.
+    """
+    year_val = str(b.get("year", "")).strip()
+    m_year = re.findall(r"\d{4}", year_val)
+    if m_year:
+        mode = "pre2011" if int(m_year[0]) <= 2011 else "post2011"
+    else:
+        raw_mode = str(b.get("template_mode") or "").strip().lower()
+        mode = "post2011" if raw_mode in ("post2011", "post") else "pre2011"
+    b["template_mode"] = mode
+
+    target_art = str(b.get("article") or "").strip().lower()
+
+    # Удаляем старую строку из обоих шаблонов, если она там присутствовала (на случай изменения года книги)
+    for m in ("pre2011", "post2011"):
+        try:
+            cur_books = get_current_books(m)
+            if any(str(cb.get("article") or "").strip().lower() == target_art for cb in cur_books):
+                delete_book_from_excel(b.get("article"), m)
+        except Exception as del_err:
+            print(f"⚠️ [ExcelService] Замена строки в Excel ({m}): {del_err}", flush=True)
+
+    return append_book_to_excel(b)
 
 

@@ -70,6 +70,20 @@ class BookCondition(str, Enum):
     BAD = "Плохая"
 
 
+class AssetStatus(str, Enum):
+    """
+    Статусы жизненного цикла ассета (фотокадра) в конвейере.
+    """
+    UPLOADED = "UPLOADED"             # Сырой оригинал загружен на диск
+    AI_PROCESSING = "AI_PROCESSING"   # rembg / вырезание фона выполняется
+    AI_READY = "AI_READY"             # rembg завершен, создан ai_white.jpg
+    EDITED = "EDITED"                 # Настроены параметры кропа/поворота
+    S3_UPLOADING = "S3_UPLOADING"     # Фоновая выгрузка в Yandex S3
+    S3_READY = "S3_READY"             # Успешно выгружен в облако Ozon CDN
+    ARCHIVED = "ARCHIVED"             # Финализирован в Vault книги
+    ERROR = "ERROR"                   # Сбой обработки или сети (доступен 1-клик retry)
+
+
 class TemplateMode(str, Enum):
     """
     Режим шаблона Ozon в зависимости от года издания книги.

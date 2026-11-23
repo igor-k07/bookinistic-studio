@@ -36,10 +36,12 @@
       const btn = document.getElementById('aiBatchBtn');
       const btnText = document.getElementById('aiBatchBtnText');
       if (!btn) return;
-      if (isBookAiRecognizing) {
+      const curBook = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
+      const isCurBusy = Boolean(curBook && curBook.isAiRecognizing);
+      if (isCurBusy) {
         btn.disabled = true;
         btn.classList.add('opacity-50', 'cursor-not-allowed', 'grayscale');
-        btn.title = 'Идет распознавание книги через Gemini...';
+        btn.title = 'Идет распознавание этой книги через Gemini...';
         if (btnText) {
           btnText.textContent = '⏳ Анализ книги через Gemini...';
         }
@@ -52,6 +54,38 @@
         }
       }
     }
+    window.updateAiBatchBtnState = updateAiBatchBtnState;
+
+    // -------------------------------------------------------------
+    // БЕЗОПАСНЫЙ URL ИСТОЧНИКА ДЛЯ СТУДИИ (ПРОКСИРОВАНИЕ S3/CORS И КИРИЛЛИЦА)
+    // -------------------------------------------------------------
+    function getSafeStudioSourceUrl(url) {
+      if (!url || typeof url !== 'string') return url;
+      url = url.trim();
+      if (url.startsWith('data:') || url.startsWith('blob:')) {
+        return url;
+      }
+      if (url.startsWith('/')) {
+        try {
+          return encodeURI(decodeURI(url));
+        } catch (e) {
+          return url;
+        }
+      }
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        try {
+          const parsed = new URL(url);
+          if (typeof window !== 'undefined' && parsed.host === window.location.host) {
+            return parsed.pathname + parsed.search;
+          }
+          return `/api/image_proxy?url=${encodeURIComponent(url)}`;
+        } catch (e) {
+          return `/api/image_proxy?url=${encodeURIComponent(url)}`;
+        }
+      }
+      return url;
+    }
+    window.getSafeStudioSourceUrl = getSafeStudioSourceUrl;
 
     // -------------------------------------------------------------
     // ИСТОРИЯ ИЗМЕНЕНИЙ ФОТО (UNDO / ИСТОРИЯ ВЕРСИЙ)
@@ -94,8 +128,11 @@
     function renderCroppedFromFullSourceAsync(src, rotationDeg = 0, rel = null) {
       return new Promise((resolve, reject) => {
         if (!src) return reject(new Error('Нет источника для рендеринга'));
+        const safeSrc = getSafeStudioSourceUrl(src);
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        if (safeSrc.startsWith('http://') || safeSrc.startsWith('https://') || safeSrc.startsWith('/api/image_proxy')) {
+          img.crossOrigin = 'anonymous';
+        }
         img.onload = () => {
           try {
             const nw = img.naturalWidth || img.width;
@@ -148,7 +185,7 @@
           }
         };
         img.onerror = () => reject(new Error('Не удалось загрузить изображение'));
-        img.src = src;
+        img.src = safeSrc;
       });
     }
     window.renderCroppedFromFullSourceAsync = renderCroppedFromFullSourceAsync;
@@ -221,8 +258,11 @@
         if (W === 0 && B === 0 && C === 0 && S === 0) {
           return resolve(src);
         }
+        const safeSrc = getSafeStudioSourceUrl(src);
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        if (safeSrc.startsWith('http://') || safeSrc.startsWith('https://') || safeSrc.startsWith('/api/image_proxy')) {
+          img.crossOrigin = 'anonymous';
+        }
         img.onload = () => {
           try {
             const canvas = document.createElement('canvas');
@@ -237,7 +277,7 @@
           }
         };
         img.onerror = () => resolve(src);
-        img.src = src;
+        img.src = safeSrc;
       });
     }
     window.applyFiltersToImageAsync = applyFiltersToImageAsync;
@@ -737,10 +777,44 @@
       updateStudioPhotoNavUI();
       updateStudioHistoryUI();
 
+      const isRemote = (s) => typeof s === 'string' && (s.startsWith('http://') || s.startsWith('https://'));
+
+      const hasLocalData = Boolean(
+        (photo.croppedBase && !isRemote(photo.croppedBase)) ||
+        (photo.aiWhiteOriginal && !isRemote(photo.aiWhiteOriginal)) ||
+        (photo.preview && !isRemote(photo.preview)) ||
+        (photo.cameraOriginal && !isRemote(photo.cameraOriginal)) ||
+        (photo.rawOriginal && !isRemote(photo.rawOriginal)) ||
+        photo.data ||
+        (photo.url && !isRemote(photo.url))
+      );
+
+      const isVaultOrCloud = !hasLocalData && Boolean(
+        photo.isFromVault ||
+        photo.s3_url ||
+        (photo.preview && isRemote(photo.preview)) ||
+        (photo.url && isRemote(photo.url))
+      );
+
       const fullSource = getPhotoFullSource(photo);
       const wantCroppedOnOpen = Boolean(photo.isCropped && photo.croppedBase && startMode !== 'crop');
-      const baseSource = wantCroppedOnOpen ? photo.croppedBase : fullSource;
-      const baseType = wantCroppedOnOpen ? 'cropped' : 'full';
+
+      let baseSource;
+      let baseType;
+
+      if (startMode === 'crop') {
+        baseSource = fullSource;
+        baseType = 'full';
+      } else if (wantCroppedOnOpen) {
+        baseSource = getSafeStudioSourceUrl(photo.croppedBase);
+        baseType = 'cropped';
+      } else if (isVaultOrCloud) {
+        baseSource = getSafeStudioSourceUrl(photo.s3_url || photo.preview || photo.url);
+        baseType = 'cropped';
+      } else {
+        baseSource = fullSource;
+        baseType = 'full';
+      }
 
       // Защитная генерация croppedBase, если флаг isCropped стоял, а среза не было в памяти
       if (photo.isCropped && !photo.croppedBase && startMode !== 'crop' && (photo.cropRelative || photo.aiCropRelative)) {
@@ -805,9 +879,22 @@
       const imgEl = document.getElementById('studioCropperImage');
       if (!imgEl) return;
       imgEl.onload = null;
+      imgEl.onerror = null;
 
-      imgEl.onload = () => {
+      const safeUrl = getSafeStudioSourceUrl(sourceUrl);
+      if (safeUrl && (safeUrl.startsWith('http://') || safeUrl.startsWith('https://') || safeUrl.startsWith('/api/image_proxy'))) {
+        imgEl.crossOrigin = 'anonymous';
+      } else {
+        imgEl.removeAttribute('crossOrigin');
+      }
+      let isHandled = false;
+
+      const onImageLoaded = () => {
+        if (isHandled) return;
+        isHandled = true;
         imgEl.onload = null;
+        imgEl.onerror = null;
+
         if (cropperInstance) {
           cropperInstance.destroy();
           cropperInstance = null;
@@ -817,6 +904,7 @@
           viewMode: 0,
           dragMode: 'move',
           autoCrop: false,
+          checkCrossOrigin: false,
           zoomOnWheel: false,
           restore: false,
           guides: true,
@@ -861,7 +949,49 @@
         });
       };
 
-      imgEl.src = sourceUrl;
+      imgEl.onerror = (err) => {
+        if (isHandled) return;
+        isHandled = true;
+        imgEl.onload = null;
+        imgEl.onerror = null;
+        console.error('⚠️ Ошибка загрузки изображения в Studio Cropper:', safeUrl, err);
+
+        // Защитный fallback: пробуем резервные источники по очереди (локальные в приоритете)
+        const candidates = [
+          currentEditingPhoto?.aiWhiteOriginal,
+          currentEditingPhoto?.croppedBase,
+          currentEditingPhoto?.preview,
+          currentEditingPhoto?.cameraOriginal,
+          currentEditingPhoto?.rawOriginal,
+          currentEditingPhoto?.data ? `data:image/jpeg;base64,${currentEditingPhoto.data}` : null,
+          currentEditingPhoto?.url,
+          currentEditingPhoto?.s3_url
+        ].filter(Boolean);
+
+        const nextFallback = candidates.find(c => {
+          const s = getSafeStudioSourceUrl(c);
+          return s && s !== safeUrl;
+        });
+
+        if (nextFallback) {
+          const fallbackUrl = getSafeStudioSourceUrl(nextFallback);
+          console.log('🔄 Fallback Studio Cropper: пробуем резервный источник:', fallbackUrl);
+          reloadStudioCropper(fallbackUrl, onReadyCallback, 'fallback');
+          return;
+        }
+
+        if (typeof showToast === 'function') {
+          showToast(`⚠️ Не удалось загрузить фото в редактор: ${escapeHtml((safeUrl || '').slice(0, 50))}`, 'error');
+        }
+      };
+
+      imgEl.onload = onImageLoaded;
+      imgEl.src = safeUrl;
+
+      // Если изображение уже было синхронно декодировано браузером из кэша
+      if (imgEl.complete && imgEl.naturalWidth > 0 && !isHandled) {
+        setTimeout(onImageLoaded, 15);
+      }
     }
 
     function syncCropFrameToPhoto() {
@@ -906,7 +1036,39 @@
 
     function getPhotoFullSource(photo) {
       if (!photo) return null;
-      return photo.aiWhiteOriginal || photo.cameraOriginal || photo.rawOriginal || photo.preview;
+      const isRemote = (s) => typeof s === 'string' && (s.startsWith('http://') || s.startsWith('https://'));
+
+      // 1. Приоритет быстрым локальным источникам (ИИ белый фон, оригинал камеры, preview, croppedBase, data)
+      const localCandidates = [
+        photo.aiWhiteOriginal,
+        photo.cameraOriginal,
+        photo.rawOriginal,
+        photo.preview,
+        photo.croppedBase,
+        photo.data ? `data:image/jpeg;base64,${photo.data}` : null,
+        photo.url
+      ].filter(Boolean);
+
+      for (const cand of localCandidates) {
+        if (!isRemote(cand)) {
+          return getSafeStudioSourceUrl(cand);
+        }
+      }
+
+      // 2. Если локальных источников нет вообще (книга только в облаке Ozon / S3) — используем облачный URL
+      const remoteCandidates = [
+        photo.s3_url,
+        photo.url,
+        photo.preview
+      ].filter(Boolean);
+
+      for (const cand of remoteCandidates) {
+        if (isRemote(cand)) {
+          return getSafeStudioSourceUrl(cand);
+        }
+      }
+
+      return getSafeStudioSourceUrl(localCandidates[0] || photo.preview || photo.url);
     }
 
     function restoreCropFrameOnFullSource(shouldZoom = true) {
@@ -2506,6 +2668,10 @@
       try {
         const isCroppedActive = Boolean(currentEditingPhoto.isCropped || (cropperInstance && cropperInstance.cropped));
 
+        if (isCroppedActive && studioLoadedSourceType === 'full' && cropperInstance && cropperInstance.cropped) {
+          syncCropFrameToPhoto();
+        }
+
         const croppedCanvas = cropperInstance.getCroppedCanvas({
           fillColor: '#ffffff',
           imageSmoothingEnabled: true,
@@ -2531,9 +2697,6 @@
         currentEditingPhoto.mime = 'image/jpeg';
         currentEditingPhoto.isCropped = isCroppedActive;
         currentEditingPhoto.croppedBase = isCroppedActive ? cleanCroppedUrl : null;
-        if (isCroppedActive && studioLoadedSourceType === 'full' && cropperInstance && cropperInstance.cropped) {
-          syncCropFrameToPhoto();
-        }
         currentEditingPhoto.whiten = studioState.whiten;
         currentEditingPhoto.brightness = studioState.brightness;
         currentEditingPhoto.contrast = studioState.contrast;
@@ -2557,6 +2720,28 @@
         const assignedSlot = currentEditingPhoto.assignedSlot;
         currentEditingPhoto.is_s3_uploaded = false;
         currentEditingPhoto.s3_url = null;
+        currentEditingPhoto.url = null;
+
+        // Синхронизация неразрушающих параметров с SQLite-реестром ассетов
+        if (savedPhotoId && (savedPhotoId.startsWith('ast_') || savedPhotoId.startsWith('photo_'))) {
+          try {
+            fetch('/api/assets/transform', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asset_id: savedPhotoId,
+                crop: currentEditingPhoto.cropRelative || currentEditingPhoto.crop_relative || null,
+                rotation: studioCurrentRotation,
+                filters: {
+                  whiten: studioState.whiten,
+                  brightness: studioState.brightness,
+                  contrast: studioState.contrast,
+                  saturation: studioState.saturation
+                }
+              })
+            }).catch(e => console.warn('Ошибка синхронизации ассета:', e));
+          } catch(e) {}
+        }
 
         if (!keepModalOpen) {
           isStudioOpen = false;
@@ -2744,7 +2929,9 @@
     async function quickRotatePhoto(photoId, deg, e) {
       if (e) e.stopPropagation();
       const photo = findPhotoById(photoId);
-      if (!photo || photo.isProcessing || photo.isAiProcessing || isBookAiRecognizing) return;
+      const photoBook = photo && photo.assignedBookId ? (window.booksSession || []).find(b => b.id === photo.assignedBookId) : (typeof window.getActiveBook === 'function' ? window.getActiveBook() : null);
+      const isPhotoBusy = Boolean(photo && (photo.isProcessing || photo.isAiProcessing || (photoBook && photoBook.isAiRecognizing)));
+      if (!photo || isPhotoBusy) return;
 
       initPhotoHistory(photo);
       const direction = deg > 0 ? 1 : -1;
@@ -2791,7 +2978,9 @@
     async function quickWhitenPhoto(photoId, e) {
       if (e) e.stopPropagation();
       const photo = findPhotoById(photoId);
-      if (!photo || photo.isProcessing || photo.isAiProcessing || isBookAiRecognizing) return;
+      const photoBook = photo && photo.assignedBookId ? (window.booksSession || []).find(b => b.id === photo.assignedBookId) : (typeof window.getActiveBook === 'function' ? window.getActiveBook() : null);
+      const isPhotoBusy = Boolean(photo && (photo.isProcessing || photo.isAiProcessing || (photoBook && photoBook.isAiRecognizing)));
+      if (!photo || isPhotoBusy) return;
       photo.isProcessing = true;
       renderPool();
       renderActiveBookSlots();
@@ -2892,6 +3081,7 @@
         currentEditingPhoto.mime = 'image/jpeg';
         currentEditingPhoto.is_s3_uploaded = false;
         currentEditingPhoto.s3_url = null;
+        currentEditingPhoto.url = null;
 
         isFreeCroppingActive = false;
 

@@ -236,11 +236,24 @@
         }
       };
 
+      const normAuth = (a) => {
+        if (!a || typeof a !== 'string') return '';
+        const trimmed = a.trim();
+        if (['автор не указан', 'нет автора', 'неизвестен', 'нет', 'отсутствует', 'не указан'].includes(trimmed.toLowerCase())) {
+          return 'не указан';
+        }
+        return trimmed;
+      };
+      const cleanPub = (p) => {
+        if (!p || typeof p !== 'string') return '';
+        return (typeof window.cleanPublisherName === 'function') ? window.cleanPublisherName(p) : p.trim();
+      };
+
       if (data.title) fill('title', data.title);
       if (data.original_title) fill('original_title', data.original_title);
-      if (data.author_cover) fill('author_cover', data.author_cover);
-      if (data.author || data.author_cover) fill('author', data.author || data.author_cover);
-      if (data.publisher) fill('publisher', data.publisher);
+      if (data.author_cover) fill('author_cover', normAuth(data.author_cover));
+      if (data.author || data.author_cover) fill('author', normAuth(data.author || data.author_cover));
+      if (data.publisher) fill('publisher', cleanPub(data.publisher));
 
       // Бренд Ozon: сопоставление с реестром Ozon
       const pubForBrand = data.publisher || (isCurrentActive ? document.getElementById('publisher')?.value : (curBookObj.formData && curBookObj.formData.publisher)) || '';
@@ -256,13 +269,17 @@
       const recognizedYear = data.year ? parseInt(data.year, 10) : 0;
       if (data.year) {
         fill('year', data.year);
-        if (isCurrentActive) {
-          try { onYearInput(data.year); } catch (e) { console.warn('onYearInput error', e); }
+        if (!isNaN(recognizedYear) && recognizedYear > 1000 && recognizedYear < 2100) {
+          const autoMode = (recognizedYear <= 2011) ? 'pre2011' : 'post2011';
+          curBookObj.formData.template_mode = autoMode;
+          if (isCurrentActive) {
+            try { setTemplateMode(autoMode, false); } catch (e) { console.warn('setTemplateMode error', e); }
+          }
         }
       }
 
       // Правило: книги до 2011 года без 100% подтверждения на фото не требуют ISBN
-      const isPre2011 = (recognizedYear > 0 && recognizedYear <= 2011) || window.currentTemplateMode === 'pre2011';
+      const isPre2011 = (recognizedYear > 0 && recognizedYear <= 2011) || ((curBookObj.formData.template_mode || window.currentTemplateMode) === 'pre2011');
       let cleanIsbn = data.isbn ? String(data.isbn).trim() : '';
       const is100PercentOnPhoto = !!data.isbn_100_percent_on_photo;
 
@@ -471,24 +488,42 @@
     if (normalized === 'Удовлетворительное') normalized = 'Удовлетворительная';
     if (normalized === 'Плохая' || normalized === 'Плохое') normalized = 'Хорошая';
 
-    if (!hasDefects) {
-      if (isUserManual && (normalized === 'Хорошая' || normalized === 'Удовлетворительная')) {
-        if (typeof window.showToast === 'function') {
-          window.showToast('💡 В слоте [5. Дефекты] нет фото — для книги всегда действует «Очень хорошее».');
-        }
-      }
-      normalized = 'Очень хорошая';
-    } else {
+    if (hasDefects) {
+      // Если есть фото в слоте [5. Дефекты], сохранность не может быть «Очень хорошая»
       if (normalized === 'Очень хорошая') {
         if (isUserManual && typeof window.showToast === 'function') {
           window.showToast('⚠️ В слоте [5. Дефекты] есть фото: сохранность не может быть «Очень хорошее».');
         }
         normalized = 'Хорошая';
       }
-      if (!isUserManual && normalized === 'Удовлетворительная') {
-        const prevSaved = curBook && curBook.formData && curBook.formData.condition;
-        if (prevSaved !== 'Удовлетворительная') {
-          normalized = 'Хорошая';
+      if (curBook) {
+        if (!curBook.formData) curBook.formData = {};
+        curBook.formData.is_manual_condition = (normalized === 'Удовлетворительная');
+      }
+    } else {
+      // Фото дефектов НЕТ
+      if (isUserManual) {
+        if (normalized === 'Хорошая' || normalized === 'Удовлетворительная') {
+          if (curBook) {
+            if (!curBook.formData) curBook.formData = {};
+            curBook.formData.is_manual_condition = true;
+          }
+          if (typeof window.showToast === 'function') {
+            window.showToast(`💡 Установлена сохранность «${normalized}». Предупреждение добавлено в аннотацию.`);
+          }
+        } else if (normalized === 'Очень хорошая') {
+          if (curBook && curBook.formData) {
+            curBook.formData.is_manual_condition = false;
+          }
+        }
+      } else {
+        // Автоматический вызов при отсутствии фото дефектов:
+        // Если пользователь ранее выбрал "Хорошая" или "Удовлетворительная", сохраняем её!
+        if (curBook && curBook.formData && (curBook.formData.condition === 'Хорошая' || curBook.formData.condition === 'Удовлетворительная')) {
+          normalized = curBook.formData.condition;
+          curBook.formData.is_manual_condition = true;
+        } else {
+          normalized = 'Очень хорошая';
         }
       }
     }
@@ -498,6 +533,24 @@
     if (curBook) {
       if (!curBook.formData) curBook.formData = {};
       curBook.formData.condition = normalized;
+    }
+
+    // Синхронизируем аннотацию с предупреждением:
+    // Предупреждение добавляется, если есть дефекты ИЛИ состояние ухудшено вручную ("Хорошая" / "Удовлетворительная")
+    const antEl = document.getElementById('annotation');
+    if (antEl && typeof window.cleanAnnotationText === 'function') {
+      const cleanAnt = window.cleanAnnotationText(curBook?.formData?.annotation || antEl.value || '');
+      const warningStr = window.ANNOTATION_WARNING || 'ВНИМАНИЕ! КНИГА НЕ НОВАЯ. Имеются определённые нюансы (повреждения) см. дополнительные фото.';
+      let newAnt = cleanAnt;
+      if (hasDefects || normalized === 'Хорошая' || normalized === 'Удовлетворительная') {
+        if (cleanAnt) {
+          newAnt = warningStr + '\n\n' + cleanAnt;
+        }
+      }
+      if (antEl.value !== newAnt) {
+        antEl.value = newAnt;
+      }
+      if (curBook && curBook.formData) curBook.formData.annotation = newAnt;
     }
 
     document.querySelectorAll('#condBtns .cond-btn').forEach(btn => {
@@ -514,6 +567,23 @@
         btn.className = 'cond-btn py-1.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-300 text-xs font-semibold hover:border-slate-500 transition text-center';
       }
     });
+
+    const hintEl = document.getElementById('annotationNoticeHint');
+    if (hintEl) {
+      if (hasDefects) {
+        hintEl.className = 'text-xs text-amber-400 mt-1.5 font-medium flex items-center gap-1.5';
+        hintEl.innerHTML = `<span>⚠️</span> <span>В слоте [5. Дефекты] фото (${defectCount} шт.). Предупреждение в аннотации, сохранность: <b>${normalized}</b>.</span>`;
+      } else if (normalized === 'Хорошая' || normalized === 'Удовлетворительная') {
+        hintEl.className = 'text-xs text-amber-400 mt-1.5 font-medium flex items-center gap-1.5';
+        hintEl.innerHTML = `<span>💡</span> <span>Сохранность вручную: <b>${normalized}</b>. Предупреждение добавлено в аннотацию.</span>`;
+      } else {
+        hintEl.className = 'text-xs text-emerald-400 mt-1.5 font-medium flex items-center gap-1.5';
+        hintEl.innerHTML = `<span>✓</span> <span>Сохранность: <b>Очень хорошее</b>. Предупреждение отключено.</span>`;
+      }
+    }
+
+    if (typeof window.saveCurrentFormToActiveBook === 'function') window.saveCurrentFormToActiveBook();
+    if (typeof window.scheduleAutoSave === 'function') window.scheduleAutoSave();
   }
 
   // -------------------------------------------------------------
@@ -569,14 +639,17 @@
     const lEl = document.getElementById('length');
     if (wEl) wEl.value = w;
     if (lEl) lEl.value = l;
-    autoCalcDimensions();
+    autoCalcDimensions(true);
+    if (typeof window.updateCardModeBanner === 'function') {
+      window.updateCardModeBanner();
+    }
   }
 
   function updateDimensionsPreviewBadge() {
     onDimensionChange();
   }
 
-  function autoCalcDimensions() {
+  function autoCalcDimensions(force = false) {
     const pages = parseInt(document.getElementById('pages')?.value, 10) || 200;
     const widthEl = document.getElementById('width');
     const lengthEl = document.getElementById('length');
@@ -611,10 +684,10 @@
 
     const bookWeight = Math.max(50, Math.round(blockWt + coverWt));
 
-    if (widthEl && (!widthEl.value || widthEl.value === '0')) widthEl.value = w;
-    if (lengthEl && (!lengthEl.value || lengthEl.value === '0')) lengthEl.value = l;
-    if (heightEl) heightEl.value = spine;
-    if (weightEl) weightEl.value = bookWeight;
+    if (widthEl && (force || !widthEl.value || widthEl.value === '0')) widthEl.value = w;
+    if (lengthEl && (force || !lengthEl.value || lengthEl.value === '0')) lengthEl.value = l;
+    if (heightEl && (force || !heightEl.value || heightEl.value === '0')) heightEl.value = spine;
+    if (weightEl && (force || !weightEl.value || weightEl.value === '0')) weightEl.value = bookWeight;
 
     onDimensionChange();
   }
@@ -641,14 +714,30 @@
   }
 
   async function generateNewArticle() {
-    const book = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
-    const idx = (window.booksSession || []).indexOf(book);
-    const nextArt = (typeof window.calculateNextArticle === 'function')
-      ? await window.calculateNextArticle(idx >= 0 ? idx : 0)
-      : 'DP-B-00001';
+    const numEl = document.getElementById('article_number');
+    const curVal = numEl ? numEl.value.replace(/\D/g, '') : '';
+    let nextArt = '';
+
+    if (curVal) {
+      // Пользователь уже работает в определенном диапазоне (например 03500).
+      // Кнопка (+1) просто прибавляет 1 к текущему номеру!
+      const curNum = parseInt(curVal, 10);
+      const nextNum = curNum + 1;
+      nextArt = `DP-B-${String(nextNum).padStart(5, '0')}`;
+    } else {
+      // Если поле пустое, берем следующий свободный
+      nextArt = (typeof window.calculateNextArticle === 'function')
+        ? await window.calculateNextArticle(1)
+        : 'DP-B-03098';
+    }
+
     const artEl = document.getElementById('article');
     if (artEl) artEl.value = nextArt;
-    if (typeof window.onArticleInput === 'function') window.onArticleInput(nextArt);
+    if (typeof window.onArticleInput === 'function') {
+      window.onArticleInput(nextArt);
+    } else if (numEl) {
+      numEl.value = nextArt.replace(/\D/g, '').slice(-5);
+    }
   }
 
   function generateArticleByAuthor() {
@@ -693,6 +782,13 @@
   }
 
   async function clearForm(customArt = null) {
+    const book = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
+    if (book && (book.isEditMode || book.isReopened) && !customArt) {
+      if (typeof window.cancelEditModeAndCreateNew === 'function') {
+        return await window.cancelEditModeAndCreateNew();
+      }
+    }
+
     ['title', 'original_title', 'author_cover', 'author', 'series', 'illustrator', 'translator', 'publisher', 'year', 'pages', 'price', 'old_price'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
@@ -719,7 +815,6 @@
     if (document.getElementById('target_audience')) document.getElementById('target_audience').value = '';
     if (document.getElementById('hashtags')) document.getElementById('hashtags').value = '';
 
-    const book = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
     let art = customArt;
     if (!art && book && (book.article || (book.formData && book.formData.article))) {
       art = (book.formData && book.formData.article) || book.article;
@@ -747,11 +842,18 @@
       book.formData.auto_package_adder = true;
     }
     autoCalcDimensions();
+    if (typeof window.updateCardModeBanner === 'function') {
+      window.updateCardModeBanner();
+    }
   }
 
   // -------------------------------------------------------------
   // ОРКЕСТРАЦИЯ СОХРАНЕНИЯ В EXCEL И VAULT
   // -------------------------------------------------------------
+  async function handlePrimaryBookSave() {
+    return await saveBookToExcel();
+  }
+
   async function saveBookToExcel() {
     if (typeof window.snapToCanonical === 'function') {
       window.snapToCanonical(document.getElementById('author_cover'), 'authors');
@@ -770,18 +872,26 @@
       return;
     }
 
-    const authorCover = document.getElementById('author_cover')?.value?.trim();
+    let authorCover = document.getElementById('author_cover')?.value?.trim();
     if (!authorCover) {
       alert('Пожалуйста, укажите автора на обложке (если автор отсутствует в книге, введите «не указан»)!');
       document.getElementById('author_cover')?.focus();
       return;
     }
+    if (['автор не указан', 'нет автора', 'неизвестен', 'нет', 'отсутствует'].includes(authorCover.toLowerCase())) {
+      authorCover = 'не указан';
+      if (document.getElementById('author_cover')) document.getElementById('author_cover').value = 'не указан';
+    }
 
-    const author = document.getElementById('author')?.value?.trim();
+    let author = document.getElementById('author')?.value?.trim();
     if (!author) {
       alert('Пожалуйста, укажите официального автора книги (в паспортном формате «Фамилия Имя Отчество», либо «не указан»)!');
       document.getElementById('author')?.focus();
       return;
+    }
+    if (['автор не указан', 'нет автора', 'неизвестен', 'нет', 'отсутствует'].includes(author.toLowerCase())) {
+      author = 'не указан';
+      if (document.getElementById('author')) document.getElementById('author').value = 'не указан';
     }
 
     const paperType = document.getElementById('paper_type')?.value?.trim();
@@ -805,6 +915,33 @@
       article = document.getElementById('article')?.value?.trim() || 'DP-B-00001';
     }
 
+    const book = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
+    const isEdit = Boolean(book && (book.isEditMode || book.isReopened || book.isSavedToExcel));
+
+    // Проверка уникальности артикула перед созданием новой книги
+    if (!isEdit) {
+      try {
+        const checkRes = await fetch(`/api/check_article?article=${encodeURIComponent(article)}`).then(r => r.json());
+        if (checkRes && checkRes.exists) {
+          const sug = checkRes.suggested_next_article || 'DP-B-03098';
+          const conf = confirm(
+            `⚠️ Внимание! Товар с артикулом ${article} уже существует («${checkRes.title || 'Товар на Ozon'}»).\n\n` +
+            `Перезапись старых карточек заблокирована для защиты данных.\n\n` +
+            `• Нажмите «ОК», чтобы создать новую книгу под свободным артикулом ${sug}.\n` +
+            `• Нажмите «Отмена», если вы хотели отредактировать этот товар (нажмите «📥 Загрузить»).`
+          );
+          if (conf) {
+            article = sug;
+            if (typeof window.onArticleInput === 'function') window.onArticleInput(sug);
+          } else {
+            return;
+          }
+        }
+      } catch (chkErr) {
+        console.warn('Pre-save check failed:', chkErr);
+      }
+    }
+
     let barcodeVal = document.getElementById('barcode')?.value?.trim();
     if (!barcodeVal || barcodeVal === 'генерирует озон' || !/^\d{12,13}$/.test(barcodeVal)) {
       barcodeVal = window.BookCalculators
@@ -816,11 +953,15 @@
     const btn = document.getElementById('saveBtn');
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span> <span>Запись в таблицу Ozon...</span>';
+      btn.innerHTML = '<span>⏳</span> <span>Запись в Excel, Ozon и БД...</span>';
     }
 
     const isbnVal = document.getElementById('isbn')?.value?.trim() || '';
-    const publisherVal = document.getElementById('publisher')?.value?.trim() || '';
+    let publisherVal = document.getElementById('publisher')?.value?.trim() || '';
+    if (typeof window.cleanPublisherName === 'function') {
+      publisherVal = window.cleanPublisherName(publisherVal);
+      if (document.getElementById('publisher')) document.getElementById('publisher').value = publisherVal;
+    }
 
     const isPkgAdder = document.getElementById('autoPackageAdder')?.checked !== false;
     const rawWidth = parseInt(document.getElementById('width')?.value, 10) || 130;
@@ -834,11 +975,22 @@
     const pkgWeight = isPkgAdder ? (rawWeight + 30) : rawWeight;
     const dimStr = `${pkgWidth}х${pkgLength}х${pkgHeight}`;
 
+    const rawYearVal = document.getElementById('year')?.value?.trim() || '';
+    const yInt = parseInt(rawYearVal, 10);
+    const resolvedTemplateMode = (!isNaN(yInt) && yInt > 1000 && yInt < 2100)
+      ? (yInt <= 2011 ? 'pre2011' : 'post2011')
+      : (window.currentTemplateMode || 'pre2011');
+    if (resolvedTemplateMode !== window.currentTemplateMode && typeof setTemplateMode === 'function') {
+      try { setTemplateMode(resolvedTemplateMode, false); } catch (e) {}
+    }
+
     const payload = {
-      template_mode: window.currentTemplateMode || 'pre2011',
+      template_mode: resolvedTemplateMode,
       article: article,
+      is_edit: isEdit,
+      isReopened: Boolean(book && (book.isReopened || book.isSavedToExcel || book.isEditMode)),
       barcode: barcodeVal,
-      isbn: (window.currentTemplateMode === 'pre2011') ? isbnVal : (isbnVal || '978-5-0000-0000-0'),
+      isbn: (resolvedTemplateMode === 'pre2011') ? isbnVal : (isbnVal || '978-5-0000-0000-0'),
       title: title,
       original_title: (document.getElementById('original_title')?.value || '').trim(),
       series: document.getElementById('series')?.value?.trim() || '',
@@ -867,6 +1019,10 @@
       width: rawWidth,
       length: rawLength,
       height: rawHeight,
+      weight_g: rawWeight,
+      width_mm: rawWidth,
+      length_mm: rawLength,
+      height_mm: rawHeight,
       width_package: pkgWidth,
       length_package: pkgLength,
       height_package: pkgHeight,
@@ -884,13 +1040,15 @@
       return {
         id: p.id,
         data: d,
+        preview: p.preview || null,
+        croppedBase: p.croppedBase || null,
+        cameraOriginal: p.cameraOriginal || null,
         name: p.name || 'photo.jpg',
         s3_url: p.s3_url || null,
         is_s3_uploaded: Boolean(p.is_s3_uploaded),
       };
     };
 
-    const book = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
     const cbPayload = book ? (Array.isArray(book.slots.cover_back)
       ? book.slots.cover_back.map(extractPhotoPayload).filter(Boolean)
       : (book.slots.cover_back ? [extractPhotoPayload(book.slots.cover_back)].filter(Boolean) : [])) : [];
@@ -932,26 +1090,52 @@
         }
         const photoCount = (result.saved_photos && result.saved_photos.length) || 0;
         const s3Badge = result.s3_enabled ? ' ☁️ [Yandex S3]' : '';
-        const photoMsg = photoCount > 0 ? ` (в архив и S3 сохранено ${photoCount} фото${s3Badge})` : '';
+        const ozonBadge = (result.ozon_info && result.ozon_info.published)
+          ? ` 🚀 [Ozon #${result.ozon_info.task_id || 'OK'}]`
+          : '';
+        const photoMsg = photoCount > 0 ? ` (в архив и S3 сохранено ${photoCount} фото${s3Badge}${ozonBadge})` : '';
         const today = typeof window.getTodayStr === 'function' ? window.getTodayStr() : '';
         const fileName = result.file_name || ((result.template_mode === 'pre2011') ? `${today}_Печатная книга_до_2011.xlsx` : `${today}_Печатная книга_после_2011.xlsx`);
         const targetFolder = result.folder || ((result.template_mode === 'pre2011') ? 'ready_tables/1942-2010' : 'ready_tables/с_2011');
         const status = document.getElementById('formStatus');
         if (status) {
-          status.textContent = `✅ Книга "${result.title}" записана в ${targetFolder}/${fileName} (строка ${result.row})!${photoMsg}`;
+          status.textContent = `✅ Книга "${result.title}" записана в ${targetFolder}/${fileName}!${photoMsg}`;
           status.className = 'text-center text-xs text-emerald-400 font-semibold';
         }
         if (typeof window.showToast === 'function') {
-          window.showToast(`✅ Записано в <b>${targetFolder}/${fileName}</b> (строка ${result.row})${s3Badge}`);
+          window.showToast(`✅ Записано в <b>${targetFolder}/${fileName}</b> (строка ${result.row})${s3Badge}${ozonBadge}`);
         }
 
-        if (book) book.isSavedToExcel = true;
+        if (book) {
+          book.isSavedToExcel = true;
+          book.isEditMode = true;
+          if (result.slots) {
+            book.slots = result.slots;
+            // Фото сохраняются в слотах книги; в общем photoPool только обновляем привязку, если фото было загружено из пула
+            Object.entries(result.slots).forEach(([slotKey, slotItem]) => {
+              const items = Array.isArray(slotItem) ? slotItem : (slotItem ? [slotItem] : []);
+              items.forEach(p => {
+                if (p && p.id && window.photoPool) {
+                  p.assignedBookId = book.id;
+                  p.assignedSlot = slotKey;
+                  const existingIdx = window.photoPool.findIndex(x => x.id === p.id);
+                  if (existingIdx >= 0) {
+                    window.photoPool[existingIdx] = { ...window.photoPool[existingIdx], ...p, assignedBookId: book.id, assignedSlot: slotKey };
+                  }
+                }
+              });
+            });
+          }
+        }
+        if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
+        if (typeof window.renderPool === 'function') window.renderPool();
         if (typeof window.loadCatalogReferences === 'function') window.loadCatalogReferences();
         if (typeof window.renderBooksTabs === 'function') window.renderBooksTabs();
+        if (typeof window.updateCardModeBanner === 'function') window.updateCardModeBanner();
         if (typeof window.scheduleAutoSave === 'function') window.scheduleAutoSave();
 
         // Предлагаем перейти к следующей книге если есть неразобранные фото
-        const unassigned = (window.photoPool || []).filter(p => !p.assignedBookId).length;
+        const unassigned = (window.photoPool || []).filter(p => !p.assignedBookId && !(window.isPhotoInAnyBookSlot && window.isPhotoInAnyBookSlot(p.id))).length;
         if (unassigned > 0) {
           const templateLabel = (result.template_mode === 'pre2011') ? 'До 2011 г.' : 'После 2011 г.';
           setTimeout(() => {
@@ -961,14 +1145,40 @@
           }, 600);
         }
       } else {
-        alert('Ошибка записи: ' + (result.error || 'Неизвестная ошибка'));
+        if (result.code === 'ARTICLE_ALREADY_EXISTS') {
+          const sug = result.suggested_article;
+          const conf = confirm(
+            `⚠️ Ошибка: ${result.error}\n\n` +
+            `Подставить свободный артикул ${sug} и попробовать снова?`
+          );
+          if (conf && sug) {
+            if (typeof window.onArticleInput === 'function') window.onArticleInput(sug);
+          }
+        } else {
+          alert('Ошибка записи: ' + (result.error || 'Неизвестная ошибка'));
+        }
       }
     } catch (err) {
       alert('Ошибка записи: ' + err.message);
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<span>💾</span> <span>Записать книгу в Excel Ozon (Cmd + Enter)</span>';
+      }
+      try {
+        if (typeof window.updateCardModeBanner === 'function') {
+          window.updateCardModeBanner();
+        }
+      } catch (eBanner) {
+        console.error('updateCardModeBanner error in finally:', eBanner);
+      }
+      if (btn && btn.innerHTML.includes('⏳')) {
+        const curBook = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
+        const curArt = (curBook && (curBook.article || (curBook.formData && curBook.formData.article))) || document.getElementById('article')?.value || '';
+        if (curBook && (curBook.isSavedToExcel || curBook.isEditMode || curBook.isReopened)) {
+          btn.innerHTML = `<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Сохранить изменения книги ${curArt} в Excel, Ozon и БД (Cmd + Enter)</span>`;
+        } else {
+          btn.innerHTML = '<span id="saveBtnIcon">✨</span> <span id="saveBtnText">Записать новую книгу в таблицу Ozon (Cmd + Enter)</span>';
+        }
       }
     }
   }
@@ -1079,7 +1289,7 @@
       if (typeof window.closeClearTableModal === 'function') window.closeClearTableModal();
     }
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      saveBookToExcel();
+      handlePrimaryBookSave();
     }
   });
 
@@ -1105,7 +1315,7 @@
 
     const restored = (typeof window.restoreSessionDraft === 'function') ? await window.restoreSessionDraft() : false;
     if (!restored) {
-      const initArt = (typeof window.calculateNextArticle === 'function') ? await window.calculateNextArticle(0) : 'DP-B-00001';
+      const initArt = (typeof window.calculateNextArticle === 'function') ? await window.calculateNextArticle(0) : 'DP-B-03098';
       if (window.booksSession && window.booksSession[0]) {
         window.booksSession[0].article = initArt;
         if (!window.booksSession[0].formData) window.booksSession[0].formData = {};
@@ -1117,6 +1327,7 @@
       autoCalcDimensions();
     }
     if (typeof window.initBatchArticleInput === 'function') window.initBatchArticleInput();
+    if (typeof window.updateCardModeBanner === 'function') window.updateCardModeBanner();
   });
 
   // Экспорт на window
@@ -1139,5 +1350,6 @@
   window.deriveBarcodeFromIsbn = deriveBarcodeFromIsbn;
   window.clearForm = clearForm;
   window.saveBookToExcel = saveBookToExcel;
+  window.handlePrimaryBookSave = handlePrimaryBookSave;
 
 })(window);

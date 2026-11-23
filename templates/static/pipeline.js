@@ -83,6 +83,48 @@
     async function handlePoolFiles(e) {
       const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
       if (files.length === 0) return;
+
+      // Быстрая бинарная загрузка через FormData в Photo Engine V2
+      try {
+        const formData = new FormData();
+        formData.append('source', 'desktop');
+        files.forEach((f, idx) => {
+          formData.append(`file_${idx}`, f, f.name || `photo_${idx}.jpg`);
+        });
+
+        showToast(`⏳ Загрузка ${files.length} фото в хранилище ассетов...`);
+        const resp = await fetch('/api/assets/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await resp.json();
+        if (data.success && data.assets && data.assets.length > 0) {
+          data.assets.forEach(ast => {
+            photoPool.push({
+              id: ast.id,
+              name: ast.name || ast.filename || 'photo.jpg',
+              preview: ast.preview_url,
+              cameraOriginal: ast.full_url,
+              rawOriginal: ast.full_url,
+              croppedBase: null,
+              isCropped: false,
+              isAiProcessed: false,
+              assignedBookId: null,
+              assignedSlot: null,
+              status: ast.status
+            });
+          });
+          renderPool();
+          scheduleAutoSave();
+          showToast(`✅ ${data.assets.length} фото загружено в память сервера!`);
+          e.target.value = '';
+          return;
+        }
+      } catch (err) {
+        console.warn('Откат на клиентский ресайз при ошибке бинарной загрузки:', err);
+      }
+
+      // Резервный клиентский путь (fallback)
       const addedPhotos = [];
       for (const f of files) {
         const res = await resizeImage(f);
@@ -106,18 +148,128 @@
       renderPool();
       scheduleAutoSave();
       e.target.value = '';
-      // П. 3.2 спецификации: не вырезаем фон для нераспределенных фото пачки
+    }
+
+    function deletePhotoFromPool(photoId, e) {
+      if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      if (!photoId) return;
+
+      const idx = photoPool.findIndex(p => p.id === photoId);
+      if (idx === -1) return;
+
+      const photo = photoPool[idx];
+      const photoName = photo.name || `#${idx + 1}`;
+
+      // Удаляем фото из массива пула
+      photoPool.splice(idx, 1);
+
+      // Отменяем отложенную S3 выгрузку если была запланирована
+      if (proactiveS3Timers.has(photoId)) {
+        clearTimeout(proactiveS3Timers.get(photoId));
+        proactiveS3Timers.delete(photoId);
+      }
+
+      // Безусловно очищаем фото из слотов любых книг и перерисовываем слоты
+      removePhotoFromSlots(photoId);
+      renderActiveBookSlots();
+
+      // Очищаем файл и запись ассета на диске и в SQLite
+      if (photoId && (photoId.startsWith('ast_') || photoId.startsWith('photo_'))) {
+        try {
+          fetch('/api/assets/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset_id: photoId })
+          }).catch(() => {});
+        } catch(e) {}
+      }
+
+      // Если удалено выбранное фото, выбираем следующее свободное
+      if (selectedPoolPhotoId === photoId) {
+        const remainingUnassigned = photoPool.filter(p => !p.assignedBookId);
+        selectedPoolPhotoId = remainingUnassigned.length > 0 ? remainingUnassigned[0].id : null;
+      }
+
+      renderPool();
+      renderBooksTabs();
+      scheduleAutoSave();
+
+      if (typeof showToast === 'function') {
+        showToast(`🗑️ Фото «${photoName}» удалено из пула`);
+      }
+    }
+
+    function deleteSelectedPhotoFromPool() {
+      if (selectedPoolPhotoId) {
+        deletePhotoFromPool(selectedPoolPhotoId);
+      } else {
+        if (typeof showToast === 'function') {
+          showToast('ℹ️ Сначала выберите фото в пуле для удаления');
+        }
+      }
     }
 
     function clearPool() {
-      if (confirm('Очистить пул фотографий?')) {
-        photoPool = [];
-        booksSession.forEach(b => {
-          b.slots = { cover_front: null, cover_back: null, info_pages: [], illustrations: [], mantra_defects: [] };
+      // Собираем все ID фотографий, которые уже распределены по слотам любых книг сессии
+      const assignedIds = new Set();
+      (window.booksSession || []).forEach(b => {
+        if (!b.slots) return;
+        ['cover_front', 'cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
+          const val = b.slots[s];
+          if (!val) return;
+          if (Array.isArray(val)) {
+            val.forEach(p => { if (p && p.id) assignedIds.add(p.id); });
+          } else if (val && val.id) {
+            assignedIds.add(val.id);
+          }
         });
-        renderPool();
-        renderActiveBookSlots();
-        scheduleAutoSave();
+      });
+
+      // Свободные фото в пуле (не привязанные ни к одному слоту)
+      const freePhotos = photoPool.filter(p => !assignedIds.has(p.id) && !p.assignedBookId);
+
+      if (freePhotos.length === 0) {
+        if (typeof showToast === 'function') {
+          showToast('ℹ️ В свободном пуле нет фотографий для очистки (все фото уже распределены по слотам книг).');
+        } else {
+          alert('В свободном пуле нет фотографий для очистки (все фото уже распределены по слотам книг).');
+        }
+        return;
+      }
+
+      const confirmed = confirm(
+        `🧹 Очистить свободный пул?\n\n` +
+        `Будет удалено нераспределенных фото: ${freePhotos.length} шт.\n\n` +
+        `Все фотографии в слотах книг (${assignedIds.size} шт.) останутся в полной сохранности!`
+      );
+      if (!confirmed) return;
+
+      // Оставляем в photoPool ТОЛЬКО те фотографии, которые распределены по слотам!
+      photoPool = photoPool.filter(p => assignedIds.has(p.id) || Boolean(p.assignedBookId));
+      selectedPoolPhotoId = null;
+
+      // Удаляем временные ассеты нераспределенных фото с диска и из базы
+      freePhotos.forEach(p => {
+        if (p && p.id && (p.id.startsWith('ast_') || p.id.startsWith('photo_'))) {
+          try {
+            fetch('/api/assets/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ asset_id: p.id })
+            }).catch(() => {});
+          } catch(e) {}
+        }
+      });
+
+      renderPool();
+      renderActiveBookSlots();
+      scheduleAutoSave();
+
+      if (typeof showToast === 'function') {
+        showToast(`🧹 Свободный пул очищен! Удалено ${freePhotos.length} фото. Фотографии в слотах сохранены.`);
       }
     }
 
@@ -278,10 +430,41 @@
       if (selectedPoolPhotoId) assignPhotoToSlot(selectedPoolPhotoId, slotName);
     }
 
+    function isPhotoInAnyBookSlot(photoId) {
+      if (!photoId) return false;
+      return (window.booksSession || []).some(b => {
+        if (!b || !b.slots) return false;
+        return [
+          b.slots.cover_front,
+          ...(Array.isArray(b.slots.cover_back) ? b.slots.cover_back : (b.slots.cover_back ? [b.slots.cover_back] : [])),
+          ...(b.slots.info_pages || []),
+          ...(b.slots.illustrations || []),
+          ...(b.slots.mantra_defects || [])
+        ].some(s => s && s.id === photoId);
+      });
+    }
+    function getPhotoDisplayUrl(p) {
+      if (!p) return '';
+      // 1. Приоритет: актуальная ссылка на облако Yandex S3 (наиболее актуальная версия)
+      if (p.s3_url) return p.s3_url;
+      // 2. Свежий отредактированный срез из сессии
+      if (p.croppedBase && typeof p.croppedBase === 'string' && (p.croppedBase.startsWith('data:') || p.croppedBase.startsWith('blob:') || p.croppedBase.startsWith('http') || p.croppedBase.startsWith('/'))) {
+        return p.croppedBase;
+      }
+      // 3. Превью кадра (локальное или облачное)
+      if (p.preview) return p.preview;
+      // 4. Постоянная ссылка из vault
+      if (p.url) return p.url;
+      // 5. Исходный снимок с камеры
+      return p.cameraOriginal || p.rawOriginal || '';
+    }
+    window.getPhotoDisplayUrl = getPhotoDisplayUrl;
+    window.isPhotoInAnyBookSlot = isPhotoInAnyBookSlot;
+
     function renderPool() {
       const container = document.getElementById('poolContainer');
       const counter = document.getElementById('poolCounterBadge');
-      const unassignedPhotos = photoPool.filter(p => !p.assignedBookId);
+      const unassignedPhotos = photoPool.filter(p => !p.assignedBookId && !isPhotoInAnyBookSlot(p.id));
       const unassignedCount = unassignedPhotos.length;
       const processedCount = photoPool.filter(p => isPhotoProcessed(p)).length;
       const rawCount = photoPool.length - processedCount;
@@ -323,7 +506,7 @@
         const isBusy = Boolean(p.isAiProcessing || p.isProcessing);
 
         return `
-          <div class="relative shrink-0 group rounded-2xl overflow-hidden border ${isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-xl shadow-amber-400/20' : 'border-slate-800 hover:border-slate-600'} ${curScale.cardW} ${curScale.minH} bg-slate-950 flex flex-col justify-between p-1.5 transition-all cursor-grab active:cursor-grabbing select-none shadow-md ${isBusy ? 'pointer-events-none opacity-85 select-none' : ''}"
+          <div class="relative shrink-0 group rounded-2xl overflow-hidden border ${isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-xl shadow-amber-400/20' : 'border-slate-800 hover:border-slate-600'} ${curScale.cardW} ${curScale.minH} bg-slate-950 flex flex-col justify-between p-1.5 transition-all cursor-grab active:cursor-grabbing select-none shadow-md ${isBusy ? 'opacity-90 select-none' : ''}"
                draggable="${!isBusy}" ondragstart="handlePhotoDragStart(event, '${p.id}', 'pool')" ondragend="handlePhotoDragEnd(event)" onclick="selectPoolPhoto('${p.id}')">
 
             
@@ -338,11 +521,14 @@
                 ` : `
                   <span class="px-1.5 py-0.5 rounded bg-slate-850 text-amber-300 border border-amber-500/40 text-[9px] font-bold shadow tracking-tight" title="Сырой исходник">📷 ИСХОДНИК</span>
                 `)}
+                ${p.s3_url ? '<span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[9px] font-bold shadow" title="Выгружено в Yandex S3 CDN">☁️ S3</span>' : ''}
+                ${p.status === 'ERROR' ? `<span class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[9px] font-bold shadow cursor-pointer" onclick="quickAiProcessPhoto('${p.id}', event)" title="Ошибка обработки. Кликните для повтора">⚠️ СБОЙ</span>` : ''}
               </div>
               <div class="flex items-center gap-0.5 bg-black/90 backdrop-blur-sm p-0.5 rounded-lg shadow border border-slate-700/60 shrink-0">
                 <button type="button" onclick="quickAiProcessPhoto('${p.id}', event)" class="p-1 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-xs transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                 <button type="button" onclick="openPhotoStudio('${p.id}', event)" class="p-1 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-xs transition" title="✏️ Редактор: кадрирование и фильтры">✏️</button>
                 ${(p.cameraOriginal || p.isAiProcessed || processed || p.isCropped || (p.history && p.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-1 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-xs transition flex items-center justify-center shadow-xs" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
+                <button type="button" onclick="deletePhotoFromPool('${p.id}', event)" class="p-1 rounded hover:bg-rose-600 hover:text-white text-rose-400 hover:text-white text-xs transition flex items-center justify-center shadow-xs" title="🗑️ Удалить фото из пула">🗑️</button>
               </div>
 
             </div>
@@ -350,14 +536,17 @@
             <!-- БОЛЬШАЯ КАРТИНКА ПРЕВЬЮ -->
             <div class="relative w-full ${curScale.imgH} rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-slate-700 transition cursor-pointer"
                  ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${p.preview || p.cameraOriginal || p.rawOriginal || ''}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+              <img src="${getPhotoDisplayUrl(p)}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+
+              <!-- КНОПКА БЫСТРОГО УДАЛЕНИЯ ИЗ ПУЛА В ЛЕВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
+              <button type="button" onclick="deletePhotoFromPool('${p.id}', event)" ondblclick="event.stopPropagation()" class="absolute top-2 left-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-rose-600 hover:text-white text-slate-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="🗑️ Удалить фото из пула">🗑️</button>
 
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
 
               <!-- БЛОКИРОВКА И СПИННЕР ПРИ ОБРАБОТКЕ -->
               ${isBusy ? `
-                <div class="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 select-none">
+                <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 pointer-events-none select-none">
                   <div class="w-8 h-8 border-3 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
                   <span class="text-[10px] font-bold text-amber-300 tracking-wide animate-pulse">${p.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...'}</span>
                 </div>
@@ -397,10 +586,16 @@
       renderPool();
     }
 
-    // Горячие клавиши 1-5 для быстрого раскидывания выбранного кадра
+    // Горячие клавиши 1-5 для быстрого раскидывания выбранного кадра и Delete для удаления
     window.addEventListener('keydown', (e) => {
       if (['input', 'textarea', 'select'].includes(document.activeElement.tagName.toLowerCase())) return;
       if (!selectedPoolPhotoId) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelectedPhotoFromPool();
+        return;
+      }
 
       const slotMap = {
         '1': 'cover_front',
@@ -461,6 +656,7 @@
           if (res && res.success && res.s3_url) {
             photo.s3_url = res.s3_url;
             photo.is_s3_uploaded = true;
+            if (!photo.preview) photo.preview = res.s3_url;
             if (window.EventBus) window.EventBus.emit('photo:s3-uploaded', { photoId, s3_url: res.s3_url });
             renderActiveBookSlots();
           }
@@ -498,8 +694,16 @@
       } else {
         // Одиночный слот (только передняя обложка): заменяем и возвращаем старое в пул
         if (book.slots[slotName]) {
+          const oldPhotoId = book.slots[slotName].id;
           book.slots[slotName].assignedBookId = null;
           book.slots[slotName].assignedSlot = null;
+          if (oldPhotoId) {
+            const oldInPool = photoPool.find(p => p.id === oldPhotoId);
+            if (oldInPool) {
+              oldInPool.assignedBookId = null;
+              oldInPool.assignedSlot = null;
+            }
+          }
         }
         book.slots[slotName] = photo;
       }
@@ -518,6 +722,22 @@
       // Шаг 3 спецификации: планируем упреждающую фоновую выгрузку в S3 с таймером покоя 2.5 сек
       scheduleProactiveS3Upload(photo.id, slotName, 2500);
 
+      // Синхронизация привязки слота с SQLite-реестром ассетов
+      if (photo.id && (photo.id.startsWith('ast_') || photo.id.startsWith('photo_'))) {
+        try {
+          fetch('/api/assets/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              asset_id: photo.id,
+              slot: slotName,
+              book_id: book.id,
+              book_article: book.article
+            })
+          }).catch(e => {});
+        } catch(e) {}
+      }
+
       renderPool();
       renderBooksTabs();
       renderActiveBookSlots();
@@ -530,15 +750,47 @@
         clearTimeout(proactiveS3Timers.get(photoId));
         proactiveS3Timers.delete(photoId);
       }
-      const photo = photoPool.find(p => p.id === photoId);
+      let photo = photoPool.find(p => p.id === photoId);
       if (photo) {
         photo.assignedBookId = null;
         photo.assignedSlot = null;
         photo.is_s3_uploaded = false;
         photo.s3_url = null;
         selectedPoolPhotoId = photo.id;
+      } else {
+        // Если фото было в слоте, но отсутствовало в photoPool — возвращаем его в пул
+        for (const b of (window.booksSession || [])) {
+          if (b.slots) {
+            const allSlotPhotos = [
+              b.slots.cover_front,
+              ...(Array.isArray(b.slots.cover_back) ? b.slots.cover_back : (b.slots.cover_back ? [b.slots.cover_back] : [])),
+              ...(b.slots.info_pages || []),
+              ...(b.slots.illustrations || []),
+              ...(b.slots.mantra_defects || [])
+            ].filter(Boolean);
+            const foundInSlot = allSlotPhotos.find(p => p && p.id === photoId);
+            if (foundInSlot) {
+              const recovered = { ...foundInSlot, assignedBookId: null, assignedSlot: null };
+              photoPool.push(recovered);
+              selectedPoolPhotoId = recovered.id;
+              break;
+            }
+          }
+        }
       }
       removePhotoFromSlots(photoId);
+
+      // Синхронизация отвязки слота с SQLite
+      if (photoId && (photoId.startsWith('ast_') || photoId.startsWith('photo_'))) {
+        try {
+          fetch('/api/assets/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset_id: photoId, slot: null })
+          }).catch(e => {});
+        } catch(e) {}
+      }
+
       renderPool();
       renderBooksTabs();
       renderActiveBookSlots();
@@ -569,6 +821,13 @@
         const list = Array.isArray(book.slots[s]) ? book.slots[s] : (book.slots[s] ? [book.slots[s]] : []);
         list.forEach(p => { p.assignedBookId = null; p.assignedSlot = null; });
         book.slots[s] = [];
+      });
+      // Также гарантируем сброс в photoPool для всех фото этой книги
+      photoPool.forEach(p => {
+        if (p.assignedBookId === book.id) {
+          p.assignedBookId = null;
+          p.assignedSlot = null;
+        }
       });
       renderPool();
       renderBooksTabs();
@@ -660,6 +919,75 @@
       }
 
       try {
+        // Оптимизированный серверный путь для ассетов V2 (без передачи base64)
+        if (photo.id && photo.id.startsWith('ast_')) {
+          const aiResp = await fetch('/api/assets/run_ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset_id: photo.id })
+          });
+          const aiData = await aiResp.json();
+          if (aiData.success) {
+            photo.aiWhiteOriginal = `/api/assets/${photo.id}/full?t=${Date.now()}`;
+            photo.preview = `/api/assets/${photo.id}/preview?t=${Date.now()}`;
+            photo.isProcessed = true;
+            photo.isAiProcessed = true;
+            photo.isAiProcessing = false;
+            let effectiveCropRel = photo.cropRelative || photo.aiCropRelative || aiData.crop_relative;
+            if (effectiveCropRel) {
+              photo.cropRelative = effectiveCropRel;
+              photo.aiCropRelative = effectiveCropRel;
+              photo.isCropped = true;
+            }
+
+            const rot = photo.rotation || 0;
+            let croppedUrl = null;
+            if (effectiveCropRel && typeof window.renderCroppedFromFullSourceAsync === 'function') {
+              try {
+                croppedUrl = await window.renderCroppedFromFullSourceAsync(photo.aiWhiteOriginal, rot, effectiveCropRel);
+              } catch (err) {
+                console.warn('Ошибка обрезки при быстром ИИ (ассет):', err);
+              }
+            } else if (effectiveCropRel && typeof window.cropImageSourceAsync === 'function') {
+              try {
+                croppedUrl = await window.cropImageSourceAsync(photo.aiWhiteOriginal, effectiveCropRel);
+              } catch (err) {
+                console.warn('Ошибка обрезки при быстром ИИ (ассет):', err);
+              }
+            }
+
+            if (croppedUrl) {
+              photo.croppedBase = croppedUrl;
+              photo.preview = croppedUrl;
+            }
+
+            if (typeof initPhotoHistory === 'function') initPhotoHistory(photo);
+
+            if (typeof currentEditingPhoto !== 'undefined' && currentEditingPhoto && currentEditingPhoto.id === photo.id && typeof isStudioOpen !== 'undefined' && isStudioOpen) {
+              const displaySrc = photo.croppedBase || photo.aiWhiteOriginal;
+              const displayType = photo.croppedBase ? 'cropped' : 'full';
+              if (typeof reloadStudioCropper === 'function') {
+                reloadStudioCropper(displaySrc, () => {
+                  if (displayType === 'full' && rot !== 0 && typeof cropperInstance !== 'undefined' && cropperInstance) {
+                    cropperInstance.rotateTo(rot);
+                  }
+                  if (typeof fitStudioImageToContainer === 'function') fitStudioImageToContainer(false);
+                  if (typeof setStudioInteractionMode === 'function') setStudioInteractionMode('move');
+                  if (typeof updateZoomBadge === 'function') updateZoomBadge();
+                  if (typeof updateCropResolution === 'function') updateCropResolution();
+                  if (typeof updateStudioHistoryUI === 'function') updateStudioHistoryUI();
+                }, displayType);
+              }
+            }
+
+            renderPool();
+            renderActiveBookSlots();
+            if (!silent) showToast(`✨ ИИ вырезал фон на чистый белый (rembg)!`);
+            scheduleAutoSave();
+            return;
+          }
+        }
+
         if (!photo.cameraOriginal) {
           photo.cameraOriginal = photo.rawOriginal || photo.preview;
         }
@@ -811,22 +1139,27 @@
           return;
         }
         const processed = isPhotoProcessed(photo);
-        const isBusy = Boolean(isBookAiRecognizing || photo.isAiProcessing || photo.isProcessing);
+        const isThisBookRecognizing = Boolean(book && book.isAiRecognizing);
+        const isPhotoBusy = Boolean(photo.isAiProcessing || photo.isProcessing);
+        const isBusy = Boolean(isThisBookRecognizing || isPhotoBusy);
 
         el.innerHTML = `
-          <div class="relative w-full h-full min-h-[190px] group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 flex flex-col justify-between p-1.5 shadow-md transition-all cursor-grab active:cursor-grabbing select-none hover:border-amber-400 ${isBusy ? 'pointer-events-none opacity-85 select-none' : ''}"
+          <div class="relative w-full h-full min-h-[190px] group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 flex flex-col justify-between p-1.5 shadow-md transition-all cursor-grab active:cursor-grabbing select-none hover:border-amber-400 ${isBusy ? 'opacity-90 select-none' : ''}"
                draggable="${!isBusy}" ondragstart="handlePhotoDragStart(event, '${photo.id}', '${slotId}')" ondragend="handlePhotoDragEnd(event)">
             
             <!-- ВЕРХНЯЯ СТРОКА: СТАТУС ОБРАБОТКИ И БЫСТРЫЕ КНОПКИ -->
             <div class="flex items-center justify-between gap-1 mb-1 z-30" ondblclick="event.stopPropagation()">
               <div class="flex items-center gap-1">
                 ${isBusy ? `
-                  <span class="px-2 py-0.5 rounded ${isBookAiRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[9px] animate-pulse shadow">${isBookAiRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ОБРАБОТКА...'}</span>
+                  <span class="px-2 py-0.5 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[9px] animate-pulse shadow">${isThisBookRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ОБРАБОТКА...'}</span>
                 ` : (processed ? `
                   <span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[9px] shadow tracking-tight" title="Фото обработано">${photo.isCropped ? '✂️ ОБРЕЗАНО' : (photo.isAiProcessed ? '✨ ИИ БЕЛЫЙ' : (photo.whiten > 0 ? '⚪ ОТБЕЛЕНО' : '✓ ОБРАБОТАНО'))}</span>
                 ` : `
                   <span class="px-2 py-0.5 rounded bg-slate-900/90 text-amber-300 border border-amber-500/40 font-bold text-[9px] shadow tracking-tight" title="Сырой снимок">📷 ИСХОДНИК</span>
                 `)}
+                ${(photo.s3_url || photo.is_s3_uploaded) ? '<span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[9px] font-bold shadow" title="Выгружено в Yandex S3 CDN">☁️ S3</span>' : ''}
+                <span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[8px] font-bold shadow" title="Главное фото витрины Ozon">🌐 OZON</span>
+                ${photo.status === 'ERROR' ? `<span class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[9px] font-bold shadow cursor-pointer" onclick="quickAiProcessPhoto('${photo.id}', event)" title="Ошибка обработки. Кликните для повтора">⚠️ СБОЙ</span>` : ''}
               </div>
               <div class="flex items-center gap-0.5 bg-black/90 p-0.5 rounded-lg shadow backdrop-blur-xs border border-slate-700/60">
                 <button type="button" onclick="quickAiProcessPhoto('${photo.id}', event)" class="p-1 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-xs transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
@@ -839,17 +1172,17 @@
             <!-- БОЛЬШАЯ КАРТИНКА КНИГИ (ВЫСОТА 176px) -->
             <div class="relative w-full h-44 rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
                  ondblclick="openPhotoStudio('${photo.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${photo.preview || photo.cameraOriginal || photo.rawOriginal || ''}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+              <img src="${getPhotoDisplayUrl(photo)}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${photo.preview || photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${photo.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
 
               <!-- БЛОКИРОВКА И СПИННЕР ПРИ ОБРАБОТКЕ -->
               ${isBusy ? `
-                <div class="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 select-none">
-                  <div class="w-8 h-8 border-3 ${isBookAiRecognizing ? 'border-amber-400' : 'border-violet-400'} border-t-transparent rounded-full animate-spin"></div>
-                  <span class="text-[10px] font-bold ${isBookAiRecognizing ? 'text-amber-300' : 'text-violet-300'} tracking-wide animate-pulse">
-                    ${isBookAiRecognizing ? 'Анализ Gemini...' : (photo.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...')}
+                <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 pointer-events-none select-none">
+                  <div class="w-8 h-8 border-3 ${isThisBookRecognizing ? 'border-amber-400' : 'border-violet-400'} border-t-transparent rounded-full animate-spin"></div>
+                  <span class="text-[10px] font-bold ${isThisBookRecognizing ? 'text-amber-300' : 'text-violet-300'} tracking-wide animate-pulse">
+                    ${isThisBookRecognizing ? 'Анализ Gemini...' : (photo.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...')}
                   </span>
                 </div>
               ` : ''}
@@ -881,10 +1214,12 @@
         }
         el.innerHTML = photos.map((p, idx) => {
           const processed = isPhotoProcessed(p);
-          const isBusy = Boolean(isBookAiRecognizing || p.isAiProcessing || p.isProcessing);
+          const isThisBookRecognizing = Boolean(book && book.isAiRecognizing);
+          const isPhotoBusy = Boolean(p.isAiProcessing || p.isProcessing);
+          const isBusy = Boolean(isThisBookRecognizing || isPhotoBusy);
 
           return `
-            <div class="relative group rounded-xl overflow-hidden bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shadow-md transition-all cursor-grab active:cursor-grabbing select-none hover:border-amber-400 ${isBusy ? 'pointer-events-none opacity-85 select-none' : ''}"
+            <div class="relative group rounded-xl overflow-hidden bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shadow-md transition-all cursor-grab active:cursor-grabbing select-none hover:border-amber-400 ${isBusy ? 'opacity-90 select-none' : ''}"
                  draggable="${!isBusy}" ondragstart="handlePhotoDragStart(event, '${p.id}', '${slotId}')" ondragend="handlePhotoDragEnd(event)">
 
               
@@ -893,12 +1228,19 @@
                 <div class="flex items-center gap-1">
                   <span class="px-1.5 py-0.2 rounded bg-black/80 text-[9px] font-mono font-bold text-white">#${idx+1}</span>
                   ${isBusy ? `
-                    <span class="px-1 py-0.2 rounded ${isBookAiRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[8px] animate-pulse shadow">${isBookAiRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ИИ...'}</span>
+                    <span class="px-1 py-0.2 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[8px] animate-pulse shadow">${isThisBookRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ИИ...'}</span>
                   ` : (processed ? `
                     <span class="px-1 py-0.2 rounded bg-emerald-500 text-slate-950 font-black text-[8px] shadow">${p.isCropped ? '✂️ ОБРЕЗ.' : (p.isAiProcessed ? '✨ ИИ БЕЛЫЙ' : (p.whiten > 0 ? '⚪ ОТБЕЛ.' : '✓ ОБРАБ.'))}</span>
                   ` : `
                     <span class="px-1 py-0.2 rounded bg-slate-850 text-amber-300 border border-amber-500/40 font-bold text-[8px] shadow">📷 СЫРОЕ</span>
                   `)}
+                  ${(p.s3_url || p.is_s3_uploaded) ? '<span class="px-1 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[8px] font-bold shadow" title="Выгружено в Yandex S3 CDN">☁️ S3</span>' : ''}
+                  ${slotId === 'slot_info_pages' ? `
+                    <span class="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-600/70 font-bold text-[8px] shadow" title="Фото титульного листа для ИИ распознавания. Сохраняется в архив и НЕ отправляется покупателям на Ozon.">🔒 ТОЛЬКО ИИ (НЕ НА OZON)</span>
+                  ` : `
+                    <span class="px-1 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[8px] font-bold shadow" title="Это фото выгружается в карточку товара на Ozon">🌐 OZON</span>
+                  `}
+                  ${p.status === 'ERROR' ? `<span class="px-1 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[8px] font-bold shadow cursor-pointer" onclick="quickAiProcessPhoto('${p.id}', event)" title="Ошибка обработки. Кликните для повтора">⚠️</span>` : ''}
                 </div>
                 <div class="flex items-center gap-0.5 bg-black/85 p-0.5 rounded shadow border border-slate-700/60">
                   <button type="button" onclick="quickAiProcessPhoto('${p.id}', event)" class="p-0.5 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-[10px] transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
@@ -912,17 +1254,17 @@
               <!-- КАРТИНКА (ВЫСОТА 144px) -->
               <div class="relative w-full h-36 rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
                    ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-                <img src="${p.preview || p.cameraOriginal || p.rawOriginal || ''}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+                <img src="${getPhotoDisplayUrl(p)}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
                 <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
                 <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
 
                 <!-- БЛОКИРОВКА И СПИННЕР ПРИ ОБРАБОТКЕ -->
                 ${isBusy ? `
-                  <div class="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 select-none">
-                    <div class="w-7 h-7 border-3 ${isBookAiRecognizing ? 'border-amber-400' : 'border-violet-400'} border-t-transparent rounded-full animate-spin"></div>
-                    <span class="text-[9px] font-bold ${isBookAiRecognizing ? 'text-amber-300' : 'text-violet-300'} tracking-wide animate-pulse">
-                      ${isBookAiRecognizing ? 'Анализ...' : (p.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...')}
+                  <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 pointer-events-none select-none">
+                    <div class="w-7 h-7 border-3 ${isThisBookRecognizing ? 'border-amber-400' : 'border-violet-400'} border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-[9px] font-bold ${isThisBookRecognizing ? 'text-amber-300' : 'text-violet-300'} tracking-wide animate-pulse">
+                      ${isThisBookRecognizing ? 'Анализ...' : (p.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...')}
                     </span>
                   </div>
                 ` : ''}
@@ -965,8 +1307,16 @@
 
       let cleanText = cleanAnnotationText(baseText);
 
+      const isManual = Boolean(book.formData && book.formData.is_manual_condition);
+      const currentCond = book.formData.condition || (document.getElementById('condition')?.value) || 'Очень хорошая';
+
+      let shouldHaveWarning = hasMantraDefects;
+      if (!hasMantraDefects && isManual && (currentCond === 'Хорошая' || currentCond === 'Удовлетворительная')) {
+        shouldHaveWarning = true;
+      }
+
       let finalValue = cleanText;
-      if (hasMantraDefects && cleanText) {
+      if (shouldHaveWarning && cleanText) {
         finalValue = ANNOTATION_WARNING + '\n\n' + cleanText;
       }
 
@@ -978,18 +1328,20 @@
       book.formData.annotation = finalValue;
 
       // Авто-синхронизация сохранности книги по регламенту:
-      // 1. «Очень хорошее» — когда нет фото дефектов ВСЕГДА.
-      // 2. Если есть хотя бы 1 дефект — состояние «Хорошее», но не меньше.
-      // 3. «Удовлетворительное» можно поставить ТОЛЬКО вручную.
+      // 1. При наличии дефектов — состояние минимум «Хорошая» (или ручная «Удовлетворительная»).
+      // 2. Без дефектов по умолчанию «Очень хорошее», но сохраняется ручной выбор букиниста («Хорошая»/«Удовлетворительная»).
       if (typeof setCondition === 'function') {
-        const currentCond = book.formData.condition || (document.getElementById('condition')?.value) || 'Очень хорошая';
-        if (!hasMantraDefects) {
-          setCondition('Очень хорошая', false);
-        } else {
+        if (hasMantraDefects) {
           if (currentCond === 'Удовлетворительная') {
             setCondition('Удовлетворительная', false);
           } else {
             setCondition('Хорошая', false);
+          }
+        } else {
+          if (isManual && (currentCond === 'Хорошая' || currentCond === 'Удовлетворительная')) {
+            setCondition(currentCond, false);
+          } else {
+            setCondition('Очень хорошая', false);
           }
         }
       }
@@ -999,9 +1351,12 @@
           const condName = (book.formData && book.formData.condition === 'Удовлетворительная') ? 'Удовлетворительное' : 'Хорошее';
           hintEl.className = 'text-xs text-amber-400 mt-1.5 font-medium flex items-center gap-1.5';
           hintEl.innerHTML = `<span>⚠️</span> <span>В слоте [5. Дефекты] фото (${defectCount} шт.). Предупреждение добавлено в аннотацию, сохранность: <b>${condName}</b>.</span>`;
+        } else if (isManual && (currentCond === 'Хорошая' || currentCond === 'Удовлетворительная')) {
+          hintEl.className = 'text-xs text-amber-400 mt-1.5 font-medium flex items-center gap-1.5';
+          hintEl.innerHTML = `<span>💡</span> <span>Сохранность вручную: <b>${currentCond}</b>. Предупреждение добавлено в аннотацию.</span>`;
         } else {
           hintEl.className = 'text-xs text-emerald-400 mt-1.5 font-medium flex items-center gap-1.5';
-          hintEl.innerHTML = `<span>✓</span> <span>Слот [5. Дефекты] пуст. Плашка предупреждения отключена, сохранность: <b>Очень хорошее</b>.</span>`;
+          hintEl.innerHTML = `<span>✓</span> <span>Слот [5. Дефекты] пуст. Сохранность: <b>Очень хорошее</b>. Предупреждение отключено.</span>`;
         }
       }
     }
@@ -1176,9 +1531,10 @@
 
       book.isAiRecognizing = true;
       renderBooksTabs();
-      if (book.id === activeBookId) {
-        isBookAiRecognizing = true;
+      if (book.id === window.activeBookId) {
+        window.isBookAiRecognizing = true;
         renderActiveBookSlots();
+        if (typeof window.updateAiBatchBtnState === 'function') window.updateAiBatchBtnState();
       }
 
       try {
@@ -1186,30 +1542,23 @@
         if (!result.success) throw new Error(result.error || 'Ошибка распознавания');
 
         const recognizedData = result.data || {};
-        if (book.id === activeBookId) {
-          populateFields(recognizedData, book);
+
+        // Заполняем данные через populateFields: для активной книги обновятся инпуты на экране,
+        // для фоновой книги в book.formData запишутся проверенные бренды Ozon, жанры и ISBN без перекрытия экрана
+        populateFields(recognizedData, book);
+
+        if (book.id === window.activeBookId) {
           const fs = document.getElementById('formStatus');
           if (fs) {
             const verifiedBadge = recognizedData.verified_by ? ` (🌐 ${recognizedData.verified_by})` : '';
             fs.textContent = `✓ Данные книги «${recognizedData.title || 'Без названия'}» успешно внесены в форму!${verifiedBadge}`;
             fs.className = 'text-center text-xs text-emerald-400 font-semibold';
           }
-        } else {
-          // Фоновое заполнение для неактивной книги
-          if (!book.formData) book.formData = {};
-          Object.keys(recognizedData).forEach(k => {
-            if (recognizedData[k] !== undefined && recognizedData[k] !== null && recognizedData[k] !== '') {
-              book.formData[k] = recognizedData[k];
-            }
-          });
-          if (recognizedData.title) {
-            book.title = recognizedData.title;
-          }
         }
 
         book.isAiRecognized = true;
         const art = (book.formData && book.formData.article) || book.article || `Книга #${book.id}`;
-        showToast(`✨ ИИ заполнил данные книги [${art}] «${recognizedData.title || 'Книга'}»!`);
+        showToast(`✨ ИИ заполнил данные книги [${art}] «${recognizedData.title || 'Книга'}»${book.id !== window.activeBookId ? ' в фоне' : ''}!`);
         updatePipelineStatus(`✓ Книга [${art}] «${(recognizedData.title || '').substring(0, 30)}» заполнена ИИ`);
       } catch (err) {
         console.error(`Ошибка ИИ для книги ${book.id}:`, err);
@@ -1225,9 +1574,14 @@
         }
       } finally {
         book.isAiRecognizing = false;
-        if (book.id === activeBookId) {
-          isBookAiRecognizing = false;
+        const curActive = typeof window.getActiveBook === 'function' ? window.getActiveBook() : null;
+        window.isBookAiRecognizing = Boolean(curActive && curActive.isAiRecognizing);
+
+        if (curActive && curActive.id === book.id) {
           renderActiveBookSlots();
+        }
+        if (typeof window.updateAiBatchBtnState === 'function') {
+          window.updateAiBatchBtnState();
         }
         renderBooksTabs();
         scheduleAutoSave();
@@ -1735,4 +2089,9 @@
         osc.stop(ctx.currentTime + 0.3);
       } catch (e) {}
     }
+
+    // Экспорт в глобальное пространство window
+    window.deletePhotoFromPool = deletePhotoFromPool;
+    window.deleteSelectedPhotoFromPool = deleteSelectedPhotoFromPool;
+    window.clearPool = clearPool;
 

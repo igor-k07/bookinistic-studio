@@ -240,6 +240,18 @@
           <span>📚 Памятки (7)</span>
         </button>
 
+        <!-- БАЗА КНИГ И БЫСТРЫЙ ПОИСК -->
+        <button type="button" onclick="openCatalogSearchModal()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-1.5 cursor-pointer" title="Быстрый поиск по всей базе (2024 книги) и открытие любой книги для редактирования фото">
+          <span>🔍</span>
+          <span>База книг (2 024)</span>
+        </button>
+
+        <!-- ХРАНИЛИЩЕ ДИСКА И СБОРКА МУСОРА -->
+        <button type="button" onclick="openStorageModal()" id="storageBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold border border-slate-700 shadow-sm transition cursor-pointer" title="Управление хранилищем фотографий и очистка кэша">
+          <span>🧹</span>
+          <span id="storageHeaderLabel">Диск: ...</span>
+        </button>
+
         <button type="button" onclick="revealTableFile('pre2011')" class="px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="Показать готовую таблицу до 2011 г. в папке ready_tables">
           <span>🏛️ До 2011 г.</span>
           <span id="excelPre2011Count" class="px-1.5 py-0.2 rounded-full bg-amber-900 text-[10px] font-mono font-bold">0</span>
@@ -293,9 +305,9 @@
             <span>🚀 Новая сессия</span>
           </button>
 
-          <!-- Очистить пул -->
-          <button type="button" onclick="clearPool()" class="px-2.5 py-1.5 rounded-xl hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 text-xs transition border border-transparent hover:border-rose-900">
-            Очистить
+          <!-- Очистить свободные фото пула -->
+          <button type="button" onclick="clearPool()" class="px-2.5 py-1.5 rounded-xl hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 text-xs transition border border-transparent hover:border-rose-900 flex items-center gap-1" title="Очистить только свободные (нераспределенные) фотографии из пула. Фотографии в слотах книг не удаляются!">
+            <span>🧹</span> <span>Очистить свободные</span>
           </button>
         </div>
       </div>
@@ -371,6 +383,9 @@
             </button>
             <button type="button" onclick="recognizeSelectedPhoto()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20" title="Распознать книгу по этому кадру через ИИ Gemini">
               <span>🔍</span> <span>Распознать фото</span>
+            </button>
+            <button type="button" onclick="deleteSelectedPhotoFromPool()" class="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 text-rose-300 hover:text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm" title="Удалить выбранное фото из пула (клавиша Delete)">
+              <span>🗑️</span> <span>Удалить фото</span>
             </button>
             <button type="button" id="btnRevertSelected" onclick="revertSelectedPhoto()" class="hidden px-2.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-800/80 text-rose-300 text-xs font-semibold transition flex items-center gap-1.5 shadow-sm" title="Сбросить все изменения выбранного фото (обрезку и фильтры) к исходному снимку с камеры">
               <span>↩️</span> <span>К исходнику</span>
@@ -450,6 +465,14 @@
         </div>
 
         <div class="flex items-center gap-2">
+          <button type="button" id="btnSmartSaveHeader" onclick="smartSaveActiveBook()" class="px-3.5 py-1 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/25 border border-emerald-400/40" title="Единая умная синхронизация: сохраняет фото в S3, обновляет базу и отправляет изменения на Ozon">
+            <span>💾</span>
+            <span>Сохранить и обновить на Ozon</span>
+          </button>
+          <button type="button" id="btnUpdateOzonPicturesHeader" onclick="updateActiveBookOzonPictures()" class="px-3.5 py-1 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-sky-600/25 border border-sky-400/40" title="Отправить обновленные фото текущей книги напрямую в карточку Ozon Seller">
+            <span>🔄</span>
+            <span>Обновить только фото</span>
+          </button>
           <button type="button" onclick="openNewSessionModal()" class="px-2.5 py-1 rounded-xl bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 text-xs font-semibold transition flex items-center gap-1 shadow-sm" title="Начать новую сессию: очистить остатки фото и задать начальный артикул">
             <span>🚀 Новая сессия</span>
           </button>
@@ -634,6 +657,21 @@
         </div>
       </div>
 
+      <!-- ИНФОРМАЦИОННЫЙ БАННЕР РЕЖИМА: СОЗДАНИЕ НОВОЙ vs РЕДАКТИРОВАНИЕ СУЩЕСТВУЮЩЕЙ -->
+      <div id="cardModeBanner" class="mb-5 px-4 py-3 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-3 text-xs transition-all shadow-sm">
+        <div class="flex items-center gap-2.5">
+          <span id="cardModeDot" class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="cardModeTitle" class="font-bold text-emerald-300">✨ Режим: Создание новой книги</span>
+          <span id="cardModeDesc" class="text-slate-400 hidden sm:inline">— книга получит гарантированно уникальный артикул, которого ещё нет на Ozon</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="cardModeArticleBadge" class="font-mono text-emerald-300 bg-emerald-900/50 px-2.5 py-1 rounded-lg border border-emerald-600/40 font-bold">DP-B-?????</span>
+          <button type="button" id="cardModeCancelBtn" onclick="cancelEditModeAndCreateNew()" class="hidden px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-650 transition flex items-center gap-1 font-medium" title="Выйти из режима редактирования: очистить слоты и поля для создания новой книги">
+            <span>✕</span> <span>Выйти из редактирования / Новая книга</span>
+          </button>
+        </div>
+      </div>
+
       <!-- ВНУТРЕННИЙ ГРИД ФОРМЫ: 2 БОЛЬШИЕ КОЛОНКИ -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         
@@ -650,15 +688,21 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <div class="flex items-center justify-between mb-1">
-                  <label class="text-xs font-medium text-slate-300">Артикул товара (SKU): <span class="text-rose-400">*</span></label>
                   <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="generateNewArticle()" class="text-[10px] text-amber-400 hover:text-amber-300 font-medium" title="Автоматический следующий номер DP-B-XXXXX">🎲 Авто (+1)</button>
+                    <label class="text-xs font-medium text-slate-300">Артикул (SKU): <span class="text-rose-400">*</span></label>
+                    <span id="articleStatusBadge" class="text-[10px] font-medium px-1.5 py-0.2 rounded transition hidden"></span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="loadBookByCurrentArticle()" class="text-[10px] text-sky-400 hover:text-sky-300 font-bold cursor-pointer" title="Открыть сохраненную книгу с этим артикулом для редактирования фото и полей">📥 Загрузить</button>
+                    <span class="text-slate-600 text-[10px]">|</span>
+                    <button type="button" onclick="generateNewArticle()" class="text-[10px] text-amber-400 hover:text-amber-300 font-medium" title="Автоматический следующий свободный номер DP-B-XXXXX">🎲 Авто (+1)</button>
                   </div>
                 </div>
-                <div class="flex items-center group">
+                <div class="flex items-center group relative">
                   <span class="inline-flex items-center px-3 py-2 rounded-l-xl border border-r-0 border-slate-700 bg-slate-900 text-amber-400 font-mono font-bold text-xs select-none shadow-inner">DP-B-</span>
-                  <input type="text" id="article_number" oninput="onArticleNumberInput(this.value)" onblur="onArticleNumberBlur()" class="w-full bg-slate-950 border border-slate-700 rounded-r-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition tracking-widest font-bold" placeholder="00001" maxlength="6" title="Введите только номер книги (например 00001 или 42)">
-                  <input type="hidden" id="article" value="DP-B-00001">
+                  <input type="text" id="article_number" oninput="onArticleNumberInput(this.value)" onblur="onArticleNumberBlur()" class="w-full bg-slate-950 border border-slate-700 rounded-r-xl px-3 py-2 text-xs text-white font-mono focus:border-amber-500 focus:outline-none transition tracking-widest font-bold pr-7" placeholder="03098" maxlength="6" title="Введите только номер книги (например 03098)">
+                  <span id="articleLockIcon" class="hidden absolute right-2.5 text-xs text-slate-400 pointer-events-none" title="Артикул зафиксирован в режиме редактирования">🔒</span>
+                  <input type="hidden" id="article" value="">
                 </div>
               </div>
 
@@ -1048,13 +1092,23 @@
             </div>
           </div>
 
-          <!-- КНОПКА ЗАПИСИ В EXCEL -->
+          <!-- КНОПКА ЗАПИСИ В EXCEL И ОБНОВЛЕНИЯ В OZON -->
           <div class="pt-3 border-t border-slate-800 space-y-2">
-            <button type="button" onclick="saveBookToExcel()" id="saveBtn" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-base shadow-xl shadow-emerald-600/25 transition flex items-center justify-center gap-2">
-              <span>💾</span>
-              <span>Записать книгу в Excel Ozon (Cmd + Enter)</span>
+            <button type="button" onclick="handlePrimaryBookSave()" id="saveBtn" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-base shadow-xl shadow-emerald-600/25 transition flex items-center justify-center gap-2">
+              <span id="saveBtnIcon">✨</span>
+              <span id="saveBtnText">Записать новую книгу в таблицу Ozon (Cmd + Enter)</span>
             </button>
-            <p id="formStatus" class="text-center text-xs text-slate-500">Записывает в активную рабочую таблицу</p>
+            <div id="editModeSecondaryButtons" class="hidden space-y-2">
+              <button type="button" onclick="cancelEditModeAndCreateNew()" class="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-650 text-slate-200 hover:text-white font-medium text-xs transition flex items-center justify-center gap-2 shadow-sm">
+                <span>✕</span>
+                <span>Выйти из редактирования и создать новую книгу</span>
+              </button>
+              <button type="button" id="btnUpdateOzonPicturesForm" onclick="updateActiveBookOzonPictures()" class="w-full py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-750 text-slate-400 hover:text-slate-200 font-medium text-xs transition flex items-center justify-center gap-2" title="Отправляет только новые фото в Ozon Seller API без обновления текста">
+                <span>🔄</span>
+                <span>Обновить только фото на Ozon (Seller API)</span>
+              </button>
+            </div>
+            <p id="formStatus" class="text-center text-xs text-slate-500">Записывает в активную рабочую таблицу и синхронизирует с Ozon</p>
           </div>
 
         </div>
@@ -1297,6 +1351,102 @@
           <span>🔄</span> <span>Обновить статус</span>
         </button>
         <button type="button" onclick="closeOzonModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-xs font-semibold text-slate-300 transition">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ ХРАНИЛИЩЕМ (PHOTO ENGINE V2) -->
+  <div id="storageModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🧹</span>
+          <div>
+            <h3 class="text-sm font-bold text-white">Хранилище фотографий и диска</h3>
+            <p class="text-[11px] text-slate-400">Ступенчатая политика хранения Bookinistic Photo Engine V2</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeStorageModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- СТАТИСТИКА ХРАНИЛИЩА -->
+      <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Общий объем хранилища:</span>
+          <span id="storageTotalMbVal" class="text-amber-400 font-mono font-bold">— МБ</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Временный кэш сессий (session_assets):</span>
+          <span id="storageSessionMbVal" class="text-slate-200 font-mono">— МБ</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-400">Вечный архив книг (books_vault):</span>
+          <span id="storageVaultMbVal" class="text-emerald-400 font-mono font-semibold">— МБ</span>
+        </div>
+        <div class="flex items-center justify-between text-xs border-t border-slate-850 pt-2">
+          <span class="text-slate-400">Всего ассетов в SQLite реестре:</span>
+          <span id="storageAssetCountVal" class="text-sky-400 font-mono font-bold">—</span>
+        </div>
+      </div>
+
+      <!-- ПРАВИЛА ХРАНЕНИЯ -->
+      <div class="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-800/40 text-[11px] text-slate-300 space-y-1.5 leading-relaxed">
+        <div class="font-bold text-amber-300">🛡️ Регламент безопасности данных:</div>
+        <div>• <b>Готовые фото для Ozon</b>: хранятся бессрочно в архиве и S3.</div>
+        <div>• <b>Сырые исходники книги (raw_sources)</b>: хранятся 30 дней для модерации и правок, затем безопасно очищаются.</div>
+        <div>• <b>Брошенные кадры из пула сессии</b>: хранятся 7 дней или до ручной очистки.</div>
+      </div>
+
+      <!-- КНОПКА ЗАПУСКА ОЧИСТКИ -->
+      <div class="flex items-center justify-between pt-2">
+        <button type="button" onclick="closeStorageModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">
+          Закрыть
+        </button>
+        <button type="button" id="btnRunCleanup" onclick="executeStorageCleanup()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer">
+          <span>🧹 Очистить старый кэш (>24ч)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО ПОИСКА ПО ВСЕЙ БАЗЕ КНИГ (2 024 КНИГИ) -->
+  <div id="catalogSearchModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closeCatalogSearchModal()">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-3xl w-full p-6 space-y-4 shadow-2xl flex flex-col max-h-[85vh]">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📚</span>
+          <div>
+            <h3 class="text-sm font-bold text-white">Каталог и база всех книг (2 024 шт.)</h3>
+            <p class="text-[11px] text-slate-400">Найдите любую ранее созданную книгу, чтобы открыть её в студии и заменить фото</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeCatalogSearchModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- ПОИСКОВАЯ СТРОКА -->
+      <div class="relative">
+        <input type="text" id="catalogSearchInput" oninput="onCatalogSearchInput(this.value)" placeholder="Поиск по номеру (02882), названию или автору книги..." class="w-full bg-slate-950 border border-slate-700 rounded-2xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none transition">
+        <span class="absolute right-3.5 top-2.5 text-slate-500 text-xs">🔍</span>
+      </div>
+
+      <!-- СПИСОК РЕЗУЛЬТАТОВ -->
+      <div class="overflow-y-auto flex-1 rounded-2xl border border-slate-800 bg-slate-950/70 p-2 space-y-2 min-h-[300px]" id="catalogSearchResults">
+        <div class="text-center py-12 text-slate-500 text-xs">
+          Введите название, автора или номер артикула для поиска...
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-xs text-slate-400">
+        <span id="catalogSearchSummary">Показаны книги из базы catalog.db</span>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btnSmartS3Sync" onclick="startSmartS3Sync()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer" title="Умная синхронизация: выгружает недостающие фото в Yandex S3, сохраняет постоянные ссылки в catalog.db и бэкапит базу в облако">
+            <span>☁️</span>
+            <span>Синхронизация S3 и Ozon</span>
+          </button>
+          <button type="button" onclick="closeCatalogSearchModal()" class="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold cursor-pointer">
+            Закрыть
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1601,7 +1751,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button type="button" onclick="closePhotoStudio(false)" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white flex items-center justify-center transition" title="Закрыть редактор (Esc)">✕</button>
+          <button type="button" onclick="closePhotoStudio(true)" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white flex items-center justify-center transition" title="Закрыть редактор (Esc)">✕</button>
         </div>
       </div>
 
@@ -1613,7 +1763,7 @@
           
           <!-- Контейнер Cropper.js на всю доступную высоту -->
           <div id="studioCropperContainer" class="flex-1 w-full min-h-0 bg-slate-950 rounded-2xl flex items-center justify-center relative overflow-hidden select-none">
-            <img id="studioCropperImage" class="max-w-full max-h-full block" alt="Editor">
+            <img id="studioCropperImage" class="max-w-full max-h-full block" alt="">
             <div id="studioOriginalBadge" class="hidden absolute top-4 left-4 px-3 py-1 bg-amber-500 text-slate-950 font-bold text-xs rounded-full shadow-lg pointer-events-none z-30">ОРИГИНАЛЬНОЕ ФОТО</div>
 
           </div>

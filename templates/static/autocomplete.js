@@ -20,6 +20,18 @@ var currentAutocompleteCategory = null;
 var currentAutocompleteMatches = [];
 var activeAutocompleteIndex = -1;
 
+function cleanPublisherName(val) {
+  if (!val || typeof val !== 'string') return '';
+  let s = val.trim();
+  // Очистка юридических префиксов издательства и кавычек по спецификации Ozon
+  s = s.replace(/^(?:издательство|изд-во|изд\.?|ид|ооо|зао|оао|ип|издательская\s+группа|издательский\s+дом)\s+/i, '');
+  s = s.replace(/\s+(?:издательство|изд-во|изд\.?|ид)$/i, '');
+  s = s.replace(/^["'«»“„”`]+|["'«»“„”`]+$/g, '').trim();
+  if (/^(?:издательство|изд-во|изд\.?)$/i.test(s)) return '';
+  return s;
+}
+window.cleanPublisherName = cleanPublisherName;
+
 function highlightMatch(text, query) {
   if (!query) return escapeHtml(text);
   const lowerText = text.toLowerCase();
@@ -38,22 +50,40 @@ function showCustomAutocomplete(inputEl, categoryKey) {
 
   const raw = (inputEl.value || '').trim();
   const rawLower = raw.toLowerCase();
-  const list = (window.CATALOG_REFERENCES && window.CATALOG_REFERENCES[categoryKey]) || [];
+  let list = (window.CATALOG_REFERENCES && window.CATALOG_REFERENCES[categoryKey]) || [];
   if (!list.length) {
     hideCustomAutocomplete();
     return;
   }
 
+  const isAuthor = (categoryKey === 'authors' || inputEl.id === 'author' || inputEl.id === 'author_cover');
+  const isPublisher = (categoryKey === 'publishers' || inputEl.id === 'publisher');
+
+  if (isPublisher) {
+    list = Array.from(new Set(list.map(cleanPublisherName).filter(Boolean)));
+  }
+
   let matches = [];
+  if (isAuthor) {
+    // В справочнике Ozon официальный вариант при отсутствии автора — строго "не указан"
+    const ozonDefault = 'не указан';
+    if (!rawLower || 'не указан'.startsWith(rawLower) || rawLower.includes('не') || rawLower.includes('авт') || rawLower.includes('нет')) {
+      matches.push(ozonDefault);
+    }
+  }
+
   if (!rawLower) {
-    // Если поле пустое, показываем первые 15 популярных вариантов
-    matches = list.slice(0, 15);
+    // Если поле пустое, показываем первые варианты (для автора 'не указан' уже в начале)
+    const candidates = list.filter(item => item.toLowerCase() !== 'не указан' && item.toLowerCase() !== 'автор не указан');
+    matches = matches.concat(candidates.slice(0, 15));
   } else {
     // 100% case-insensitive: сначала начинающиеся с запроса, затем содержащие запрос
     const starts = [];
     const contains = [];
     for (const item of list) {
       const itemLower = item.toLowerCase();
+      if (itemLower === 'автор не указан') continue;
+      if (itemLower === 'не указан' && matches.includes('не указан')) continue;
       if (itemLower.startsWith(rawLower)) {
         starts.push(item);
       } else if (itemLower.includes(rawLower) || itemLower.replace(/["'«»]/g, '').includes(rawLower.replace(/["'«»]/g, ''))) {
@@ -61,7 +91,7 @@ function showCustomAutocomplete(inputEl, categoryKey) {
       }
       if (starts.length + contains.length >= 35) break;
     }
-    matches = starts.concat(contains).slice(0, 25);
+    matches = matches.concat(starts).concat(contains).slice(0, 25);
   }
 
   if (!matches.length) {
@@ -74,12 +104,17 @@ function showCustomAutocomplete(inputEl, categoryKey) {
   currentAutocompleteMatches = matches;
   activeAutocompleteIndex = -1;
 
-  menu.innerHTML = matches.map((item, idx) => `
-    <div class="autocomplete-item px-3 py-1.5 cursor-pointer text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 font-medium transition flex items-center justify-between" data-index="${idx}" data-val="${escapeHtml(item)}">
-      <span class="truncate">${highlightMatch(item, raw)}</span>
-      <span class="text-[9px] text-slate-500 ml-2 shrink-0">в базе</span>
-    </div>
-  `).join('');
+  menu.innerHTML = matches.map((item, idx) => {
+    const isSpecialOzon = (item === 'не указан');
+    const badgeText = isSpecialOzon ? 'по Ozon' : 'в базе';
+    const badgeColor = isSpecialOzon ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded' : 'text-slate-500';
+    return `
+      <div class="autocomplete-item px-3 py-1.5 cursor-pointer text-slate-200 hover:bg-amber-500/20 hover:text-amber-300 font-medium transition flex items-center justify-between" data-index="${idx}" data-val="${escapeHtml(item)}">
+        <span class="truncate ${isSpecialOzon ? 'text-emerald-300 font-bold' : ''}">${highlightMatch(item, raw)}</span>
+        <span class="text-[9px] ${badgeColor} ml-2 shrink-0">${badgeText}</span>
+      </div>
+    `;
+  }).join('');
 
   const rect = inputEl.getBoundingClientRect();
   menu.style.top = `${rect.bottom + 4}px`;
@@ -90,14 +125,18 @@ function showCustomAutocomplete(inputEl, categoryKey) {
 
 function selectAutocompleteItem(val) {
   if (currentAutocompleteInput && val) {
-    currentAutocompleteInput.value = val;
+    let finalVal = val;
+    if (currentAutocompleteCategory === 'publishers' || currentAutocompleteInput.id === 'publisher') {
+      finalVal = cleanPublisherName(val);
+    }
+    currentAutocompleteInput.value = finalVal;
     currentAutocompleteInput.dispatchEvent(new Event('input', { bubbles: true }));
     currentAutocompleteInput.dispatchEvent(new Event('change', { bubbles: true }));
     currentAutocompleteInput.classList.add('field-updated');
     setTimeout(() => currentAutocompleteInput && currentAutocompleteInput.classList.remove('field-updated'), 800);
 
     if (currentAutocompleteCategory === 'publishers' || currentAutocompleteInput.id === 'publisher') {
-      syncBrandWithPublisher(val);
+      syncBrandWithPublisher(finalVal);
     }
   }
   hideCustomAutocomplete();
@@ -198,29 +237,49 @@ function initCustomAutocomplete() {
 
 // Нечувствительная к регистру сверка с эталонной базой
 function snapToCanonical(inputEl, categoryKey) {
-  if (!inputEl || !window.CATALOG_REFERENCES) return;
+  if (!inputEl) return;
   const raw = (inputEl.value || '').trim();
   if (!raw) return;
 
-  // Для авторов (как на обложке, так и официального): не подставляем автора автоматически при вводе,
-  // если есть похожий. Варианты предлагаются в выпадающем меню, но сам скрипт не выбирает.
+  const rawLower = raw.toLowerCase();
+
+  // 1. Для авторов: если автор не указан — строго официальное значение Ozon "не указан"
   if (categoryKey === 'authors' || inputEl.id === 'author' || inputEl.id === 'author_cover') {
+    if (['автор не указан', 'нет автора', 'неизвестен', 'нет', 'отсутствует', 'без автора', 'не указан'].includes(rawLower)) {
+      if (inputEl.value !== 'не указан') {
+        inputEl.value = 'не указан';
+        inputEl.classList.add('field-updated');
+        setTimeout(() => inputEl.classList.remove('field-updated'), 800);
+      }
+    }
     return;
   }
 
-  const list = window.CATALOG_REFERENCES[categoryKey] || [];
-  const rawLower = raw.toLowerCase();
+  // 2. Для издательства: убираем слово "издательство", "изд-во", "ИД" и кавычки
+  if (categoryKey === 'publishers' || inputEl.id === 'publisher') {
+    const cleaned = cleanPublisherName(raw);
+    if (cleaned && cleaned !== raw) {
+      inputEl.value = cleaned;
+      inputEl.classList.add('field-updated');
+      setTimeout(() => inputEl.classList.remove('field-updated'), 800);
+    }
+    syncBrandWithPublisher(inputEl.value);
+    return;
+  }
 
-  // 1. Точное совпадение без учета регистра
+  if (!window.CATALOG_REFERENCES) return;
+  const list = window.CATALOG_REFERENCES[categoryKey] || [];
+
+  // 3. Точное совпадение без учета регистра
   let matched = list.find(item => item.toLowerCase() === rawLower);
 
-  // 2. Без кавычек ("Эксмо" <-> Эксмо <-> «эксмо»)
+  // 4. Без кавычек ("Эксмо" <-> Эксмо <-> «эксмо»)
   if (!matched) {
     const cleanLower = rawLower.replace(/["'«»]/g, '').trim();
     matched = list.find(item => item.toLowerCase().replace(/["'«»]/g, '').trim() === cleanLower);
   }
 
-  // 3. Для бренда: автоматическая нормализация "нет бренда"
+  // 5. Для бренда: автоматическая нормализация "нет бренда"
   if (categoryKey === 'brands' && (rawLower === 'нет бренда' || rawLower === 'нет' || rawLower === 'без бренда' || rawLower === 'не указан')) {
     matched = 'Нет бренда';
   }
@@ -229,11 +288,6 @@ function snapToCanonical(inputEl, categoryKey) {
     inputEl.value = matched;
     inputEl.classList.add('field-updated');
     setTimeout(() => inputEl.classList.remove('field-updated'), 800);
-  }
-
-  // 4. Если изменилось издательство — синхронизируем бренд с базой брендов Ozon
-  if (categoryKey === 'publishers' || inputEl.id === 'publisher') {
-    syncBrandWithPublisher(inputEl.value);
   }
 }
 

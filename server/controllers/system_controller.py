@@ -44,7 +44,7 @@ def get_tunnel_url(ctx: RequestContext) -> Dict[str, Any]:
         "url": url or "",
         "local_url": local_url,
         "local_ip": local_ip,
-        "has_vpn": tunnel_service.tunnel_manager.is_vpn_active(),
+        "has_vpn": tunnel_service.is_vpn_active(),
     }
 
 
@@ -56,7 +56,7 @@ def restart_tunnel(ctx: RequestContext) -> Dict[str, Any]:
         "url": new_url or "",
         "local_url": tunnel_service.get_local_url(PORT),
         "local_ip": tunnel_service.get_local_ip(),
-        "has_vpn": tunnel_service.tunnel_manager.is_vpn_active(),
+        "has_vpn": tunnel_service.is_vpn_active(),
     }
 
 
@@ -289,6 +289,18 @@ def ozon_import_status(ctx: RequestContext) -> Dict[str, Any]:
     """GET /api/ozon/import_status"""
     st = ozon_service.get_import_status()
     return {"success": True, "status": st}
+
+
+def smart_s3_sync_start(ctx: RequestContext) -> Dict[str, Any]:
+    """POST /api/sync/smart_s3: Запуск умной синхронизации Ozon -> S3 -> DB"""
+    from services.sync_service import start_smart_s3_sync_async
+    return start_smart_s3_sync_async()
+
+
+def smart_s3_sync_status(ctx: RequestContext) -> Dict[str, Any]:
+    """GET /api/sync/smart_s3/status: Статус умной синхронизации"""
+    from services.sync_service import get_smart_s3_sync_status
+    return {"success": True, "status": get_smart_s3_sync_status()}
 
 
 def download_excel(ctx: RequestContext) -> None:

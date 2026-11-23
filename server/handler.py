@@ -119,7 +119,12 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(file_size))
-            self.send_header("Cache-Control", "public, max-age=86400")
+            if tag == "SESSION_PHOTO" or "session_photos" in full_file_path:
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+            else:
+                self.send_header("Cache-Control", "public, max-age=86400")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             if self.command != "HEAD":
@@ -178,6 +183,27 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
             self._serve_file_stream(full_file_path, tag="SESSION_PHOTO", rel_label=safe_rel_path)
             return
 
+        # 3.1. Ассеты V2 (GET /api/assets/<id>/preview и GET /api/assets/<id>/full)
+        if path.startswith("/api/assets/"):
+            parts = path.strip("/").split("/")
+            if len(parts) >= 4 and parts[0] == "api" and parts[1] == "assets":
+                asset_id = parts[2]
+                variant = parts[3]
+                import services.asset_service as asset_service
+                asset = asset_service.get_asset(asset_id)
+                if asset:
+                    file_to_serve = None
+                    if variant == "preview" and os.path.exists(asset.preview_path):
+                        file_to_serve = asset.preview_path
+                    elif variant == "full":
+                        if asset.ai_white_path and os.path.exists(asset.ai_white_path):
+                            file_to_serve = asset.ai_white_path
+                        elif os.path.exists(asset.original_path):
+                            file_to_serve = asset.original_path
+                    if file_to_serve and os.path.exists(file_to_serve):
+                        self._serve_file_stream(file_to_serve, tag="ASSET_V2", rel_label=f"{asset_id}_{variant}")
+                        return
+
         # 4. Фото из архива books_vault/
         if path.startswith("/vault/"):
             rel_path = urllib.parse.unquote(path[len("/vault/"):])
@@ -213,6 +239,51 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 return
             full_file_path = os.path.join(INBOX_DIR, safe_rel_path)
             self._serve_file_stream(full_file_path, tag="INBOX", rel_label=safe_rel_path)
+            return
+
+        # 5.1. Безопасный CORS-прокси для внешних облачных изображений (S3, Ozon CDN)
+        # Позволяет Cropper.js и HTML5 Canvas обрабатывать фото без блокировок браузера
+        if path == "/api/image_proxy":
+            query = urllib.parse.parse_qs(parsed.query)
+            target_url = (query.get("url") or [""])[0].strip()
+            if not target_url or not (target_url.startswith("http://") or target_url.startswith("https://")):
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(b"Param 'url' must be valid http/https URL")
+                return
+
+            try:
+                import requests
+                # Нормализация URL: кодируем кириллицу и спецсимволы в path и query
+                p_parts = urllib.parse.urlsplit(target_url)
+                ascii_path = urllib.parse.quote(urllib.parse.unquote(p_parts.path), safe="/:@&=+$,-_.!~*'()")
+                ascii_query = urllib.parse.quote(urllib.parse.unquote(p_parts.query), safe="/:@&=+$,-_.!~*'()")
+                ascii_url = urllib.parse.urlunsplit((p_parts.scheme, p_parts.netloc, ascii_path, ascii_query, p_parts.fragment))
+
+                r = requests.get(ascii_url, headers={"User-Agent": "BookinisticProxy/1.0"}, timeout=15)
+                if r.status_code == 200:
+                    c_type = r.headers.get("Content-Type") or "image/jpeg"
+                    img_bytes = r.content
+                    self.send_response(200)
+                    self.send_header("Content-Type", c_type)
+                    self.send_header("Content-Length", str(len(img_bytes)))
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    if self.command != "HEAD":
+                        self.wfile.write(img_bytes)
+                else:
+                    self.send_response(r.status_code)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+            except Exception as e_proxy:
+                print(f"⚠️ Ошибка image_proxy для {target_url}: {e_proxy}")
+                self.send_response(502)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
             return
 
         # 6. Статика (JS, CSS, шрифты)

@@ -30,15 +30,20 @@ cloudflared
 *.db
 *.db-shm
 *.db-wal
+catalog.db
 storage/catalog.db*
 storage/backups/
 storage/archive/
+*.bak
+*.bak*
 
 # ==========================================
 # 4. Временные сессии и тяжелые черновики
 # ==========================================
-storage/session_draft.json
+storage/session_draft*.json
 storage/card.png
+storage/session_assets/*
+!storage/session_assets/.gitkeep
 
 # ==========================================
 # 5. Пользовательские фото и медиа-хранилище

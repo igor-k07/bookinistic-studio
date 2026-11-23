@@ -28,19 +28,57 @@
   async function performAutoSave() {
     saveCurrentFormToActiveBook();
     try {
+      // 1. Гарантируем, что любые фото из слотов всех книг зарегистрированы в photoPool со всеми URL и привязкой к слотам
+      if (window.photoPool && Array.isArray(window.photoPool)) {
+        (window.booksSession || []).forEach(b => {
+          if (!b || !b.slots) return;
+          const slotMap = [
+            ['cover_front', b.slots.cover_front ? [b.slots.cover_front] : []],
+            ['cover_back', Array.isArray(b.slots.cover_back) ? b.slots.cover_back : (b.slots.cover_back ? [b.slots.cover_back] : [])],
+            ['info_pages', b.slots.info_pages || []],
+            ['illustrations', b.slots.illustrations || []],
+            ['mantra_defects', b.slots.mantra_defects || []]
+          ];
+
+          slotMap.forEach(([sName, items]) => {
+            items.forEach(p => {
+              if (p && p.id && (p.preview || p.cameraOriginal || p.url || p.data)) {
+                p.assignedBookId = b.id;
+                p.assignedSlot = sName;
+                const exIdx = window.photoPool.findIndex(x => x.id === p.id);
+                if (exIdx >= 0) {
+                  const ex = window.photoPool[exIdx];
+                  ex.assignedBookId = b.id;
+                  ex.assignedSlot = sName;
+                  if (!ex.preview && p.preview) ex.preview = p.preview;
+                  if (!ex.cameraOriginal && (p.cameraOriginal || p.url)) ex.cameraOriginal = p.cameraOriginal || p.url;
+                  if (!ex.rawOriginal && (p.rawOriginal || p.cameraOriginal || p.url)) ex.rawOriginal = p.rawOriginal || p.cameraOriginal || p.url;
+                  if (!ex.url && p.url) ex.url = p.url;
+                  if (!ex.name && p.name) ex.name = p.name;
+                  if (p.s3_url && !ex.s3_url) ex.s3_url = p.s3_url;
+                }
+                // Фото слотов книги хранятся в b.slots, не дублируем их в общий photoPool
+              }
+            });
+          });
+        });
+      }
+
       // Компактный photoPool без раздутой истории undo и дубликатов data
       const cleanPool = (window.photoPool || []).map(p => {
         const item = {
           id: p.id,
           name: p.name || 'photo.jpg',
           mime: p.mime || 'image/jpeg',
-          preview: p.preview || p.cameraOriginal,
-          cameraOriginal: p.cameraOriginal || p.rawOriginal || p.preview,
-          rawOriginal: p.cameraOriginal || p.rawOriginal || p.preview,
+          preview: p.preview || p.cameraOriginal || p.url,
+          cameraOriginal: p.cameraOriginal || p.rawOriginal || p.preview || p.url,
+          rawOriginal: p.rawOriginal || p.cameraOriginal || p.preview || p.url,
           croppedBase: p.croppedBase || null,
           aiWhiteOriginal: p.aiWhiteOriginal || null,
+          url: p.url || p.preview || null,
           isCropped: Boolean(p.isCropped),
           isAiProcessed: Boolean(p.isAiProcessed),
+          isFromVault: Boolean(p.isFromVault),
           whiten: p.whiten || 0,
           brightness: p.brightness || 0,
           contrast: p.contrast || 0,
@@ -80,9 +118,14 @@
         timestamp: Date.now()
       };
 
+      // Дублируем сохранение в localStorage на случай мгновенного закрытия/перезагрузки страницы
+      try {
+        localStorage.setItem('bookinistic_session_draft', JSON.stringify(payload));
+      } catch (locErr) {}
+
       const resData = window.ApiClient
         ? await window.ApiClient.saveSessionDraft(payload)
-        : await fetch('/api/save_draft', {
+        : await fetch('/api/save_session_draft', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -91,18 +134,29 @@
       if (resData.success) {
         if (resData.updated_urls) {
           // Освобождаем память в браузере, заменяя base64 на легкие локальные URL
+          let hasUrlUpdates = false;
           Object.keys(resData.updated_urls).forEach(pid => {
             const p = window.findPhotoById ? window.findPhotoById(pid) : null;
             if (p) {
               const urls = resData.updated_urls[pid];
-              if (urls.preview) p.preview = urls.preview;
+              if (urls.preview && p.preview !== urls.preview) {
+                p.preview = urls.preview;
+                hasUrlUpdates = true;
+              }
               if (urls.cameraOriginal) p.cameraOriginal = urls.cameraOriginal;
               if (urls.rawOriginal) p.rawOriginal = urls.rawOriginal;
-              if (urls.croppedBase) p.croppedBase = urls.croppedBase;
+              if (urls.croppedBase && p.croppedBase !== urls.croppedBase) {
+                p.croppedBase = urls.croppedBase;
+                hasUrlUpdates = true;
+              }
               if (urls.aiWhiteOriginal) p.aiWhiteOriginal = urls.aiWhiteOriginal;
               delete p.data;
             }
           });
+          if (hasUrlUpdates) {
+            if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
+            if (typeof window.renderPool === 'function') window.renderPool();
+          }
         }
         updateAutoSaveStatus('saved');
       } else {
@@ -129,19 +183,31 @@
 
   async function restoreSessionDraft() {
     try {
-      const draft = window.ApiClient
+      let draft = window.ApiClient
         ? await window.ApiClient.getSessionDraft()
-        : await fetch('/api/get_draft').then(r => r.json());
+        : await fetch('/api/get_session_draft').then(r => r.json());
+
+      if (!draft || !draft.booksSession || draft.booksSession.length === 0) {
+        try {
+          const localStr = localStorage.getItem('bookinistic_session_draft');
+          if (localStr) {
+            draft = JSON.parse(localStr);
+          }
+        } catch (lErr) {}
+      }
 
       if (draft && draft.booksSession && draft.booksSession.length > 0) {
         window.booksSession = draft.booksSession;
         window.photoPool = draft.photoPool || [];
         window.activeBookId = draft.activeBookId || window.booksSession[0].id;
 
-        // Санитизация аннотаций: убираем предупреждения из черновика для книг без дефектов
+        // Санитизация аннотаций: убираем предупреждения только если нет дефектов И состояние не ухудшено вручную
         window.booksSession.forEach(b => {
           const hasDefects = Boolean(b.slots && b.slots.mantra_defects && b.slots.mantra_defects.length > 0);
-          if (!hasDefects && b.formData && b.formData.annotation && typeof window.cleanAnnotationText === 'function') {
+          const cond = b.formData && b.formData.condition;
+          const isManual = b.formData && b.formData.is_manual_condition;
+          const isDowngraded = isManual && (cond === 'Хорошая' || cond === 'Удовлетворительная');
+          if (!hasDefects && !isDowngraded && b.formData && b.formData.annotation && typeof window.cleanAnnotationText === 'function') {
             b.formData.annotation = window.cleanAnnotationText(b.formData.annotation);
           }
         });
@@ -151,7 +217,7 @@
         restoreFormFromActiveBook();
         if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
         if (typeof window.renderPool === 'function') window.renderPool();
-        if (typeof window.autoCalcDimensions === 'function') window.autoCalcDimensions();
+        if (typeof window.updateDimensionsPreviewBadge === 'function') window.updateDimensionsPreviewBadge();
         if (typeof window.autoDetectCountry === 'function') window.autoDetectCountry();
         updateAutoSaveStatus('restored');
         return true;
@@ -165,8 +231,9 @@
   function relinkSessionPhotos() {
     const map = new Map();
     (window.photoPool || []).forEach(p => {
-      if (!p.cameraOriginal) p.cameraOriginal = p.rawOriginal || p.preview;
-      if (!p.rawOriginal) p.rawOriginal = p.cameraOriginal;
+      if (!p.preview && (p.url || p.cameraOriginal)) p.preview = p.url || p.cameraOriginal;
+      if (!p.cameraOriginal) p.cameraOriginal = p.rawOriginal || p.preview || p.url;
+      if (!p.rawOriginal) p.rawOriginal = p.cameraOriginal || p.preview || p.url;
       if (!p.preview) p.preview = p.cameraOriginal || p.rawOriginal || (p.data ? ('data:' + (p.mime || 'image/jpeg') + ';base64,' + p.data) : '');
       if (p.isCropped === undefined) p.isCropped = Boolean(p.croppedBase);
       if (p.croppedBase === undefined) p.croppedBase = null;
@@ -179,10 +246,25 @@
     (window.booksSession || []).forEach(b => {
       if (!b.slots) b.slots = {};
       if (b.slots.cover_front && b.slots.cover_front.id) {
+        b.slots.cover_front.assignedBookId = b.id;
+        b.slots.cover_front.assignedSlot = 'cover_front';
         if (map.has(b.slots.cover_front.id)) {
-          b.slots.cover_front = map.get(b.slots.cover_front.id);
-        } else if (b.slots.cover_front.preview) {
-          window.photoPool.push(b.slots.cover_front);
+          const item = map.get(b.slots.cover_front.id);
+          item.assignedBookId = b.id;
+          item.assignedSlot = 'cover_front';
+          if (!item.preview && (b.formData && b.formData.main_photo_url)) {
+            item.preview = b.formData.main_photo_url;
+            item.url = b.formData.main_photo_url;
+            item.cameraOriginal = b.formData.main_photo_url;
+          }
+          b.slots.cover_front = item;
+        } else if (b.slots.cover_front.preview || b.slots.cover_front.url) {
+          if (!b.slots.cover_front.preview) b.slots.cover_front.preview = b.slots.cover_front.url;
+          map.set(b.slots.cover_front.id, b.slots.cover_front);
+        } else if (b.formData && b.formData.main_photo_url) {
+          b.slots.cover_front.preview = b.formData.main_photo_url;
+          b.slots.cover_front.url = b.formData.main_photo_url;
+          b.slots.cover_front.cameraOriginal = b.formData.main_photo_url;
           map.set(b.slots.cover_front.id, b.slots.cover_front);
         } else {
           b.slots.cover_front = null;
@@ -194,9 +276,17 @@
           list = (list && list.id) ? [list] : [];
         }
         b.slots[s] = list.map(p => {
-          if (p && p.id && map.has(p.id)) return map.get(p.id);
-          if (p && p.preview) {
-            window.photoPool.push(p);
+          if (!p || !p.id) return null;
+          p.assignedBookId = b.id;
+          p.assignedSlot = s;
+          if (map.has(p.id)) {
+            const item = map.get(p.id);
+            item.assignedBookId = b.id;
+            item.assignedSlot = s;
+            return item;
+          }
+          if (p.preview || p.url) {
+            if (!p.preview) p.preview = p.url;
             map.set(p.id, p);
             return p;
           }
@@ -429,52 +519,242 @@
     }
   }
 
-  async function calculateNextArticle(offset = 0) {
-    let maxSessionNum = 0;
+  async function calculateNextArticle(offset = null) {
+    let globalMax = 0;
+    const dbArt = await fetchDbNextArticle();
+    if (dbArt) {
+      const digits = String(dbArt).replace(/\D/g, '');
+      if (digits) globalMax = parseInt(digits, 10);
+    }
+
+    let sessionMax = 0;
     if (typeof window.booksSession !== 'undefined' && Array.isArray(window.booksSession)) {
       window.booksSession.forEach(b => {
+        if (b.isEditMode) return; // Не учитываем редактируемые старые книги
         const art = (b.formData && (b.formData.article || b.formData.article_number)) || b.article || '';
         const digits = String(art).replace(/\D/g, '');
         if (digits) {
           const val = parseInt(digits, 10);
-          if (val > maxSessionNum) maxSessionNum = val;
+          if (val < 100000 && val > sessionMax) sessionMax = val;
         }
       });
     }
 
-    if (maxSessionNum > 0) {
-      const nextNum = maxSessionNum + 1 + offset;
-      return `DP-B-${String(nextNum).padStart(5, '0')}`;
+    let nextNum;
+    if (sessionMax > 0) {
+      const inc = (offset !== null && offset > 0) ? offset : (offset === 0 ? 0 : 1);
+      nextNum = Math.max(globalMax, sessionMax + inc);
+    } else {
+      const inc = (offset !== null && offset > 0) ? (offset - 1) : 0;
+      nextNum = (globalMax > 0 ? globalMax : 1) + inc;
     }
 
-    // Проверяем глобальный артикул из БД и архива books_vault
-    const dbArt = await fetchDbNextArticle();
-    if (dbArt) {
-      const digits = String(dbArt).replace(/\D/g, '');
-      if (digits) {
-        const val = parseInt(digits, 10);
-        return `DP-B-${String(val + offset).padStart(5, '0')}`;
-      }
+    return `DP-B-${String(nextNum).padStart(5, '0')}`;
+  }
+
+  let _checkArtTimeout = null;
+
+  async function checkArticleAvailability(art) {
+    const cleanArt = String(art || '').trim();
+    const badge = document.getElementById('articleStatusBadge');
+    if (!badge || !cleanArt) {
+      if (badge) badge.classList.add('hidden');
+      return;
     }
 
     try {
-      const res = await fetch('/api/get_books');
-      const data = await res.json();
-      let maxExcelNum = 0;
-      const allBooks = [];
-      if (data.books && Array.isArray(data.books)) allBooks.push(...data.books);
-      allBooks.forEach(b => {
-        const digits = String(b.article || '').replace(/\D/g, '');
-        if (digits) {
-          const val = parseInt(digits, 10);
-          if (val > maxExcelNum) maxExcelNum = val;
+      const res = await fetch(`/api/check_article?article=${encodeURIComponent(cleanArt)}`).then(r => r.json());
+      const book = typeof getActiveBook === 'function' ? getActiveBook() : null;
+      const isSaved = Boolean(book && book.isSavedToExcel);
+      const isEdit = Boolean(book && (book.isEditMode || book.isReopened || isSaved));
+
+      if (res && res.success) {
+        badge.classList.remove('hidden');
+        if (res.exists) {
+          if (isSaved) {
+            badge.className = 'text-[10px] font-medium px-2 py-0.5 rounded bg-teal-900/60 text-teal-300 border border-teal-600/50';
+            const dispTitle = res.title || (book && book.formData && book.formData.title) || 'Товар';
+            badge.innerHTML = `✅ Добавлена в таблицу Ozon («${safeEscape(dispTitle)}»)`;
+            badge.onclick = null;
+          } else if (isEdit) {
+            badge.className = 'text-[10px] font-medium px-2 py-0.5 rounded bg-sky-900/60 text-sky-300 border border-sky-600/50';
+            badge.innerHTML = `🔒 Карточка Ozon («${safeEscape(res.title || 'Товар')}»)`;
+            badge.onclick = null;
+          } else {
+            badge.className = 'text-[10px] font-medium px-2 py-0.5 rounded bg-rose-900/70 text-rose-200 border border-rose-500/60 cursor-pointer shadow-sm';
+            badge.title = 'Нажмите, чтобы подставить гарантированно свободный артикул';
+            badge.innerHTML = `⚠️ Занят («${safeEscape(res.title || 'Товар')}»)! <span class="underline font-bold text-amber-300">Взять ${res.suggested_next_article}</span>`;
+            badge.onclick = () => {
+              if (typeof window.onArticleInput === 'function') window.onArticleInput(res.suggested_next_article);
+            };
+          }
+        } else {
+          badge.className = 'text-[10px] font-medium px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-600/50';
+          badge.innerHTML = `✓ Свободен (нет на Ozon)`;
+          badge.onclick = null;
         }
-      });
-      const baseCount = (typeof data.total === 'number') ? data.total : allBooks.length;
-      const nextNum = Math.max(maxExcelNum, baseCount) + 1 + offset;
-      return `DP-B-${String(nextNum).padStart(5, '0')}`;
+      }
     } catch (e) {
-      return `DP-B-${String(1 + offset).padStart(5, '0')}`;
+      if (badge) badge.classList.add('hidden');
+    }
+  }
+
+  function safeEscape(str) {
+    if (typeof window.escapeHtml === 'function') return window.escapeHtml(str);
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function updateCardModeBanner() {
+    try {
+      const book = typeof getActiveBook === 'function' ? getActiveBook() : null;
+      const isSaved = Boolean(book && book.isSavedToExcel);
+      const isEdit = Boolean(book && (book.isEditMode || book.isReopened || isSaved));
+      const art = (book && (book.article || (book.formData && book.formData.article))) || document.getElementById('article')?.value || '';
+
+      const banner = document.getElementById('cardModeBanner');
+      const dot = document.getElementById('cardModeDot');
+      const title = document.getElementById('cardModeTitle');
+      const desc = document.getElementById('cardModeDesc');
+      const artBadge = document.getElementById('cardModeArticleBadge');
+      const cancelBtn = document.getElementById('cardModeCancelBtn');
+      const lockIcon = document.getElementById('articleLockIcon');
+      const artInput = document.getElementById('article_number');
+
+      const saveBtn = document.getElementById('saveBtn');
+      const saveIcon = document.getElementById('saveBtnIcon');
+      const saveText = document.getElementById('saveBtnText');
+      const secBtns = document.getElementById('editModeSecondaryButtons');
+
+      if (isSaved) {
+        if (banner) {
+          banner.className = 'mb-5 px-4 py-3 rounded-2xl bg-teal-950/80 border border-teal-500/50 flex flex-wrap items-center justify-between gap-3 text-xs transition-all shadow-sm';
+        }
+        if (dot) dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-teal-400';
+        if (title) title.innerHTML = `✅ Статус: Книга добавлена в таблицу Ozon <span class="text-white underline">${safeEscape(art)}</span>`;
+        if (desc) desc.textContent = '— данные сохранены в таблице и архиве; при повторном сохранении карточка обновится';
+        if (artBadge) {
+          artBadge.className = 'font-mono text-teal-200 bg-teal-900/50 px-2.5 py-1 rounded-lg border border-teal-600/50 font-bold';
+          artBadge.textContent = art || 'В таблице Ozon';
+        }
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+        if (lockIcon) lockIcon.classList.remove('hidden');
+        if (artInput) {
+          artInput.readOnly = true;
+          artInput.title = 'Карточка сохранена в таблице. Нажмите «Новая книга», чтобы создать новый товар с новым артикулом.';
+        }
+
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.className = 'w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-base shadow-xl shadow-teal-600/25 transition flex items-center justify-center gap-2 cursor-pointer';
+          saveBtn.innerHTML = `<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Сохранить изменения книги ${safeEscape(art)} в Excel, Ozon и БД (Cmd + Enter)</span>`;
+        }
+        if (secBtns) secBtns.classList.remove('hidden');
+
+      } else if (isEdit) {
+        if (banner) {
+          banner.className = 'mb-5 px-4 py-3 rounded-2xl bg-sky-950/80 border border-sky-500/50 flex flex-wrap items-center justify-between gap-3 text-xs transition-all shadow-sm';
+        }
+        if (dot) dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-sky-400';
+        if (title) title.innerHTML = `✏️ Режим: Редактирование карточки <span class="text-white underline">${safeEscape(art)}</span>`;
+        if (desc) desc.textContent = '— правки обновят существующий товар на Ozon без дублирования';
+        if (artBadge) {
+          artBadge.className = 'font-mono text-sky-200 bg-sky-900/50 px-2.5 py-1 rounded-lg border border-sky-600/50 font-bold';
+          artBadge.textContent = art || 'Редактирование';
+        }
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+        if (lockIcon) lockIcon.classList.remove('hidden');
+        if (artInput) {
+          artInput.readOnly = true;
+          artInput.title = 'В режиме редактирования артикул зафиксирован. Нажмите «Новая книга», чтобы создать новый товар.';
+        }
+
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.className = 'w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-sky-600 via-teal-600 to-sky-700 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-base shadow-xl shadow-sky-600/25 transition flex items-center justify-center gap-2 cursor-pointer';
+          saveBtn.innerHTML = `<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Сохранить изменения книги ${safeEscape(art)} в Excel, Ozon и БД (Cmd + Enter)</span>`;
+        }
+        if (secBtns) secBtns.classList.remove('hidden');
+
+      } else {
+        if (banner) {
+          banner.className = 'mb-5 px-4 py-3 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-3 text-xs transition-all shadow-sm';
+        }
+        if (dot) dot.className = 'inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+        if (title) title.textContent = '✨ Режим: Создание новой книги';
+        if (desc) desc.textContent = '— книга получит гарантированно уникальный артикул, которого ещё нет на Ozon';
+        if (artBadge) {
+          artBadge.className = 'font-mono text-emerald-300 bg-emerald-900/50 px-2.5 py-1 rounded-lg border border-emerald-600/40 font-bold';
+          artBadge.textContent = art || 'DP-B-?????';
+        }
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        if (lockIcon) lockIcon.classList.add('hidden');
+        if (artInput) {
+          artInput.readOnly = false;
+          artInput.title = 'Введите номер книги (например 03098)';
+        }
+
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.className = 'w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-base shadow-xl shadow-emerald-600/25 transition flex items-center justify-center gap-2 cursor-pointer';
+          saveBtn.innerHTML = '<span id="saveBtnIcon">✨</span> <span id="saveBtnText">Записать новую книгу в таблицу Ozon (Cmd + Enter)</span>';
+        }
+        if (secBtns) secBtns.classList.add('hidden');
+      }
+
+      if (art) {
+        clearTimeout(_checkArtTimeout);
+        _checkArtTimeout = setTimeout(() => checkArticleAvailability(art), 200);
+      }
+    } catch (bannerErr) {
+      console.error('updateCardModeBanner error:', bannerErr);
+      const saveBtn = document.getElementById('saveBtn');
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Записать книгу в таблицу Ozon (Cmd + Enter)</span>';
+      }
+    }
+  }
+
+  async function cancelEditModeAndCreateNew() {
+    // 1. Сохраняем состояние текущей редактируемой книги в её объект, НЕ уничтожая её слоты и поля!
+    saveCurrentFormToActiveBook();
+
+    // 2. Ищем, есть ли уже чистая пустая вкладка для новой книги в текущей сессии
+    const books = window.booksSession || [];
+    const isBookEmpty = (b) => {
+      if (!b) return true;
+      if (b.isEditMode || b.isReopened || b.isSavedToExcel) return false;
+      const hasPhotos = b.slots && (
+        Boolean(b.slots.cover_front) ||
+        (Array.isArray(b.slots.cover_back) && b.slots.cover_back.length > 0) ||
+        (Array.isArray(b.slots.info_pages) && b.slots.info_pages.length > 0) ||
+        (Array.isArray(b.slots.illustrations) && b.slots.illustrations.length > 0) ||
+        (Array.isArray(b.slots.mantra_defects) && b.slots.mantra_defects.length > 0)
+      );
+      if (hasPhotos) return false;
+      const title = (b.formData && b.formData.title) || b.title || '';
+      if (title && !title.startsWith('Книга #') && title !== 'Без названия') return false;
+      return true;
+    };
+
+    const emptyTab = books.find(b => isBookEmpty(b));
+    if (emptyTab) {
+      switchBook(emptyTab.id);
+      if (typeof showToast === 'function') {
+        const art = (emptyTab.formData && emptyTab.formData.article) || emptyTab.article || '';
+        showToast(`✨ Переключились на чистую карточку <b>${safeEscape(art)}</b>. Прошлая книга сохранена во вкладках.`);
+      }
+      return;
+    }
+
+    // 3. Если пустой вкладки нет — создаем новую отдельную вкладку под гарантированно свободный артикул!
+    await addNewBook();
+
+    if (typeof showToast === 'function') {
+      const cur = typeof getActiveBook === 'function' ? getActiveBook() : null;
+      const art = (cur && (cur.article || (cur.formData && cur.formData.article))) || '';
+      showToast(`✨ Создана новая карточка под артикулом <b>${safeEscape(art)}</b>. Прошлая книга сохранена во вкладках.`);
     }
   }
 
@@ -482,7 +762,7 @@
     saveCurrentFormToActiveBook();
     const books = window.booksSession || [];
     const nextId = books.length > 0 ? Math.max(...books.map(b => b.id)) + 1 : 1;
-    const nextArt = await calculateNextArticle(books.length);
+    const nextArt = await calculateNextArticle(1);
     const nextBarcode = window.BookCalculators
       ? window.BookCalculators.generateEan13FromArticle(nextArt)
       : (window.generateEan13FromArticle ? window.generateEan13FromArticle(nextArt) : '2978470000012');
@@ -491,6 +771,8 @@
       id: nextId,
       article: nextArt,
       title: `Книга #${nextId}`,
+      isEditMode: false,
+      isReopened: false,
       slots: {
         cover_front: null,
         cover_back: [],
@@ -510,33 +792,54 @@
     renderBooksTabs();
     if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
     if (typeof window.clearForm === 'function') window.clearForm(nextArt);
+    updateCardModeBanner();
     scheduleAutoSave();
   }
 
-  function deleteBookSession(id, e) {
+  function closeBookTab(id, e) {
     if (e) e.stopPropagation();
-    if (!window.booksSession || window.booksSession.length <= 1) {
-      alert('В сессии должна оставаться как минимум одна книга!');
-      return;
-    }
-    if (!confirm('Удалить эту карточку книги из текущей сессии? Фото вернутся в общий пул.')) return;
+    const books = window.booksSession || [];
+    const targetBook = books.find(b => b.id === id);
+    const art = (targetBook && (targetBook.article || (targetBook.formData && targetBook.formData.article))) || `Книга #${id}`;
 
-    (window.photoPool || []).forEach(p => {
-      if (p.assignedBookId === id) {
-        p.assignedBookId = null;
-        p.assignedSlot = null;
+    const isSaved = Boolean(targetBook && (targetBook.isSavedToExcel || targetBook.isEditMode || targetBook.isReopened));
+    const confirmMsg = isSaved
+      ? `Закрыть вкладку «${art}»?\n\nКарточка сохранена в базе и таблице Ozon. Вы сможете открыть её снова в любое время из таблицы или каталога.`
+      : `Закрыть вкладку «${art}»? Несохраненные данные этой вкладки будут закрыты.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    // ВАЖНО: Фотографии закрываемой книги НЕ возвращаются в общий пул!
+    // Общий пул предназначен только для входящих неразобранных фото с телефона/диска.
+    // Удаляем из photoPool любые фото, привязанные к закрываемой вкладке:
+    window.photoPool = (window.photoPool || []).filter(p => p.assignedBookId !== id);
+
+    if (books.length <= 1) {
+      // Если это была единственная открытая вкладка, создаем чистую новую книгу
+      if (typeof window.addNewBook === 'function') {
+        window.addNewBook();
       }
-    });
+    }
 
-    window.booksSession = window.booksSession.filter(b => b.id !== id);
-    if (window.activeBookId === id) {
+    window.booksSession = (window.booksSession || []).filter(b => b.id !== id);
+    if (window.activeBookId === id && window.booksSession.length > 0) {
       window.activeBookId = window.booksSession[0].id;
     }
+
     if (typeof window.renderPool === 'function') window.renderPool();
     renderBooksTabs();
     restoreFormFromActiveBook();
     if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
+    if (typeof window.updateCardModeBanner === 'function') window.updateCardModeBanner();
     scheduleAutoSave();
+
+    if (typeof window.showToast === 'function') {
+      window.showToast(`✕ Вкладка <b>${art}</b> закрыта.`);
+    }
+  }
+
+  function deleteBookSession(id, e) {
+    return closeBookTab(id, e);
   }
 
   function syncArticleInputs(fullArt) {
@@ -582,6 +885,10 @@
     }
     renderBooksTabs();
     scheduleAutoSave();
+    if (fullArt) {
+      clearTimeout(_checkArtTimeout);
+      _checkArtTimeout = setTimeout(() => checkArticleAvailability(fullArt), 250);
+    }
   }
 
   function onArticleNumberBlur() {
@@ -603,6 +910,7 @@
         }
         renderBooksTabs();
         scheduleAutoSave();
+        checkArticleAvailability(fullArt);
       }
     }
   }
@@ -628,6 +936,7 @@
 
     renderBooksTabs();
     scheduleAutoSave();
+    checkArticleAvailability(fullArt);
   }
 
   function onBarcodeInput(val) {
@@ -658,8 +967,14 @@
     if (document.getElementById('autoPackageAdder')) {
       book.formData.auto_package_adder = document.getElementById('autoPackageAdder').checked;
     }
-    book.formData.template_mode = window.currentTemplateMode;
+    const rawY = parseInt(document.getElementById('year')?.value, 10);
+    if (!isNaN(rawY) && rawY > 1000 && rawY < 2100) {
+      book.formData.template_mode = (rawY <= 2011) ? 'pre2011' : 'post2011';
+    } else {
+      book.formData.template_mode = window.currentTemplateMode || 'pre2011';
+    }
     if (book.formData.article) book.article = book.formData.article;
+    if (book.formData.title) book.title = book.formData.title;
   }
 
   function restoreFormFromActiveBook() {
@@ -670,7 +985,11 @@
     FORM_FIELD_IDS.forEach(id => {
       const el = document.getElementById(id);
       if (el) {
-        el.value = (book.formData[id] !== undefined && book.formData[id] !== null) ? String(book.formData[id]) : '';
+        let val = (book.formData[id] !== undefined && book.formData[id] !== null) ? String(book.formData[id]) : '';
+        if (id === 'dimensions' && val.includes('[object')) {
+          val = '';
+        }
+        el.value = val;
       }
     });
     if (document.getElementById('autoPackageAdder')) {
@@ -699,16 +1018,29 @@
     const art = (book.formData && book.formData.article) || book.article || 'DP-B-00001';
     syncArticleInputs(art);
     const defectCount = (book.slots && book.slots.mantra_defects) ? book.slots.mantra_defects.length : 0;
+    const isManual = Boolean(book.formData && book.formData.is_manual_condition);
+    const savedCond = book.formData && book.formData.condition;
     if (typeof window.setCondition === 'function') {
-      if (defectCount === 0) {
-        window.setCondition('Очень хорошая', false);
-      } else if (book.formData && book.formData.condition === 'Удовлетворительная') {
-        window.setCondition('Удовлетворительная', false);
+      if (defectCount > 0) {
+        if (savedCond === 'Удовлетворительная') {
+          window.setCondition('Удовлетворительная', false);
+        } else {
+          window.setCondition('Хорошая', false);
+        }
       } else {
-        window.setCondition('Хорошая', false);
+        if (savedCond === 'Хорошая' || savedCond === 'Удовлетворительная') {
+          if (book.formData) book.formData.is_manual_condition = true;
+          window.setCondition(savedCond, false);
+        } else {
+          window.setCondition('Очень хорошая', false);
+        }
       }
     }
-    const mode = book.formData.template_mode || (parseInt(book.formData.year) > 2011 ? 'post2011' : 'pre2011');
+    const yParsed = parseInt(book.formData.year, 10);
+    const mode = (!isNaN(yParsed) && yParsed > 1000 && yParsed < 2100)
+      ? (yParsed <= 2011 ? 'pre2011' : 'post2011')
+      : (book.formData.template_mode || 'pre2011');
+    book.formData.template_mode = mode;
     if (typeof window.setTemplateMode === 'function') {
       window.setTemplateMode(mode, false);
     }
@@ -718,21 +1050,65 @@
     if (typeof window.syncAnnotationWarningWithDefectsSlot === 'function') {
       window.syncAnnotationWarningWithDefectsSlot();
     }
+    try {
+      updateCardModeBanner();
+    } catch (eBanner) {
+      console.error('updateCardModeBanner error during restore:', eBanner);
+    }
+
+    const fs = document.getElementById('formStatus');
+    if (fs) {
+      if (book.isAiRecognizing) {
+        fs.textContent = '⏳ Данные этой книги сейчас распознаются нейросетью Gemini...';
+        fs.className = 'text-center text-xs text-amber-400 font-semibold animate-pulse';
+      } else if (book.isAiRecognized) {
+        fs.textContent = `✓ Данные книги «${book.formData?.title || book.title || 'Книга'}» распознаны ИИ`;
+        fs.className = 'text-center text-xs text-emerald-400 font-semibold';
+      } else if (book.isSavedToExcel) {
+        fs.textContent = `✅ Книга сохранена в Excel`;
+        fs.className = 'text-center text-xs text-teal-400 font-semibold';
+      } else {
+        fs.textContent = 'Записывает в активную рабочую таблицу и синхронизирует с Ozon';
+        fs.className = 'text-center text-xs text-slate-500';
+      }
+    }
   }
 
   function switchBook(id) {
     if (window.activeBookId === id) return;
     saveCurrentFormToActiveBook();
     window.activeBookId = id;
+
+    const newActiveBook = (window.booksSession || []).find(b => b.id === id);
+    window.isBookAiRecognizing = Boolean(newActiveBook && newActiveBook.isAiRecognizing);
+
+    // Гарантированно сбрасываем залипшую кнопку сохранения предыдущей книги
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      const isSaved = Boolean(newActiveBook && (newActiveBook.isSavedToExcel || newActiveBook.isEditMode || newActiveBook.isReopened));
+      const curArt = (newActiveBook && (newActiveBook.article || (newActiveBook.formData && newActiveBook.formData.article))) || '';
+      if (isSaved) {
+        saveBtn.innerHTML = `<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Сохранить изменения книги ${safeEscape(curArt)} в Excel, Ozon и БД (Cmd + Enter)</span>`;
+      } else {
+        saveBtn.innerHTML = '<span id="saveBtnIcon">✨</span> <span id="saveBtnText">Записать новую книгу в таблицу Ozon (Cmd + Enter)</span>';
+      }
+    }
+
     renderBooksTabs();
     restoreFormFromActiveBook();
     if (typeof window.renderActiveBookSlots === 'function') window.renderActiveBookSlots();
+    if (typeof window.updateAiBatchBtnState === 'function') window.updateAiBatchBtnState();
+    if (typeof window.updateCardModeBanner === 'function') window.updateCardModeBanner();
+    if (typeof window.renderPool === 'function') window.renderPool();
     scheduleAutoSave();
   }
 
   function renderBooksTabs() {
     const container = document.getElementById('booksTabsContainer');
     if (!container) return;
+    const anyBackgroundAi = (window.booksSession || []).some(b => b.isAiRecognizing && b.id !== window.activeBookId);
+
     container.innerHTML = (window.booksSession || []).map(b => {
       const isActive = b.id === window.activeBookId;
       const art = (b.formData && b.formData.article) || b.article || `Книга #${b.id}`;
@@ -745,26 +1121,70 @@
         (b.slots.mantra_defects || []).length
       ].reduce((a, b) => a + b, 0);
 
-      const statusIcon = b.isAiRecognizing ? '⏳' : (b.isAiRecognized ? '✨' : (b.isSavedToExcel ? '✅' : '📖'));
+      const statusIcon = b.isAiRecognizing
+        ? '<span class="inline-block animate-spin mr-0.5">⏳</span>'
+        : (b.isAiRecognized ? '✨' : (b.isSavedToExcel ? '✅' : '📖'));
+
       return `
-        <div class="inline-flex items-center rounded-xl overflow-hidden border transition ${isActive ? 'border-amber-500 bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'border-slate-700 bg-slate-800 hover:bg-slate-750 text-slate-300'}">
+        <div class="inline-flex items-center rounded-xl overflow-hidden border transition ${isActive ? 'border-amber-500 bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : (b.isAiRecognizing ? 'border-amber-400/80 bg-amber-950/40 text-amber-200' : 'border-slate-700 bg-slate-800 hover:bg-slate-750 text-slate-300')}">
           <button type="button" onclick="switchBook(${b.id})" class="px-3 py-1.5 text-xs font-semibold flex items-center gap-2 text-left" title="${b.isAiRecognizing ? 'Книга сейчас анализируется нейросетью Gemini...' : (b.isAiRecognized ? 'Книга успешно распознана нейросетью!' : '')}">
             <span>${statusIcon} <span class="font-mono tracking-tight font-bold">${art}</span><span class="opacity-80">${titleSnippet}</span></span>
             <span class="px-1.5 py-0.2 rounded-full text-[10px] ${isActive ? 'bg-slate-950 text-amber-300' : 'bg-slate-900 text-slate-400'} font-mono">${count} фото</span>
+            ${b.isAiRecognizing ? '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block"></span>' : ''}
           </button>
           ${(window.booksSession || []).length > 1 ? `
-            <button type="button" onclick="deleteBookSession(${b.id}, event)" class="px-2 py-1.5 text-xs ${isActive ? 'text-slate-950 hover:bg-amber-400 hover:text-rose-950' : 'text-slate-400 hover:bg-slate-700 hover:text-rose-400'} transition font-bold" title="Удалить карточку этой книги">✕</button>
+            <button type="button" onclick="closeBookTab(${b.id}, event)" class="px-2 py-1.5 text-xs ${isActive ? 'text-slate-950 hover:bg-amber-400 hover:text-rose-950' : 'text-slate-400 hover:bg-slate-700 hover:text-rose-400'} transition font-bold" title="Закрыть вкладку этой книги">✕</button>
           ` : ''}
         </div>
       `;
     }).join('');
+
     const cur = typeof getActiveBook === 'function' ? getActiveBook() : null;
     const titleEl = document.getElementById('activeBookTitle');
     if (cur && titleEl) {
       const curArt = (cur.formData && cur.formData.article) || cur.article || `Книга #${cur.id}`;
-      titleEl.textContent = `📚 [${curArt}]: Слоты категорий`;
+      const isReopened = Boolean(cur.isReopened);
+      const isCurRecognizing = Boolean(cur.isAiRecognizing);
+
+      let statusPill = '';
+      if (isCurRecognizing) {
+        statusPill = '<span class="ml-2 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-bold animate-pulse">⏳ Идет анализ Gemini...</span>';
+      } else if (anyBackgroundAi) {
+        const bgBook = (window.booksSession || []).find(b => b.isAiRecognizing && b.id !== cur.id);
+        const bgArt = bgBook ? ((bgBook.formData && bgBook.formData.article) || bgBook.article || `#${bgBook.id}`) : '';
+        statusPill = `<span class="ml-2 px-2 py-0.5 rounded bg-violet-950/70 text-violet-300 border border-violet-700/60 text-[10px] font-semibold animate-pulse">⚡ [${bgArt}] анализируется в фоне...</span>`;
+      } else if (isReopened) {
+        statusPill = '<span class="ml-1.5 px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-600/60 text-[10px] font-bold">Из каталога</span>';
+      }
+
+      titleEl.innerHTML = `📚 <span class="font-mono text-white">[${curArt}]</span>: Слоты категорий ${statusPill}`;
     }
   }
+
+  // Сохранение черновика при закрытии или перезагрузке страницы
+  window.addEventListener('beforeunload', () => {
+    try {
+      saveCurrentFormToActiveBook();
+      const payload = {
+        has_draft: true,
+        activeBookId: window.activeBookId,
+        booksSession: window.booksSession,
+        photoPool: (window.photoPool || []).map(p => ({
+          id: p.id,
+          name: p.name,
+          mime: p.mime,
+          preview: p.preview,
+          cameraOriginal: p.cameraOriginal,
+          rawOriginal: p.rawOriginal,
+          croppedBase: p.croppedBase,
+          assignedBookId: p.assignedBookId,
+          assignedSlot: p.assignedSlot
+        })),
+        timestamp: Date.now()
+      };
+      localStorage.setItem('bookinistic_session_draft', JSON.stringify(payload));
+    } catch (e) {}
+  });
 
   // Экспорт на window
   window.scheduleAutoSave = scheduleAutoSave;
@@ -782,7 +1202,11 @@
   window.executeStartNewSession = executeStartNewSession;
   window.initBatchArticleInput = initBatchArticleInput;
   window.calculateNextArticle = calculateNextArticle;
+  window.checkArticleAvailability = checkArticleAvailability;
+  window.updateCardModeBanner = updateCardModeBanner;
+  window.cancelEditModeAndCreateNew = cancelEditModeAndCreateNew;
   window.addNewBook = addNewBook;
+  window.closeBookTab = closeBookTab;
   window.deleteBookSession = deleteBookSession;
   window.syncArticleInputs = syncArticleInputs;
   window.onArticleNumberInput = onArticleNumberInput;

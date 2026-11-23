@@ -486,6 +486,8 @@ def enrich_book_metadata(
             else:
                 fl_pub = _clean_fantlab_text(fl_match.get("publisher"))
             if fl_pub:
+                from core.domain.rules import clean_publisher_name
+                fl_pub = clean_publisher_name(fl_pub)
                 res["publisher"] = fl_pub
                 try:
                     from services.db_service import get_catalog_references, _match_brand_from_publisher
