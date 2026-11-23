@@ -6,6 +6,63 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
+  // ЕДИНОЕ ОКНО НАСТРОЕК (SETTINGS HUB)
+  // ---------------------------------------------------------------------------
+  let activeSettingsTab = 'gemini';
+
+  function openSettingsModal(tab = 'gemini') {
+    const modal = document.getElementById('settingsModal');
+    if (!modal) {
+      // Fallback к старым модалкам, если единой модалки нет в DOM
+      if (tab === 'gemini') openKeyModal();
+      else if (tab === 'ozon') openOzonModal();
+      else if (tab === 'storage') openStorageModal();
+      else if (tab === 'memos') openMemosModal();
+      return;
+    }
+    modal.classList.remove('hidden');
+    switchSettingsTab(tab);
+  }
+
+  function closeSettingsModal() {
+    const modal = document.getElementById('settingsModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function switchSettingsTab(tabName) {
+    activeSettingsTab = tabName;
+    const tabBtns = document.querySelectorAll('.settings-tab-btn');
+    tabBtns.forEach(btn => {
+      const isTarget = btn.getAttribute('data-tab') === tabName;
+      if (isTarget) {
+        btn.className = 'settings-tab-btn px-3.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs shadow transition';
+      } else {
+        btn.className = 'settings-tab-btn px-3.5 py-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-800 text-slate-400 hover:text-white font-medium text-xs transition border border-slate-800';
+      }
+    });
+
+    const panes = document.querySelectorAll('.settings-tab-pane');
+    panes.forEach(pane => {
+      if (pane.id === 'pane_' + tabName) {
+        pane.classList.remove('hidden');
+      } else {
+        pane.classList.add('hidden');
+      }
+    });
+
+    if (tabName === 'gemini') {
+      loadSavedKey();
+    } else if (tabName === 'ozon') {
+      loadOzonStatus();
+      checkOzonImportStatus();
+    } else if (tabName === 'storage') {
+      if (typeof loadStorageStats === 'function') loadStorageStats();
+    } else if (tabName === 'memos') {
+      loadMemosList();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // ПАМЯТКИ И СПРАВОЧНИКИ
   // ---------------------------------------------------------------------------
   async function openFieldsGuide(docName = 'OZON_FIELDS_GUIDE.md') {
@@ -37,13 +94,11 @@
   }
 
   async function openMemosModal() {
-    const modal = document.getElementById('memosModal');
-    if (!modal) return;
-    modal.classList.remove('hidden');
-    loadMemosList();
+    openSettingsModal('memos');
   }
 
   function closeMemosModal() {
+    closeSettingsModal();
     const modal = document.getElementById('memosModal');
     if (modal) modal.classList.add('hidden');
   }
@@ -136,13 +191,11 @@
   }
 
   function openKeyModal() {
-    const input = document.getElementById('apiKeyInput');
-    if (input) input.value = window.currentApiKey || '';
-    const modal = document.getElementById('keyModal');
-    if (modal) modal.classList.remove('hidden');
+    openSettingsModal('gemini');
   }
 
   function closeKeyModal() {
+    closeSettingsModal();
     const modal = document.getElementById('keyModal');
     if (modal) modal.classList.add('hidden');
   }
@@ -243,13 +296,11 @@
   }
 
   function openOzonModal() {
-    const modal = document.getElementById('ozonModal');
-    if (modal) modal.classList.remove('hidden');
-    loadOzonStatus();
-    checkOzonImportStatus();
+    openSettingsModal('ozon');
   }
 
   function closeOzonModal() {
+    closeSettingsModal();
     const modal = document.getElementById('ozonModal');
     if (modal) modal.classList.add('hidden');
   }
@@ -397,6 +448,9 @@
   }
 
   // Экспорт на window
+  window.openSettingsModal = openSettingsModal;
+  window.closeSettingsModal = closeSettingsModal;
+  window.switchSettingsTab = switchSettingsTab;
   window.openFieldsGuide = openFieldsGuide;
   window.openDocsFolder = openDocsFolder;
   window.openMemosModal = openMemosModal;

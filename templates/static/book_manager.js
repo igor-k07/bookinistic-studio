@@ -56,8 +56,16 @@
     const isbnStar = document.getElementById('isbnStar');
     const isbnNote = document.getElementById('isbnNote');
     const isbnInput = document.getElementById('isbn');
+    const modeBadge = document.getElementById('templateModeBadge');
+    const modeText = document.getElementById('templateModeText');
 
     if (window.currentTemplateMode === 'pre2011') {
+      if (modeBadge) {
+        modeBadge.className = 'text-[11px] font-mono px-3 py-1 rounded-xl bg-amber-950/60 border border-amber-800/80 text-amber-300 font-semibold flex items-center gap-1.5';
+      }
+      if (modeText) {
+        modeText.textContent = 'Ozon: До 2011 г. (ISBN опционален)';
+      }
       if (btnPre) {
         btnPre.className = 'px-2.5 py-1 text-xs font-semibold rounded-lg transition bg-amber-600 text-white shadow-sm flex items-center gap-1';
       }
@@ -74,6 +82,12 @@
         if (isbnInput.value === '978-5-0000-0000-0') isbnInput.value = '';
       }
     } else {
+      if (modeBadge) {
+        modeBadge.className = 'text-[11px] font-mono px-3 py-1 rounded-xl bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 font-semibold flex items-center gap-1.5';
+      }
+      if (modeText) {
+        modeText.textContent = 'Ozon: После 2011 г. (ISBN обязателен)';
+      }
       if (btnPre) {
         btnPre.className = 'px-2.5 py-1 text-xs font-medium rounded-lg transition text-slate-400 hover:text-white flex items-center gap-1';
       }

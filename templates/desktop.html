@@ -205,62 +205,42 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2.5">
+        <!-- БАЗА КНИГ И БЫСТРЫЙ ПОИСК -->
+        <button type="button" onclick="openCatalogSearchModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-1.5 cursor-pointer" title="Быстрый поиск по всей базе (2024 книги) и открытие любой книги">
+          <span>🔍</span>
+          <span>База книг</span>
+        </button>
+
+        <!-- КНОПКА QR ДЛЯ СМАРТФОНА -->
+        <button type="button" id="btnOpenQrModal" onclick="openQrModal()" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 text-xs font-semibold shadow-sm transition flex items-center gap-1.5 cursor-pointer" title="Подключить смартфон фотографа по QR-коду">
+          <span>📱</span>
+          <span>QR для телефона</span>
+        </button>
+
         <!-- КНОПКА НОВОЙ СЕССИИ -->
         <button type="button" onclick="openNewSessionModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer" title="Начать новую сессию: очистить остатки пула и задать стартовый артикул">
           <span>🚀</span>
           <span>Новая сессия</span>
         </button>
 
-        <!-- КНОПКА QR ДЛЯ СМАРТФОНА -->
-        <button type="button" id="btnOpenQrModal" onclick="openQrModal()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold shadow-md shadow-amber-600/20 transition flex items-center gap-1.5 animate-pulse cursor-pointer">
-          <span>📱</span>
-          <span>QR для телефона</span>
+        <!-- ЕДИНАЯ КНОПКА НАСТРОЕК СТУДИИ -->
+        <button type="button" onclick="openSettingsModal()" id="settingsBadge" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer" title="Настройки API, Ozon, хранилища, бэкапов и памяток">
+          <span>⚙️</span>
+          <span>Настройки</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400" id="headerStatusDot" title="Система готова"></span>
         </button>
 
-        <!-- API КЛЮЧ GEMINI -->
-        <button type="button" onclick="openKeyModal()" id="keyBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 text-xs font-medium border border-slate-700 transition">
-          <span class="w-2 h-2 rounded-full bg-amber-400" id="keyDot"></span>
-          <span id="keyLabel">Gemini Key</span>
-        </button>
-
-        <!-- OZON SELLER API -->
-        <button type="button" onclick="openOzonModal()" id="ozonBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/70 hover:bg-blue-900/80 text-blue-300 text-xs font-semibold border border-blue-700/60 shadow-sm transition">
-          <span class="w-2 h-2 rounded-full bg-emerald-400" id="ozonDot"></span>
-          <span id="ozonLabel">Ozon API</span>
-        </button>
-
-        <!-- ГОТОВЫЕ EXCEL ТАБЛИЦЫ В ПАПКЕ ПРОЕКТА ready_tables -->
-        <button type="button" onclick="openReadyFolder()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="Открыть папку ready_tables в Finder на Mac">
-          <span>📂 Папка таблиц</span>
-        </button>
-
-        <!-- ПАМЯТКИ И ИНСТРУКЦИИ СТУДИИ -->
-        <button type="button" onclick="openMemosModal()" class="px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-purple-300 text-xs font-semibold border border-purple-700/60 shadow-sm transition flex items-center gap-1.5" title="Открыть меню памяток, словарей и регламентов студии">
-          <span>📚 Памятки (7)</span>
-        </button>
-
-        <!-- БАЗА КНИГ И БЫСТРЫЙ ПОИСК -->
-        <button type="button" onclick="openCatalogSearchModal()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition flex items-center gap-1.5 cursor-pointer" title="Быстрый поиск по всей базе (2024 книги) и открытие любой книги для редактирования фото">
-          <span>🔍</span>
-          <span>База книг (2 024)</span>
-        </button>
-
-        <!-- ХРАНИЛИЩЕ ДИСКА И СБОРКА МУСОРА -->
-        <button type="button" onclick="openStorageModal()" id="storageBadge" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold border border-slate-700 shadow-sm transition cursor-pointer" title="Управление хранилищем фотографий и очистка кэша">
-          <span>🧹</span>
-          <span id="storageHeaderLabel">Диск: ...</span>
-        </button>
-
-        <button type="button" onclick="revealTableFile('pre2011')" class="px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="Показать готовую таблицу до 2011 г. в папке ready_tables">
-          <span>🏛️ До 2011 г.</span>
-          <span id="excelPre2011Count" class="px-1.5 py-0.2 rounded-full bg-amber-900 text-[10px] font-mono font-bold">0</span>
-        </button>
-
-        <button type="button" onclick="revealTableFile('post2011')" class="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="Показать готовую таблицу после 2011 г. в папке ready_tables">
-          <span>📖 После 2011 г.</span>
-          <span id="excelPost2011Count" class="px-1.5 py-0.2 rounded-full bg-emerald-900 text-[10px] font-mono font-bold">0</span>
-        </button>
+        <!-- Невидимые бейджи для обратной совместимости скриптов -->
+        <div class="hidden">
+          <span id="keyDot"></span>
+          <span id="keyLabel"></span>
+          <span id="ozonDot"></span>
+          <span id="ozonLabel"></span>
+          <span id="storageHeaderLabel"></span>
+          <span id="excelPre2011Count">0</span>
+          <span id="excelPost2011Count">0</span>
+        </div>
       </div>
     </div>
   </header>
@@ -281,28 +261,15 @@
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <!-- ПЕРЕКЛЮЧАТЕЛЬ МАСШТАБА КАРТОЧЕК -->
-          <div class="inline-flex items-center p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs shadow-inner">
-            <span class="px-2 text-slate-500 text-[10px] font-medium hidden sm:inline">Размер фото:</span>
-            <button type="button" onclick="setPoolScale('normal')" id="scaleBtn_normal" class="px-2.5 py-1 text-xs rounded-lg transition font-medium text-slate-400 hover:text-white" title="Компактный размер карточек (180px)">Обычный</button>
-            <button type="button" onclick="setPoolScale('large')" id="scaleBtn_large" class="px-2.5 py-1 text-xs rounded-lg transition font-bold bg-amber-500 text-slate-950 shadow-sm" title="Крупный размер (240px) — видны все детали обложки и текста">Крупный</button>
-            <button type="button" onclick="setPoolScale('xlarge')" id="scaleBtn_xlarge" class="px-2.5 py-1 text-xs rounded-lg transition font-medium text-slate-400 hover:text-white" title="Экстра-крупный размер (300px)">Экстра</button>
-          </div>
-
-          <!-- МАССОВОЕ ОТБЕЛИВАНИЕ -->
-          <button type="button" id="batchWhitenBtn" onclick="batchWhitenAllPool()" class="px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold border border-emerald-800 transition flex items-center gap-1.5 shadow-sm" title="Автоматически применить фильтр белого фона Ozon ко всем неотбеленным фото в пуле">
-            <span>⚪ Отбелить (фильтр)</span>
-          </button>
-
           <!-- Выбрать файлы с диска -->
           <button type="button" onclick="document.getElementById('poolFileInput').click()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
             <span>📁 С диска</span>
           </button>
           <input type="file" id="poolFileInput" multiple accept="image/*" class="hidden" onchange="handlePoolFiles(event)">
 
-          <!-- Новая сессия -->
-          <button type="button" onclick="openNewSessionModal()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5 border border-emerald-500/40" title="Начать новую сессию: очистить остатки фото и задать стартовый артикул">
-            <span>🚀 Новая сессия</span>
+          <!-- МАССОВОЕ ОТБЕЛИВАНИЕ -->
+          <button type="button" id="batchWhitenBtn" onclick="batchWhitenAllPool()" class="px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold border border-emerald-800 transition flex items-center gap-1.5 shadow-sm" title="Автоматически применить фильтр белого фона Ozon ко всем неотбеленным фото в пуле">
+            <span>⚪ Отбелить (фильтр)</span>
           </button>
 
           <!-- Очистить свободные фото пула -->
@@ -465,25 +432,14 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button type="button" id="btnSmartSaveHeader" onclick="smartSaveActiveBook()" class="px-3.5 py-1 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/25 border border-emerald-400/40" title="Единая умная синхронизация: сохраняет фото в S3, обновляет базу и отправляет изменения на Ozon">
-            <span>💾</span>
-            <span>Сохранить и обновить на Ozon</span>
+          <button type="button" onclick="addNewBook()" class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-amber-500/20">
+            <span>+ Новая книга</span>
           </button>
-          <button type="button" id="btnUpdateOzonPicturesHeader" onclick="updateActiveBookOzonPictures()" class="px-3.5 py-1 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-sky-600/25 border border-sky-400/40" title="Отправить обновленные фото текущей книги напрямую в карточку Ozon Seller">
-            <span>🔄</span>
-            <span>Обновить только фото</span>
-          </button>
-          <button type="button" onclick="openNewSessionModal()" class="px-2.5 py-1 rounded-xl bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 text-xs font-semibold transition flex items-center gap-1 shadow-sm" title="Начать новую сессию: очистить остатки фото и задать начальный артикул">
-            <span>🚀 Новая сессия</span>
-          </button>
-          <button type="button" onclick="clearCurrentBookSlots()" class="px-2.5 py-1 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 text-xs transition font-medium" title="Очистить слоты текущей книги (фото вернутся в пул)">
+          <button type="button" onclick="clearCurrentBookSlots()" class="px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 text-xs transition font-medium" title="Очистить слоты текущей книги (фото вернутся в пул)">
             🧹 Очистить слоты
           </button>
-          <button type="button" onclick="resetCurrentBook()" class="px-2.5 py-1 rounded-xl text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs transition font-medium" title="Сбросить все заполненные поля и слоты текущей книги (фото вернутся в свободный пул)">
-            <span>🗑️ Сбросить всё</span>
-          </button>
-          <button type="button" onclick="addNewBook()" class="px-3 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 transition flex items-center gap-1.5 shadow-sm">
-            <span>+ Новая книга</span>
+          <button type="button" onclick="resetCurrentBook()" class="px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-rose-300 hover:bg-rose-950/40 text-xs transition font-medium" title="Сбросить все заполненные поля и слоты текущей книги (фото вернутся в свободный пул)">
+            <span>🗑️ Сбросить форму</span>
           </button>
         </div>
       </div>
@@ -644,16 +600,12 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <!-- ПЕРЕКЛЮЧАТЕЛЬ ШАБЛОНА: ДО 2011 / ПОСЛЕ 2011 -->
-          <div class="inline-flex items-center p-1 bg-slate-950 border border-slate-800 rounded-xl">
-            <button type="button" id="btnModePre" onclick="setTemplateMode('pre2011')" class="px-2.5 py-1 text-xs font-semibold rounded-lg transition bg-amber-600 text-white shadow-sm flex items-center gap-1" title="Шаблон Ozon для книг до 2011 года (81 колонка, ISBN не обязателен)">
-              <span>🏛️ До 2011 г.</span>
-            </button>
-            <button type="button" id="btnModePost" onclick="setTemplateMode('post2011')" class="px-2.5 py-1 text-xs font-medium rounded-lg transition text-slate-400 hover:text-white flex items-center gap-1" title="Шаблон Ozon для книг после 2011 года (86 колонок, обязательный ISBN)">
-              <span>📖 После 2011 г.</span>
-            </button>
-          </div>
-          <button type="button" onclick="clearForm()" class="text-xs text-slate-400 hover:text-rose-400 transition ml-1">Очистить форму</button>
+          <!-- АВТОМАТИЧЕСКИЙ БЕЙДЖ СТАНДАРТА OZON -->
+          <span id="templateModeBadge" class="text-[11px] font-mono px-3 py-1 rounded-xl bg-amber-950/60 border border-amber-800/80 text-amber-300 font-semibold flex items-center gap-1.5" title="Стандарт Ozon определяется автоматически по году издания">
+            <span>🏛️</span>
+            <span id="templateModeText">Ozon: До 2011 г. (ISBN опционален)</span>
+          </span>
+          <button type="button" onclick="clearForm()" class="text-xs text-slate-400 hover:text-rose-400 transition ml-2">Очистить форму</button>
         </div>
       </div>
 
@@ -1245,6 +1197,185 @@
       </button>
 
       <button type="button" onclick="closeQrModal()" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-xs font-semibold text-slate-200">Понятно, закрыть</button>
+    </div>
+  </div>
+
+  <!-- ЕДИНОЕ ОКНО НАСТРОЕК СТУДИИ (SETTINGS HUB) -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4" onclick="if(event.target===this)closeSettingsModal()">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-4 shadow-2xl flex flex-col max-h-[90vh]">
+      <!-- ШАПКА -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">⚙️</span>
+          <div>
+            <h3 class="text-sm font-bold text-white uppercase tracking-wider">Настройки студии</h3>
+            <p class="text-[11px] text-slate-400">Управление ключами ИИ, Ozon Seller API, хранилищем и регламентами</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeSettingsModal()" class="text-slate-400 hover:text-white text-lg px-2">✕</button>
+      </div>
+
+      <!-- ТАБЫ НАВИГАЦИИ -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-950 rounded-2xl border border-slate-800 overflow-x-auto text-xs shrink-0">
+        <button type="button" onclick="switchSettingsTab('gemini')" data-tab="gemini" class="settings-tab-btn px-3 py-1.5 rounded-xl font-bold text-xs transition">
+          🤖 Gemini AI
+        </button>
+        <button type="button" onclick="switchSettingsTab('ozon')" data-tab="ozon" class="settings-tab-btn px-3 py-1.5 rounded-xl font-medium text-xs transition">
+          🛍️ Ozon API
+        </button>
+        <button type="button" onclick="switchSettingsTab('storage')" data-tab="storage" class="settings-tab-btn px-3 py-1.5 rounded-xl font-medium text-xs transition">
+          🧹 Хранилище
+        </button>
+        <button type="button" onclick="switchSettingsTab('memos')" data-tab="memos" class="settings-tab-btn px-3 py-1.5 rounded-xl font-medium text-xs transition">
+          📚 Памятки (7)
+        </button>
+      </div>
+
+      <!-- ТАБ 1: GEMINI AI -->
+      <div id="pane_gemini" class="settings-tab-pane space-y-3">
+        <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Статус ключа Gemini:</span>
+            <span id="geminiStatusBadge" class="px-2.5 py-0.5 rounded-full font-mono text-[11px] font-bold bg-amber-950 text-amber-400 border border-amber-800">
+              Проверка...
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Используется для распознавания обложек, титульных листов, выходных данных и составления аннотаций. Ключ сохраняется в изолированном файле <code class="text-amber-400 font-mono">.gemini_api_key</code>.
+          </p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">API-ключ Google AI Studio:</label>
+          <input type="password" id="apiKeyInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono focus:border-amber-500 focus:outline-none" placeholder="AIzaSy...">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300">Отмена</button>
+          <button type="button" onclick="saveKeyFromModal()" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md">Сохранить ключ</button>
+        </div>
+      </div>
+
+      <!-- ТАБ 2: OZON SELLER API -->
+      <div id="pane_ozon" class="settings-tab-pane hidden space-y-3">
+        <!-- СТАТУС ПОДКЛЮЧЕНИЯ -->
+        <div id="ozonConnectionCard" class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400">Статус авторизации:</span>
+            <span id="ozonStatusBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+              🟢 Проверка связи...
+            </span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Client-Id магазина:</span>
+            <span id="ozonClientIdVal" class="text-slate-200 font-mono font-semibold">—</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Товаров в магазине Ozon:</span>
+            <span id="ozonTotalProductsVal" class="text-amber-400 font-mono font-bold">—</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Следующий артикул (авто):</span>
+            <span id="ozonNextArticleVal" class="text-sky-400 font-mono font-bold">—</span>
+          </div>
+        </div>
+
+        <!-- ИМПОРТ КАТАЛОГА -->
+        <div class="p-3.5 rounded-2xl bg-blue-950/30 border border-blue-900/50 space-y-2">
+          <h4 class="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+            <span>📥</span> <span>Синхронизация каталога Ozon в локальную базу</span>
+          </h4>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Загружает существующие книги из Ozon в локальную базу SQLite для сверки и предотвращения дубликатов артикулов.
+          </p>
+
+          <div id="ozonImportProgressBox" class="hidden space-y-1.5">
+            <div class="flex justify-between text-[11px] text-slate-300">
+              <span id="ozonImportProgressText">Синхронизация...</span>
+              <span id="ozonImportProgressPct" class="font-mono font-bold text-amber-400">0%</span>
+            </div>
+            <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+              <div id="ozonImportProgressBar" class="bg-gradient-to-r from-amber-500 to-emerald-500 h-2 transition-all duration-300" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <button type="button" onclick="startOzonCatalogImport()" id="btnStartOzonImport" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2">
+            <span>📥</span>
+            <span id="btnStartOzonImportText">Запустить импорт каталога Ozon</span>
+          </button>
+        </div>
+
+        <!-- КЛЮЧИ ДОСТУПА -->
+        <details class="text-xs text-slate-400 group">
+          <summary class="cursor-pointer hover:text-slate-200 transition select-none flex items-center gap-1 py-1 font-semibold">
+            <span>⚙️ Сменить ключи доступа Ozon API</span>
+          </summary>
+          <div class="pt-2 space-y-2">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-0.5">Client-Id магазина:</label>
+              <input type="text" id="ozonClientIdInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none" placeholder="1234567">
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-0.5">Api-Key (роли: Product, Category, Barcode):</label>
+              <input type="password" id="ozonApiKeyInput" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono focus:border-amber-500 focus:outline-none" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+            </div>
+            <button type="button" onclick="saveOzonKeysFromModal()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-white font-semibold text-xs border border-slate-700 transition">
+              Сохранить ключи Ozon
+            </button>
+          </div>
+        </details>
+      </div>
+
+      <!-- ТАБ 3: ХРАНИЛИЩЕ ДИСКА -->
+      <div id="pane_storage" class="settings-tab-pane hidden space-y-3">
+        <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Общий объем хранилища:</span>
+            <span id="storageTotalMbVal" class="text-amber-400 font-mono font-bold">— МБ</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Временный кэш сессий (session_assets):</span>
+            <span id="storageSessionMbVal" class="text-slate-200 font-mono">— МБ</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Вечный архив книг (books_vault):</span>
+            <span id="storageVaultMbVal" class="text-emerald-400 font-mono font-semibold">— МБ</span>
+          </div>
+          <div class="flex items-center justify-between text-xs border-t border-slate-850 pt-2">
+            <span class="text-slate-400">Всего ассетов в реестре SQLite:</span>
+            <span id="storageAssetCountVal" class="text-sky-400 font-mono font-bold">—</span>
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-800/40 text-[11px] text-slate-300 space-y-1.5 leading-relaxed">
+          <div class="font-bold text-amber-300">🛡️ Регламент безопасности:</div>
+          <div>• Готовые фото книг в архиве хранятся бессрочно.</div>
+          <div>• Временные брошенные кадры сессий старше 24ч можно безопасно очистить.</div>
+        </div>
+
+        <button type="button" id="btnRunCleanup" onclick="executeStorageCleanup()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer">
+          <span>🧹 Очистить старый временный кэш (>24ч)</span>
+        </button>
+      </div>
+
+      <!-- ТАБ 4: ПАМЯТКИ И РЕГЛАМЕНТЫ -->
+      <div id="pane_memos" class="settings-tab-pane hidden space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="text-[11px] text-slate-400">7 официальных регламентов и памяток студии</p>
+          <button type="button" onclick="openDocsFolder()" class="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1">
+            <span>📂 Папка docs на Mac</span>
+          </button>
+        </div>
+        <div class="overflow-y-auto space-y-2 max-h-[320px] pr-1" id="memosListContainer">
+          <div class="text-center py-6 text-slate-500 text-xs font-medium">Загрузка списка памяток...</div>
+        </div>
+      </div>
+
+      <!-- ФУТЕР НАСТРОЕК -->
+      <div class="border-t border-slate-800 pt-3 flex justify-between items-center text-xs">
+        <span class="text-slate-500">Bookinistic Batch Studio v2.5</span>
+        <button type="button" onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition">
+          Закрыть
+        </button>
+      </div>
     </div>
   </div>
 

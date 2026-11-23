@@ -214,12 +214,19 @@ async function loadStorageStats() {
 }
 
 function openStorageModal() {
+  if (typeof window.openSettingsModal === 'function') {
+    window.openSettingsModal('storage');
+    return;
+  }
   loadStorageStats();
   const m = document.getElementById('storageModal');
   if (m) m.classList.remove('hidden');
 }
 
 function closeStorageModal() {
+  if (typeof window.closeSettingsModal === 'function') {
+    window.closeSettingsModal();
+  }
   const m = document.getElementById('storageModal');
   if (m) m.classList.add('hidden');
 }
