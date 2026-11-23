@@ -445,23 +445,38 @@
     }
     function getPhotoDisplayUrl(p) {
       if (!p) return '';
-      // 1. Приоритет #1: Свежий финальный запеченный результат из редактора (со всеми кропами, разворотами и фильтрами)
+      // 1. Свежий in-memory срез из canvas редактора (data: или blob:)
+      if (p.preview && typeof p.preview === 'string' && (p.preview.startsWith('data:') || p.preview.startsWith('blob:'))) {
+        return p.preview;
+      }
+      if (p.croppedBase && typeof p.croppedBase === 'string' && (p.croppedBase.startsWith('data:') || p.croppedBase.startsWith('blob:'))) {
+        return p.croppedBase;
+      }
+      // 2. Чистые base64 данные (если есть)
+      if (p.data && typeof p.data === 'string' && !p.data.startsWith('/session_photos/')) {
+        return p.data.startsWith('data:') ? p.data : `data:image/jpeg;base64,${p.data}`;
+      }
+      // 3. Актуальная ссылка на постоянное облако Yandex S3 CDN
+      if (p.s3_url && typeof p.s3_url === 'string') {
+        return p.s3_url;
+      }
+      // 4. Постоянная надежная ссылка из локального архива books_vault/
+      if (p.url && typeof p.url === 'string' && p.url.startsWith('/vault/')) {
+        return p.url;
+      }
+      // 5. Превью (если это облачная ссылка, vault или локальный URL)
       if (p.preview && typeof p.preview === 'string') {
         return p.preview;
       }
-      // 2. Если есть чистые base64 данные (то, что уходит в Ozon API и хранилище)
-      if (p.data && typeof p.data === 'string') {
-        return p.data.startsWith('data:') ? p.data : `data:image/jpeg;base64,${p.data}`;
-      }
-      // 3. Свежий отредактированный срез из сессии
+      // 6. Отредактированный срез из сессии
       if (p.croppedBase && typeof p.croppedBase === 'string') {
         return p.croppedBase;
       }
-      // 4. Актуальная ссылка на облако Yandex S3
-      if (p.s3_url) return p.s3_url;
-      // 5. Постоянная ссылка из vault
-      if (p.url) return p.url;
-      // 6. Исходный снимок с камеры
+      // 7. Постоянная ссылка из vault / asset
+      if (p.url && typeof p.url === 'string') {
+        return p.url;
+      }
+      // 8. Исходный снимок с камеры
       return p.cameraOriginal || p.rawOriginal || '';
     }
     window.getPhotoDisplayUrl = getPhotoDisplayUrl;
@@ -643,7 +658,7 @@
             <!-- БОЛЬШАЯ КАРТИНКА ПРЕВЬЮ В РЕЖИМЕ OBJECT-CONTAIN -->
             <div class="relative w-full ${curScale.imgH} rounded-xl overflow-hidden bg-slate-950/80 border border-slate-800/80 group-hover:border-slate-700 transition cursor-pointer flex items-center justify-center p-1.5 shadow-inner"
                  ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${getPhotoDisplayUrl(p)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+              <img src="${getPhotoDisplayUrl(p)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${p.url || p.s3_url || p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- КНОПКА БЫСТРОГО УДАЛЕНИЯ ИЗ ПУЛА В ЛЕВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="deletePhotoFromPool('${p.id}', event)" ondblclick="event.stopPropagation()" class="absolute top-2 left-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-rose-600 hover:text-white text-slate-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="🗑️ Удалить фото из пула">🗑️</button>
@@ -1289,7 +1304,7 @@
             <!-- БОЛЬШАЯ КАРТИНКА КНИГИ (ВЫСОТА 176px) В РЕЖИМЕ OBJECT-CONTAIN (ЧЕСТНЫЕ ГРАНИЦЫ И МАСШТАБ) -->
             <div class="relative w-full h-44 rounded-lg overflow-hidden bg-slate-950/80 border border-slate-800 flex items-center justify-center p-1.5 cursor-pointer shadow-inner"
                  ondblclick="openPhotoStudio('${photo.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${getPhotoDisplayUrl(photo)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${photo.preview || photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+              <img src="${getPhotoDisplayUrl(photo)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${photo.url || photo.s3_url || photo.preview || photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${photo.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
@@ -1378,7 +1393,7 @@
               <!-- КАРТИНКА (ВЫСОТА 144px) В РЕЖИМЕ OBJECT-CONTAIN (ЧЕСТНЫЕ ГРАНИЦЫ И МАСШТАБ) -->
               <div class="relative w-full h-36 rounded-lg overflow-hidden bg-slate-950/80 border border-slate-800 flex items-center justify-center p-1.5 cursor-pointer shadow-inner"
                    ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-                <img src="${getPhotoDisplayUrl(p)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+                <img src="${getPhotoDisplayUrl(p)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${p.url || p.s3_url || p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
                 <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
                 <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>

@@ -202,6 +202,19 @@
     }
 
     /**
+     * Установка слотов книги целиком (например, после сохранения или загрузки из vault)
+     */
+    setSlots(slots = {}, bookId = null) {
+      const bId = bookId !== null ? Number(bookId) : this.activeId;
+      const book = this.getBookById(bId);
+      if (!book) return;
+
+      book.slots = slots;
+      this.syncLegacyGlobals();
+      this.emit('book:slots_updated', { bookId: bId, slots });
+    }
+
+    /**
      * Очистка слотов книги
      */
     clearSlots(bookId = null) {

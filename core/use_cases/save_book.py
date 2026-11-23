@@ -237,45 +237,22 @@ class SaveBookUseCase:
 
     def _cleanup_temporary_session_photos(self, slots_photos: Dict[str, Any]) -> None:
         """
-        Удаляет временные тяжелые файлы с диска Mac после успешного сохранения в Vault/S3 (п. 6.2 спецификации).
-        Удаляет все варианты (cameraOriginal, aiWhiteOriginal, croppedBase, preview).
+        Мягкая очистка устаревших временных файлов (старше 2 часов),
+        сохраняя файлы текущей открытой сессии в целости во избежание 404 на вкладках.
         """
-        if not slots_photos:
+        if not os.path.exists(SESSION_PHOTOS_DIR):
             return
-
-        import re
-
-        def _cleanup_photo_variations(p_dict: dict):
-            if not isinstance(p_dict, dict):
-                return
-            p_id = p_dict.get("id") or ""
-            prefixes = set()
-            if p_id:
-                prefixes.add(p_id)
-            for k in ("url", "local_path", "preview", "name"):
-                val = p_dict.get(k)
-                if isinstance(val, str) and "photo_" in val:
-                    m = re.search(r"(photo_[a-z0-9]+)", val)
-                    if m:
-                        prefixes.add(m.group(1))
-
-            if prefixes and os.path.exists(SESSION_PHOTOS_DIR):
-                try:
-                    for fname in os.listdir(SESSION_PHOTOS_DIR):
-                        for pref in prefixes:
-                            if fname.startswith(pref):
-                                try:
-                                    os.remove(os.path.join(SESSION_PHOTOS_DIR, fname))
-                                except Exception:
-                                    pass
-                except Exception:
-                    pass
-
-        for slot_val in slots_photos.values():
-            if isinstance(slot_val, dict):
-                _cleanup_photo_variations(slot_val)
-            elif isinstance(slot_val, list):
-                for item in slot_val:
-                    if isinstance(item, dict):
-                        _cleanup_photo_variations(item)
+        import time
+        now = time.time()
+        try:
+            for fname in os.listdir(SESSION_PHOTOS_DIR):
+                fpath = os.path.join(SESSION_PHOTOS_DIR, fname)
+                if os.path.isfile(fpath):
+                    if now - os.path.getmtime(fpath) > 7200:
+                        try:
+                            os.remove(fpath)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 

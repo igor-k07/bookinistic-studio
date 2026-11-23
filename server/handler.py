@@ -180,6 +180,26 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             full_file_path = os.path.join(SESSION_PHOTOS_DIR, safe_rel_path)
+            if not (os.path.exists(full_file_path) and os.path.isfile(full_file_path)):
+                # Защита от 404: если временный файл сессии отсутствует, ищем в архиве books_vault
+                fname = os.path.basename(safe_rel_path)
+                m = re.search(r"(photo_[a-z0-9]+)", fname)
+                prefix = m.group(1) if m else fname.split(".")[0]
+                if os.path.exists(VAULT_DIR):
+                    for d in os.listdir(VAULT_DIR):
+                        v_dir = os.path.join(VAULT_DIR, d)
+                        if os.path.isdir(v_dir):
+                            bs_file = os.path.join(v_dir, "book_state.json")
+                            if os.path.exists(bs_file):
+                                try:
+                                    with open(bs_file, "r", encoding="utf-8") as f_bs:
+                                        if prefix in f_bs.read():
+                                            cand = os.path.join(v_dir, "01_cover_front.jpg")
+                                            if os.path.exists(cand):
+                                                full_file_path = cand
+                                                break
+                                except Exception:
+                                    pass
             self._serve_file_stream(full_file_path, tag="SESSION_PHOTO", rel_label=safe_rel_path)
             return
 

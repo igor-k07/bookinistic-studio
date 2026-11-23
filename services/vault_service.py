@@ -791,7 +791,20 @@ def reopen_book_from_vault(article: str) -> Optional[Dict[str, Any]]:
         if target_slot == SLOT_CARD:
             continue
 
-        p_obj = _make_vault_photo_obj(target_slot, fname)
+        slot_meta = None
+        raw_items = raw_slots.get(target_slot)
+        if isinstance(raw_items, dict):
+            slot_meta = raw_items
+        elif isinstance(raw_items, list) and raw_items:
+            m_num = re.search(r"(\d+)", fname)
+            curr_count = len(slots.get(target_slot, []))
+            target_idx = int(m_num.group(1)) - 1 if m_num else curr_count
+            if 0 <= target_idx < len(raw_items):
+                slot_meta = raw_items[target_idx]
+            elif curr_count < len(raw_items):
+                slot_meta = raw_items[curr_count]
+
+        p_obj = _make_vault_photo_obj(target_slot, fname, slot_meta)
         if p_obj:
             if target_slot in slots:
                 slots[target_slot].append(p_obj)

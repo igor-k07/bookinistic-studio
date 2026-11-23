@@ -172,7 +172,7 @@ def upload_book_photos(
     clean_title = re.sub(r"[^\w\s-]", "", title or "").strip().replace(" ", "_")[:30]
     if not clean_title or clean_title.lower() in ("book", "без_названия"):
         # Защита: не создаем безымянную папку в S3 до определения реального названия книги
-        return None
+        return None, ""
     folder = f"{article}_{clean_title}".strip("_")
 
     main_photo_url: Optional[str] = None

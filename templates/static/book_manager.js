@@ -1162,7 +1162,10 @@
           book.isEditMode = true;
           if (result.slots) {
             book.slots = result.slots;
-            // Фото сохраняются в слотах книги; в общем photoPool только обновляем привязку, если фото было загружено из пула
+            if (window.BookStore && typeof window.BookStore.setSlots === 'function') {
+              window.BookStore.setSlots(result.slots, book.id);
+            }
+            // Фото сохраняются в слотах книги; в общем photoPool обновляем привязку или добавляем постоянный объект
             Object.entries(result.slots).forEach(([slotKey, slotItem]) => {
               const items = Array.isArray(slotItem) ? slotItem : (slotItem ? [slotItem] : []);
               items.forEach(p => {
@@ -1172,6 +1175,8 @@
                   const existingIdx = window.photoPool.findIndex(x => x.id === p.id);
                   if (existingIdx >= 0) {
                     window.photoPool[existingIdx] = { ...window.photoPool[existingIdx], ...p, assignedBookId: book.id, assignedSlot: slotKey };
+                  } else {
+                    window.photoPool.push({ ...p, assignedBookId: book.id, assignedSlot: slotKey });
                   }
                 }
               });
