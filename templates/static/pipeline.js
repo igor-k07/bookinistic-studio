@@ -456,27 +456,34 @@
       if (p.data && typeof p.data === 'string' && !p.data.startsWith('/session_photos/')) {
         return p.data.startsWith('data:') ? p.data : `data:image/jpeg;base64,${p.data}`;
       }
-      // 3. Актуальная ссылка на постоянное облако Yandex S3 CDN
-      if (p.s3_url && typeof p.s3_url === 'string') {
-        return p.s3_url;
-      }
-      // 4. Постоянная надежная ссылка из локального архива books_vault/
+      // 3. Постоянная надежная локальная ссылка из хранилища books_vault на диске Mac (0 мс задержки)
       if (p.url && typeof p.url === 'string' && p.url.startsWith('/vault/')) {
         return p.url;
       }
-      // 5. Превью (если это облачная ссылка, vault или локальный URL)
+      if (p.preview && typeof p.preview === 'string' && p.preview.startsWith('/vault/')) {
+        return p.preview;
+      }
+      // 4. Локальные сессионные фото и ассеты
+      if (p.preview && typeof p.preview === 'string' && (p.preview.startsWith('/session_photos/') || p.preview.startsWith('/api/assets/') || p.preview.startsWith('/inbox/'))) {
+        return p.preview;
+      }
+      // 5. Актуальная ссылка на постоянное облако Yandex S3 CDN (если локального файла нет)
+      if (p.s3_url && typeof p.s3_url === 'string') {
+        return p.s3_url;
+      }
+      // 6. Превью любого другого формата
       if (p.preview && typeof p.preview === 'string') {
         return p.preview;
       }
-      // 6. Отредактированный срез из сессии
+      // 7. Отредактированный срез из сессии
       if (p.croppedBase && typeof p.croppedBase === 'string') {
         return p.croppedBase;
       }
-      // 7. Постоянная ссылка из vault / asset
+      // 8. Постоянная ссылка из vault / asset
       if (p.url && typeof p.url === 'string') {
         return p.url;
       }
-      // 8. Исходный снимок с камеры
+      // 9. Исходный снимок с камеры
       return p.cameraOriginal || p.rawOriginal || '';
     }
     window.getPhotoDisplayUrl = getPhotoDisplayUrl;

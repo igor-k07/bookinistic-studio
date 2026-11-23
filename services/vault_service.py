@@ -103,17 +103,27 @@ def resolve_photo_bytes(photo_obj_or_data: Any) -> Optional[bytes]:
         # Локальный путь / URL (отсекаем query params ?t=... и hash #...)
         clean_val = val.split("?")[0].split("#")[0]
 
+        def _safe_fetch_url(u_str: str) -> Optional[bytes]:
+            try:
+                p_parts = urllib.parse.urlsplit(u_str)
+                ascii_path = urllib.parse.quote(urllib.parse.unquote(p_parts.path), safe="/:@&=+$,-_.!~*'()")
+                ascii_query = urllib.parse.quote(urllib.parse.unquote(p_parts.query), safe="/:@&=+$,-_.!~*'()")
+                safe_url = urllib.parse.urlunsplit((p_parts.scheme, p_parts.netloc, ascii_path, ascii_query, p_parts.fragment))
+                req = urllib.request.Request(safe_url, headers={"User-Agent": "BookinisticVault/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.read()
+            except Exception:
+                return None
+
         # Если это URL через наш локальный /api/image_proxy
         if "/api/image_proxy" in val and "url=" in val:
             try:
                 parsed_q = urllib.parse.parse_qs(urllib.parse.urlparse(val).query)
                 real_target = (parsed_q.get("url") or [""])[0]
                 if real_target and (real_target.startswith("http://") or real_target.startswith("https://")):
-                    req = urllib.request.Request(real_target, headers={"User-Agent": "BookinisticVault/1.0"})
-                    with urllib.request.urlopen(req, timeout=12) as resp:
-                        raw_bytes = resp.read()
+                    raw_bytes = _safe_fetch_url(real_target)
             except Exception as e_prx:
-                print(f"⚠️ Ошибка чтения через image_proxy в resolve_photo_bytes: {e_prx}")
+                pass
 
         if not raw_bytes and (clean_val.startswith("/") or clean_val.startswith("storage/")):
             clean_rel = clean_val.lstrip("/")
@@ -139,12 +149,7 @@ def resolve_photo_bytes(photo_obj_or_data: Any) -> Optional[bytes]:
 
         # Если это HTTP/HTTPS URL
         elif clean_val.startswith("http://") or clean_val.startswith("https://"):
-            try:
-                req = urllib.request.Request(clean_val, headers={"User-Agent": "BookinisticVault/1.0"})
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    raw_bytes = resp.read()
-            except Exception:
-                pass
+            raw_bytes = _safe_fetch_url(clean_val)
 
         # Обычная base64 строка без data-префикса
         if not raw_bytes and len(val) > 200:
@@ -744,18 +749,17 @@ def reopen_book_from_vault(article: str) -> Optional[Dict[str, Any]]:
 
         cam_orig = raw_source_url or url
         s3_cand = _find_cloud_url(filename, slot_name)
-        cloud_url = s3_cand or url
 
         return {
             "id": pid,
             "name": filename,
-            "preview": cloud_url,
+            "preview": url,
             "url": url,
             "s3_url": s3_cand,
             "is_s3_uploaded": bool(s3_cand),
             "cameraOriginal": cam_orig,
             "rawOriginal": cam_orig,
-            "croppedBase": cloud_url,
+            "croppedBase": url,
             "isCropped": bool(meta and (meta.get("isCropped") or meta.get("crop_relative") or meta.get("cropRelative"))) or bool(s3_cand),
             "crop_relative": (meta and (meta.get("crop_relative") or meta.get("cropRelative") or meta.get("aiCropRelative"))),
             "rotation": int(meta.get("rotation", 0)) if meta else 0,

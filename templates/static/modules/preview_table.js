@@ -732,12 +732,14 @@
         const yr = escapeHtml(b.year ? String(b.year) : '');
         const price = b.price ? `${b.price} ₽` : '';
         const photo = b.main_photo_url || b.photo_main || '';
+        const vaultPhoto = art ? `/vault/${encodeURIComponent(art)}/01_cover_front.jpg` : '';
+        const initialPhoto = photo || vaultPhoto;
 
         return `
           <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-800 transition">
             <div class="flex items-center gap-3 min-w-0">
               <div class="w-12 h-16 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                ${photo ? `<img src="${photo}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'text-xs text-slate-600\\'>📷</span>'">` : '<span class="text-xs text-slate-600">📷</span>'}
+                ${initialPhoto ? `<img src="${initialPhoto}" class="w-full h-full object-cover" onerror="if(this.getAttribute('data-tried-vault')!=='1' && '${vaultPhoto}'){this.setAttribute('data-tried-vault','1');this.src='${vaultPhoto}';}else{this.parentElement.innerHTML='<span class=\\'text-xs text-slate-600\\'>📷</span>';}">` : '<span class="text-xs text-slate-600">📷</span>'}
               </div>
               <div class="min-w-0">
                 <div class="flex items-center gap-2 mb-0.5">

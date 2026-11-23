@@ -245,6 +245,15 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                             if os.path.exists(cand) and os.path.isfile(cand):
                                 full_file_path = cand
                                 break
+                            if any(k in inner_file.lower() for k in ("cover_front", "front", "01")):
+                                d_path = os.path.join(VAULT_DIR, d)
+                                if os.path.isdir(d_path):
+                                    for f in sorted(os.listdir(d_path)):
+                                        if f.lower().endswith(('.jpg', '.jpeg', '.png')) and ('front' in f.lower() or f.startswith('01_')):
+                                            full_file_path = os.path.join(d_path, f)
+                                            break
+                                if os.path.exists(full_file_path) and os.path.isfile(full_file_path):
+                                    break
 
             self._serve_file_stream(full_file_path, tag="VAULT", rel_label=safe_rel_path)
             return

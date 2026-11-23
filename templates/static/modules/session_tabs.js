@@ -256,22 +256,28 @@
           const item = map.get(b.slots.cover_front.id);
           item.assignedBookId = b.id;
           item.assignedSlot = 'cover_front';
-          if (!item.preview && (b.formData && b.formData.main_photo_url)) {
-            item.preview = b.formData.main_photo_url;
-            item.url = b.formData.main_photo_url;
-            item.cameraOriginal = b.formData.main_photo_url;
+          const vaultCover = b.article ? `/vault/${encodeURIComponent(b.article)}/01_cover_front.jpg` : '';
+          const fallbackCover = vaultCover || (b.formData && b.formData.main_photo_url);
+          if (!item.preview && fallbackCover) {
+            item.preview = fallbackCover;
+            item.url = fallbackCover;
+            item.cameraOriginal = fallbackCover;
           }
           b.slots.cover_front = item;
         } else if (b.slots.cover_front.preview || b.slots.cover_front.url) {
           if (!b.slots.cover_front.preview) b.slots.cover_front.preview = b.slots.cover_front.url;
           map.set(b.slots.cover_front.id, b.slots.cover_front);
-        } else if (b.formData && b.formData.main_photo_url) {
-          b.slots.cover_front.preview = b.formData.main_photo_url;
-          b.slots.cover_front.url = b.formData.main_photo_url;
-          b.slots.cover_front.cameraOriginal = b.formData.main_photo_url;
-          map.set(b.slots.cover_front.id, b.slots.cover_front);
         } else {
-          b.slots.cover_front = null;
+          const vaultCover = b.article ? `/vault/${encodeURIComponent(b.article)}/01_cover_front.jpg` : '';
+          const fallbackCover = vaultCover || (b.formData && b.formData.main_photo_url);
+          if (fallbackCover) {
+            b.slots.cover_front.preview = fallbackCover;
+            b.slots.cover_front.url = fallbackCover;
+            b.slots.cover_front.cameraOriginal = fallbackCover;
+            map.set(b.slots.cover_front.id, b.slots.cover_front);
+          } else {
+            b.slots.cover_front = null;
+          }
         }
       }
       ['cover_back', 'info_pages', 'illustrations', 'mantra_defects'].forEach(s => {
