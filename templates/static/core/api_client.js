@@ -177,6 +177,10 @@
       return this.post('/api/ozon/publish_book', bookData);
     }
 
+    getOzonTaskStatus(taskId) {
+      return this.get('/api/ozon/task_status', { task_id: taskId });
+    }
+
     cleanupTemp(maxAgeHours = 24.0, dryRun = false) {
       return this.post('/api/cleanup_temp', { max_age_hours: maxAgeHours, dry_run: dryRun });
     }

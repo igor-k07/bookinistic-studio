@@ -659,7 +659,7 @@
         if (saveBtn) {
           saveBtn.disabled = false;
           saveBtn.className = 'w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-base shadow-xl shadow-teal-600/25 transition flex items-center justify-center gap-2 cursor-pointer';
-          saveBtn.innerHTML = `<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Сохранить изменения книги ${safeEscape(art)} в Excel, Ozon и БД (Cmd + Enter)</span>`;
+          saveBtn.innerHTML = `<span id="saveBtnIcon">⚡</span> <span id="saveBtnText">Обновить карточку ${safeEscape(art)} на Ozon (Cmd + Enter)</span>`;
         }
         if (secBtns) secBtns.classList.remove('hidden');
 
@@ -684,7 +684,7 @@
         if (saveBtn) {
           saveBtn.disabled = false;
           saveBtn.className = 'w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-sky-600 via-teal-600 to-sky-700 hover:from-sky-500 hover:to-teal-500 text-white font-bold text-base shadow-xl shadow-sky-600/25 transition flex items-center justify-center gap-2 cursor-pointer';
-          saveBtn.innerHTML = `<span id="saveBtnIcon">💾</span> <span id="saveBtnText">Сохранить изменения книги ${safeEscape(art)} в Excel, Ozon и БД (Cmd + Enter)</span>`;
+          saveBtn.innerHTML = `<span id="saveBtnIcon">⚡</span> <span id="saveBtnText">Обновить карточку ${safeEscape(art)} на Ozon (Cmd + Enter)</span>`;
         }
         if (secBtns) secBtns.classList.remove('hidden');
 
@@ -709,7 +709,7 @@
         if (saveBtn) {
           saveBtn.disabled = false;
           saveBtn.className = 'w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-base shadow-xl shadow-emerald-600/25 transition flex items-center justify-center gap-2 cursor-pointer';
-          saveBtn.innerHTML = '<span id="saveBtnIcon">✨</span> <span id="saveBtnText">Записать новую книгу в таблицу Ozon (Cmd + Enter)</span>';
+          saveBtn.innerHTML = '<span id="saveBtnIcon">🚀</span> <span id="saveBtnText">Опубликовать новую книгу на Ozon (Cmd + Enter)</span>';
         }
         if (secBtns) secBtns.classList.add('hidden');
       }

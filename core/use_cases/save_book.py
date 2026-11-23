@@ -180,51 +180,31 @@ class SaveBookUseCase:
             except Exception as ast_err:
                 print(f"⚠️ [SaveBookUseCase] Ошибка архивации ассетов в SQLite: {ast_err}")
 
-        # 8. Синхронизация книги с официальной таблицей Excel Ozon (и для новых, и для обновляемых книг)
-        excel_result = sync_book_to_excel(book.to_dict())
+        # 8. Синхронизация книги с официальной таблицей Excel Ozon (как резервный оффлайн-экспорт)
+        excel_result = {}
+        try:
+            excel_result = sync_book_to_excel(book.to_dict())
+        except Exception as e_xl:
+            print(f"⚠️ [SaveBookUseCase] Ошибка синхронизации с Excel (возможно файл открыт): {e_xl}", flush=True)
+            excel_result = {"success": True, "excel_warning": str(e_xl)}
 
-        # 8.1. Выгрузка / обновление в Ozon Seller API (если подключено)
+        # 8.1. Умная публикация / обновление в Ozon Seller API (Smart Update)
         ozon_info = None
-        if is_edit:
-            # Обновление фото на Ozon через Seller API
-            if s3_main_url:
-                try:
-                    import services.ozon_service as ozon_service
-                    imgs = [u for u in (book.add_photo_urls or "").split() if u]
-                    ozon_service.update_ozon_product_pictures(book.article, s3_main_url, imgs)
-                except Exception as e_p:
-                    print(f"⚠️ [SaveBookUseCase] Ошибка update_ozon_product_pictures: {e_p}")
-
-            # Обновление атрибутов книги на Ozon
-            try:
-                import services.ozon_service as ozon_service
-                conn_status = ozon_service.check_ozon_connection()
-                if conn_status.get("connected"):
-                    ok_ozon, ozon_res = ozon_service.publish_product_to_ozon(book.to_dict())
-                    t_id = (ozon_res if isinstance(ozon_res, dict) else {}).get("task_id")
-                    ozon_info = {"published": ok_ozon, "task_id": t_id, "result": ozon_res}
-            except Exception as e_oz:
-                ozon_info = {"published": False, "error": str(e_oz)}
-        else:
-            try:
-                import services.ozon_service as ozon_service
-                conn_status = ozon_service.check_ozon_connection()
-                if conn_status.get("connected"):
-                    ok_ozon, ozon_res = ozon_service.publish_product_to_ozon(book.to_dict())
-                    if ok_ozon:
-                        t_id = (ozon_res if isinstance(ozon_res, dict) else {}).get("task_id")
-                        ozon_info = {
-                            "published": True,
-                            "task_id": t_id,
-                            "result": ozon_res,
-                        }
-                        print(f"🚀 [SaveBookUseCase] Карточка {book.article} успешно создана на Ozon (task_id: {t_id})")
-                    else:
-                        ozon_info = {"published": False, "error": str(ozon_res)}
-                        print(f"⚠️ [SaveBookUseCase] Ошибка создания карточки на Ozon: {ozon_res}")
-            except Exception as ozon_err:
-                ozon_info = {"published": False, "error": str(ozon_err)}
-                print(f"⚠️ [SaveBookUseCase] Сбой обращения к Ozon API: {ozon_err}")
+        try:
+            import services.ozon_service as ozon_service
+            ozon_info = ozon_service.smart_publish_or_update(book.to_dict())
+            if ozon_info.get("published"):
+                print(
+                    f"🚀 [SaveBookUseCase] Успешная выгрузка на Ozon "
+                    f"(действие: {ozon_info.get('action')}, task_id: {ozon_info.get('task_id')})",
+                    flush=True
+                )
+                # Сохраняем актуальный статус Ozon в базе данных catalog.db
+                book.status = "imported"
+                save_book_to_db(book.to_dict())
+        except Exception as ozon_err:
+            ozon_info = {"published": False, "error": str(ozon_err)}
+            print(f"⚠️ [SaveBookUseCase] Сбой обращения к Ozon API: {ozon_err}", flush=True)
 
         # 9. Авто-очистка временных файлов сессии с диска Mac (п. 6.2 спецификации)
         self._cleanup_temporary_session_photos(slots_photos)

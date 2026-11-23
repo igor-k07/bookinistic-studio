@@ -76,6 +76,7 @@ def build_router() -> Router:
 
     # --- Ozon Seller API & Smart Cloud Sync ---
     router.get("/api/ozon/status")(system_controller.ozon_status)
+    router.get("/api/ozon/task_status")(system_controller.ozon_task_status)
     router.get("/api/ozon/import_status")(system_controller.ozon_import_status)
     router.post("/api/ozon/save_keys")(system_controller.ozon_save_keys)
     router.post("/api/ozon/start_import")(system_controller.ozon_start_import)

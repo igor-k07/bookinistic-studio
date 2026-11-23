@@ -291,6 +291,22 @@ def ozon_import_status(ctx: RequestContext) -> Dict[str, Any]:
     return {"success": True, "status": st}
 
 
+def ozon_task_status(ctx: RequestContext) -> Dict[str, Any]:
+    """GET /api/ozon/task_status?task_id=...: Статус задачи обработки карточки на Ozon."""
+    task_id_raw = ctx.get_query("task_id", "").strip()
+    if not task_id_raw:
+        return {"success": False, "error": "Не передан task_id"}
+    try:
+        t_id = int(task_id_raw)
+    except ValueError:
+        return {"success": False, "error": "Некорректный task_id (ожидается число)"}
+
+    ok, res = ozon_service.get_import_task_info(t_id)
+    if ok:
+        return {"success": True, "result": res}
+    return {"success": False, "error": str(res)}
+
+
 def smart_s3_sync_start(ctx: RequestContext) -> Dict[str, Any]:
     """POST /api/sync/smart_s3: Запуск умной синхронизации Ozon -> S3 -> DB"""
     from services.sync_service import start_smart_s3_sync_async

@@ -971,7 +971,7 @@
     const btn = document.getElementById('saveBtn');
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<span>⏳</span> <span>Запись в Excel, Ozon и БД...</span>';
+      btn.innerHTML = '<span>⏳</span> <span>Публикация в Ozon, Vault и Excel...</span>';
     }
 
     const isbnVal = document.getElementById('isbn')?.value?.trim() || '';
@@ -1127,6 +1127,34 @@
         }
         if (typeof window.showToast === 'function') {
           window.showToast(`✅ Записано в <b>${targetFolder}/${fileName}</b> (строка ${result.row})${s3Badge}${ozonBadge}`);
+        }
+
+        // Асинхронная проверка статуса модерации Ozon без блокировки оператора
+        if (result.ozon_info && result.ozon_info.task_id) {
+          const taskId = result.ozon_info.task_id;
+          setTimeout(async () => {
+            try {
+              const taskRes = window.ApiClient
+                ? await window.ApiClient.getOzonTaskStatus(taskId)
+                : await fetch(`/api/ozon/task_status?task_id=${taskId}`).then(r => r.json());
+              if (taskRes && taskRes.success && taskRes.result) {
+                const items = taskRes.result.items || [];
+                const hasErrors = items.some(it => it.errors && it.errors.length > 0);
+                if (hasErrors) {
+                  const errList = items.flatMap(it => (it.errors || []).map(e => e.message || e.error || e)).join('; ');
+                  if (typeof window.showToast === 'function') {
+                    window.showToast(`⚠️ Ozon модерация: ${errList}`);
+                  }
+                } else if (items.length > 0) {
+                  if (typeof window.showToast === 'function') {
+                    window.showToast(`✅ Ozon: Товар ${result.article} успешно подтвержден модерацией!`);
+                  }
+                }
+              }
+            } catch (ePoll) {
+              console.warn('Ozon task poll error:', ePoll);
+            }
+          }, 3500);
         }
 
         if (book) {

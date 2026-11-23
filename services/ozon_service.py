@@ -436,47 +436,11 @@ def start_import_catalog_async() -> Dict[str, Any]:
     return {"success": True, "message": "Импорт запущен в фоновом режиме"}
 
 
-def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
+def _build_ozon_book_attributes(book: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Публикует (или обновляет) товар в Ozon Seller API через POST /v3/product/import.
-    Поддерживает прямую загрузку книги со всеми фотографиями из S3/CDN.
+    Формирует массив атрибутов категории 17028757 («Печатная книга») по спецификации Ozon Seller API.
     """
-    article = str(book.get("article", "")).strip()
-    if not article:
-        return False, "Не указан артикул товара (offer_id)"
-
-    title = str(book.get("title", "")).strip()
-    if not title:
-        return False, "Не указано название книги"
-
-    price = str(book.get("price", "350")).strip()
-    old_price = str(book.get("old_price", "")).strip() or str(round(float(price) * 1.4))
-
-    # Габариты упаковки (в мм) и вес (в граммах)
-    width = int(book.get("width_package") or book.get("width") or 140)
-    height = int(book.get("height_package") or book.get("height") or 22)
-    depth = int(book.get("length_package") or book.get("length") or 215)
-    weight = int(book.get("weight_package") or book.get("weight") or 330)
-
-    # Фотографии товара
-    main_photo = book.get("main_photo_url") or book.get("photo_main") or ""
-    additional_photos_raw = book.get("add_photo_urls") or book.get("photos_additional") or ""
-    if isinstance(additional_photos_raw, str):
-        add_photos = [p.strip() for p in additional_photos_raw.split() if p.strip()]
-    elif isinstance(additional_photos_raw, list):
-        add_photos = [str(p).strip() for p in additional_photos_raw if str(p).strip()]
-    else:
-        add_photos = []
-
-    all_images = []
-    if main_photo:
-        all_images.append(main_photo)
-    for p in add_photos:
-        if p and p != main_photo and p not in all_images:
-            all_images.append(p)
-
-    # Формируем атрибуты Ozon
-    attributes = []
+    attributes: List[Dict[str, Any]] = []
 
     def _add_attr(attr_id: int, val: Any):
         if val is not None and str(val).strip():
@@ -485,7 +449,7 @@ def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
                 "values": [{"value": str(val).strip()}]
             })
 
-    # Название и авторы
+    title = str(book.get("title", "")).strip()
     _add_attr(4180, title)
     author = book.get("author") or book.get("author_cover") or "не указан"
     _add_attr(105, author)
@@ -523,6 +487,50 @@ def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
     if book.get("dimensions"):
         _add_attr(4082, book.get("dimensions"))
 
+    return attributes
+
+
+def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
+    """
+    Публикует новый товар в Ozon Seller API через POST /v3/product/import.
+    Поддерживает прямую загрузку книги со всеми фотографиями из S3/CDN.
+    """
+    article = str(book.get("article", "")).strip()
+    if not article:
+        return False, "Не указан артикул товара (offer_id)"
+
+    title = str(book.get("title", "")).strip()
+    if not title:
+        return False, "Не указано название книги"
+
+    price = str(book.get("price", "350")).strip()
+    old_price = str(book.get("old_price", "")).strip() or str(round(float(price) * 1.4))
+
+    # Габариты упаковки (в мм) и вес (в граммах)
+    width = int(book.get("width_package") or book.get("width") or 140)
+    height = int(book.get("height_package") or book.get("height") or 22)
+    depth = int(book.get("length_package") or book.get("length") or 215)
+    weight = int(book.get("weight_package") or book.get("weight") or 330)
+
+    # Фотографии товара
+    main_photo = book.get("main_photo_url") or book.get("photo_main") or ""
+    additional_photos_raw = book.get("add_photo_urls") or book.get("photos_additional") or ""
+    if isinstance(additional_photos_raw, str):
+        add_photos = [p.strip() for p in additional_photos_raw.split() if p.strip()]
+    elif isinstance(additional_photos_raw, list):
+        add_photos = [str(p).strip() for p in additional_photos_raw if str(p).strip()]
+    else:
+        add_photos = []
+
+    all_images = []
+    if main_photo:
+        all_images.append(main_photo)
+    for p in add_photos:
+        if p and p != main_photo and p not in all_images:
+            all_images.append(p)
+
+    attributes = _build_ozon_book_attributes(book)
+
     item_payload = {
         "description_category_id": 17028757,  # Категория Ozon: Печатная книга
         "name": title,
@@ -544,6 +552,150 @@ def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
 
     payload = {"items": [item_payload]}
     return _make_ozon_request("/v3/product/import", payload)
+
+
+def check_product_exists(offer_id: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """
+    Проверяет, существует ли товар на Ozon по offer_id (артикулу) через POST /v2/product/info.
+    Возвращает (exists: bool, product_data: Optional[Dict]).
+    """
+    art = str(offer_id).strip()
+    if not art:
+        return False, None
+
+    ok, res = _make_ozon_request("/v2/product/info", {"offer_id": art})
+    if ok and isinstance(res, dict) and res.get("id"):
+        return True, res
+    return False, None
+
+
+def update_ozon_product_attributes(book: Dict[str, Any]) -> Tuple[bool, Any]:
+    """
+    Обновляет текстовые характеристики существующего товара на Ozon через POST /v1/product/attributes/update.
+    """
+    article = str(book.get("article", "")).strip()
+    if not article:
+        return False, "Не указан артикул товара"
+
+    attributes = _build_ozon_book_attributes(book)
+    payload = {
+        "items": [
+            {
+                "offer_id": article,
+                "attributes": attributes
+            }
+        ]
+    }
+    return _make_ozon_request("/v1/product/attributes/update", payload)
+
+
+def update_ozon_product_prices(offer_id: str, price: Any, old_price: Any = None) -> Tuple[bool, Any]:
+    """
+    Обновляет цены товара на Ozon через POST /v1/product/import/prices.
+    """
+    art = str(offer_id).strip()
+    p_str = str(price).strip()
+    op_str = str(old_price).strip() if old_price else str(round(float(p_str) * 1.4))
+
+    payload = {
+        "prices": [
+            {
+                "offer_id": art,
+                "price": p_str,
+                "old_price": op_str,
+                "auto_action_enabled": "UNKNOWN",
+            }
+        ]
+    }
+    return _make_ozon_request("/v1/product/import/prices", payload)
+
+
+def smart_publish_or_update(book: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Интеллектуальная публикация карточки книги на Ozon (Smart Update):
+    1. Проверяет наличие ключей Ozon API.
+    2. Автоматически определяет, существует ли товар с данным артикулом на Ozon.
+    3. Если товар СУЩЕСТВУЕТ:
+       - Обновляет атрибуты (/v1/product/attributes/update)
+       - Обновляет фотографии (/v2/product/pictures/import)
+       - Обновляет цены (/v1/product/import/prices)
+    4. Если товар НОВЫЙ:
+       - Создает товар целиком со всеми атрибутами и фото (/v3/product/import)
+    Возвращает унифицированный словарь результата с task_id для отслеживания.
+    """
+    article = str(book.get("article", "")).strip()
+    if not article:
+        return {"success": False, "error": "Не указан артикул книги"}
+
+    conn_status = check_ozon_connection()
+    if not conn_status.get("connected"):
+        return {
+            "success": False,
+            "skipped": True,
+            "error": "Ozon Seller API не настроен (Client-Id / Api-Key отсутствуют в настройках)",
+        }
+
+    # 1. Проверяем существование товара на Ozon
+    exists, existing_info = check_product_exists(article)
+
+    # 2. ВЕТКА ОБНОВЛЕНИЯ (Товар уже есть на Ozon)
+    if exists and existing_info:
+        product_id = existing_info.get("id")
+        attr_ok, attr_res = update_ozon_product_attributes(book)
+        attr_task_id = (attr_res if isinstance(attr_res, dict) else {}).get("task_id")
+
+        # Обновление фото, если ссылки переданы
+        main_photo = book.get("main_photo_url") or book.get("photo_main") or ""
+        add_photos = [u for u in (book.get("add_photo_urls") or "").split() if u]
+        pic_task_id = None
+        if main_photo:
+            pic_ok, pic_res = update_ozon_product_pictures(article, main_photo, add_photos)
+            if pic_ok and isinstance(pic_res, dict):
+                pic_task_id = pic_res.get("task_id")
+
+        # Обновление цен
+        if book.get("price"):
+            update_ozon_product_prices(article, book.get("price"), book.get("old_price"))
+
+        primary_task_id = attr_task_id or pic_task_id
+        return {
+            "success": attr_ok,
+            "action": "updated",
+            "published": attr_ok,
+            "task_id": primary_task_id,
+            "product_id": product_id,
+            "result": attr_res,
+            "message": f"Карточка {article} успешно обновлена на Ozon (task_id: {primary_task_id})",
+        }
+
+    # 3. ВЕТКА СОЗДАНИЯ (Новый товар на Ozon)
+    imp_ok, imp_res = publish_product_to_ozon(book)
+    t_id = (imp_res if isinstance(imp_res, dict) else {}).get("task_id")
+    if imp_ok:
+        return {
+            "success": True,
+            "action": "imported",
+            "published": True,
+            "task_id": t_id,
+            "result": imp_res,
+            "message": f"Новая карточка {article} успешно отправлена на создание в Ozon (task_id: {t_id})",
+        }
+    else:
+        return {
+            "success": False,
+            "action": "imported",
+            "published": False,
+            "error": str(imp_res),
+            "result": imp_res,
+        }
+
+
+def get_import_task_info(task_id: int) -> Tuple[bool, Any]:
+    """
+    Проверка статуса обработки асинхронной задачи импорта/обновления товара (POST /v1/product/import/info).
+    Возвращает статус модерации Ozon и подробные ошибки, если они есть.
+    """
+    return _make_ozon_request("/v1/product/import/info", {"task_id": int(task_id)})
 
 
 def update_ozon_product_pictures(
