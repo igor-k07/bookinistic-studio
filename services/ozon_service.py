@@ -436,9 +436,49 @@ def start_import_catalog_async() -> Dict[str, Any]:
     return {"success": True, "message": "Импорт запущен в фоновом режиме"}
 
 
+# Словарь сопоставления жанров книги со справочником Ozon API (атрибут 23273: «Направление»)
+OZON_GENRE_MAP = {
+    "проза": (972842193, "Проза"),
+    "поэзия": (972842191, "Поэзия"),
+    "стихи": (972842191, "Поэзия"),
+    "фантастика": (972842200, "Фантастика"),
+    "фэнтези": (972842203, "Фэнтези"),
+    "детектив": (972841922, "Детектив"),
+    "приключения": (972842192, "Приключения"),
+    "история": (972842216, "История"),
+    "биография": (972845201, "Биография"),
+    "мемуары": (972845202, "Мемуары"),
+    "биографии и мемуары": (972845201, "Биография"),
+    "искусство и культура": (972842218, "Искусство и культура"),
+    "искусство": (972842218, "Искусство и культура"),
+    "научная и научно-популярная литература": (972842189, "Научная и научно-популярная литература"),
+    "наука": (972842189, "Научная и научно-популярная литература"),
+    "научно-популярное": (972842189, "Научная и научно-популярная литература"),
+    "драматургия": (972841924, "Драматургия"),
+    "публицистика": (972842196, "Публицистика"),
+    "триллер": (972845207, "Триллер"),
+    "мистика": (972845208, "Мистика"),
+    "ужасы": (972842199, "Ужасы"),
+    "эпос и фольклор": (972842202, "Эпос и фольклор"),
+    "сказки": (972850201, "Дошкольное развитие детей"),
+    "детская": (972850201, "Дошкольное развитие детей"),
+    "детская литература": (972850201, "Дошкольное развитие детей"),
+    "юриспруденция": (972842211, "Право и юриспруденция"),
+    "медицина": (972842219, "Медицина"),
+    "философия": (972842225, "Эзотерика и духовные практики"),
+    "религия": (972842224, "Религия"),
+    "словарь": (972863583, "Словарь"),
+    "энциклопедия": (972842209, "Энциклопедия, справочник"),
+    "кулинария": (972849921, "Кулинария"),
+    "дом и сад": (972863367, "Дом и сад"),
+    "спорт": (972845200, "Спорт"),
+    "военное дело": (972863574, "Военное дело"),
+}
+
+
 def _build_ozon_book_attributes(book: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Формирует массив атрибутов категории 17028757 («Печатная книга») по спецификации Ozon Seller API.
+    Формирует массив атрибутов категории «Печатная книга» по спецификации Ozon Seller API.
     """
     attributes: List[Dict[str, Any]] = []
 
@@ -449,6 +489,36 @@ def _build_ozon_book_attributes(book: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "values": [{"value": str(val).strip()}]
             })
 
+    # 1. Обязательные системные атрибуты Ozon: Тип книги и код ТН ВЭД ЕАЭС
+    attributes.append({
+        "id": 8229,
+        "values": [{"dictionary_value_id": 971445087, "value": "Печатная книга"}]
+    })
+    attributes.append({
+        "id": 22232,
+        "values": [{"dictionary_value_id": 971398243, "value": "4901990000 - Прочие книги, брошюры, листовки, аналогичные печатные издания, сброшюрованные"}]
+    })
+
+    # 2. Обязательный атрибут 23273: Направление (жанр книги из справочника Ozon)
+    genre_raw = str(book.get("genre") or "").strip().lower()
+    genre_entry = OZON_GENRE_MAP.get(genre_raw)
+    if genre_entry:
+        attributes.append({
+            "id": 23273,
+            "values": [{"dictionary_value_id": genre_entry[0], "value": genre_entry[1]}]
+        })
+    elif book.get("genre"):
+        attributes.append({
+            "id": 23273,
+            "values": [{"value": str(book.get("genre")).strip()}]
+        })
+    else:
+        attributes.append({
+            "id": 23273,
+            "values": [{"dictionary_value_id": 972842193, "value": "Проза"}]
+        })
+
+    # 3. Название и авторы
     title = str(book.get("title", "")).strip()
     _add_attr(4180, title)
     author = book.get("author") or book.get("author_cover") or "не указан"
@@ -457,15 +527,16 @@ def _build_ozon_book_attributes(book: Dict[str, Any]) -> List[Dict[str, Any]]:
     if book.get("original_title"):
         _add_attr(4183, book.get("original_title"))
 
-    # Издательство, бренд, серия
+    # 4. Издательство, бренд, серия
+    brand_val = book.get("brand") or book.get("publisher") or "Советский писатель"
+    if brand_val and brand_val != "Нет бренда":
+        _add_attr(85, brand_val)
     if book.get("publisher"):
-        _add_attr(85, book.get("publisher"))
-    if book.get("brand") and book.get("brand") != "Нет бренда":
-        _add_attr(85, book.get("brand"))
+        _add_attr(7, book.get("publisher"))
     if book.get("series"):
         _add_attr(1, book.get("series"))
 
-    # Характеристики издания
+    # 5. Характеристики издания
     if book.get("year"):
         _add_attr(4081, book.get("year"))
     if book.get("pages"):
@@ -476,10 +547,8 @@ def _build_ozon_book_attributes(book: Dict[str, Any]) -> List[Dict[str, Any]]:
         _add_attr(9356, book.get("cover_type"))
     if book.get("condition"):
         _add_attr(8857, book.get("condition"))
-    if book.get("genre"):
-        _add_attr(23273, book.get("genre"))
-    if book.get("annotation"):
-        _add_attr(4191, book.get("annotation"))
+    if book.get("annotation") or book.get("description"):
+        _add_attr(4191, book.get("annotation") or book.get("description"))
     if book.get("age_limit"):
         _add_attr(8862, book.get("age_limit"))
     if book.get("translator"):
@@ -505,6 +574,20 @@ def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
 
     price = str(book.get("price", "350")).strip()
     old_price = str(book.get("old_price", "")).strip() or str(round(float(price) * 1.4))
+
+    # Определение категории Ozon в зависимости от года выпуска книги
+    year_val = 0
+    try:
+        year_val = int(book.get("year") or 0)
+    except (ValueError, TypeError):
+        year_val = 0
+
+    if 0 < year_val <= 1941:
+        desc_cat_id = 200001486  # Антикварные издания (до 1941 г.)
+    elif 1942 <= year_val <= 2010:
+        desc_cat_id = 200001485  # Букинистические издания (1942-2010 гг.)
+    else:
+        desc_cat_id = 200001483  # Современные печатные издания (с 2011 г.)
 
     # Габариты упаковки (в мм) и вес (в граммах)
     width = int(book.get("width_package") or book.get("width") or 140)
@@ -532,13 +615,14 @@ def publish_product_to_ozon(book: Dict[str, Any]) -> Tuple[bool, Any]:
     attributes = _build_ozon_book_attributes(book)
 
     item_payload = {
-        "description_category_id": 17028757,  # Категория Ozon: Печатная книга
+        "description_category_id": desc_cat_id,
+        "type_id": 971445087,  # Тип товара Ozon: Печатная книга
         "name": title,
         "offer_id": article,
         "barcode": str(book.get("barcode", "")).strip(),
         "price": str(price),
         "old_price": str(old_price),
-        "vat": "0.1",
+        "vat": "0",  # Не облагается НДС
         "dimension_unit": "mm",
         "weight_unit": "g",
         "width": width,
