@@ -12,7 +12,7 @@ import tempfile
 import threading
 from typing import Any, Dict, List, Optional
 
-from config import DB_PATH, READY_TABLES_DIR
+from config import DB_PATH, READY_TABLES_DIR, get_db_path, get_active_store_id
 from core.constants import normalize_genre
 from core.domain.rules import (
     calculate_book_condition,
@@ -22,19 +22,22 @@ from core.domain.rules import (
 )
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Возвращает соединение с базой данных SQLite в режиме WAL."""
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+def get_db_connection(store_id: Optional[str] = None) -> sqlite3.Connection:
+    """Возвращает соединение с базой данных SQLite активного (или указанного) магазина в режиме WAL."""
+    db_file = get_db_path(store_id)
+    os.makedirs(os.path.dirname(db_file), exist_ok=True)
+    conn = sqlite3.connect(db_file, timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
 
-def init_db():
-    """Инициализирует структуру таблиц и индексов в базе данных."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    with get_db_connection() as conn:
+def init_db(store_id: Optional[str] = None):
+    """Инициализирует структуру таблиц и индексов в базе данных магазина."""
+    db_file = get_db_path(store_id)
+    os.makedirs(os.path.dirname(db_file), exist_ok=True)
+    with get_db_connection(store_id) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS books (
                 article         TEXT PRIMARY KEY,
@@ -250,11 +253,11 @@ def save_book_to_db(book: Dict[str, Any], sync_s3: bool = True) -> Dict[str, Any
     return book
 
 
-def get_book_from_db(article: str) -> Optional[Dict[str, Any]]:
-    """Возвращает полный словарь книги по её артикулу."""
-    init_db()
+def get_book_from_db(article: str, store_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Возвращает полный словарь книги по её артикулу из базы данных магазина."""
+    init_db(store_id)
     target_art = str(article or "").strip()
-    with get_db_connection() as conn:
+    with get_db_connection(store_id) as conn:
         row = conn.execute("SELECT * FROM books WHERE article = ? COLLATE NOCASE", (target_art,)).fetchone()
         if not row:
             return None
@@ -277,11 +280,11 @@ def get_book_from_db(article: str) -> Optional[Dict[str, Any]]:
 get_book_by_article = get_book_from_db
 
 
-def delete_book_from_db(article: str) -> bool:
+def delete_book_from_db(article: str, store_id: Optional[str] = None) -> bool:
     """Удаляет книгу из базы данных по её артикулу."""
-    init_db()
+    init_db(store_id)
     target_art = str(article or "").strip()
-    with get_db_connection() as conn:
+    with get_db_connection(store_id) as conn:
         cursor = conn.execute("DELETE FROM books WHERE article = ? COLLATE NOCASE", (target_art,))
         conn.commit()
         if cursor.rowcount > 0:
@@ -292,12 +295,13 @@ def delete_book_from_db(article: str) -> bool:
 def get_all_books_from_db(
     mode: Optional[str] = None,
     status: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    store_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Возвращает список книг из базы данных с опциональной фильтрацией по режиму Ozon, статусу и поиску.
+    Возвращает список книг из базы данных магазина с опциональной фильтрацией по режиму Ozon, статусу и поиску.
     """
-    init_db()
+    init_db(store_id)
     query = "SELECT * FROM books WHERE 1=1"
     params = []
 
@@ -317,7 +321,7 @@ def get_all_books_from_db(
     query += " ORDER BY article ASC"
 
     result = []
-    with get_db_connection() as conn:
+    with get_db_connection(store_id) as conn:
         rows = conn.execute(query, params).fetchall()
         for idx, row in enumerate(rows, 1):
             try:
@@ -409,24 +413,28 @@ def check_article_exists(article: str, check_ozon: bool = True) -> Dict[str, Any
     }
 
 
-def get_next_article_number(verify_ozon: bool = False) -> str:
+def get_next_article_number(verify_ozon: bool = False, store_id: Optional[str] = None) -> str:
     """
     Определяет следующий свободный номер артикула (DP-B-xxxxx) на основе всех книг в базе
-    и существующих архивов в books_vault, с возможностью гарантированной проверки на Ozon.
+    и существующих архивов в books_vault активного магазина, с возможностью гарантированной проверки на Ozon.
     """
-    init_db()
-    max_num = 2600
+    from config import get_active_store_id, get_vault_dir, VAULT_DIR
+    s_id = str(store_id or get_active_store_id()).strip()
+    init_db(s_id)
+    # Для основного магазина («Другой Петербург» 870997) базовый порог 2600.
+    # Для тестового магазина (2727930) или других магазинов базовый порог 0.
+    base_floor = 2600 if s_id in ("870997", "primary") else 0
+    max_num = base_floor
 
-    # 1. Проверяем записи в базе данных
+    # 1. Проверяем записи в базе данных активного магазина
     try:
-        with get_db_connection() as conn:
+        with get_db_connection(s_id) as conn:
             rows = conn.execute("SELECT article FROM books").fetchall()
             for r in rows:
                 art = str(r["article"] or "").strip()
                 digits = re.findall(r"\d+", art)
                 if digits:
                     val = int(digits[-1])
-                    # Защита от опечаток с лишними нулями в Ozon вроде DP-B-025013 вместо 02513
                     if val > 10000:
                         continue
                     if val > max_num:
@@ -434,9 +442,23 @@ def get_next_article_number(verify_ozon: bool = False) -> str:
     except Exception:
         pass
 
-    # 2. Проверяем локальные папки в storage/books_vault
-    from config import VAULT_DIR
-    if os.path.exists(VAULT_DIR):
+    # 2. Проверяем локальные папки в books_vault активного магазина
+    v_dir = get_vault_dir(s_id)
+    if os.path.exists(v_dir):
+        for fname in os.listdir(v_dir):
+            if fname.startswith("DP-B-"):
+                digits = re.findall(r"\d+", fname)
+                if digits:
+                    try:
+                        val = int(digits[0])
+                        if val > 10000:
+                            continue
+                        if val > max_num:
+                            max_num = val
+                    except Exception:
+                        pass
+
+    if s_id in ("870997", "primary") and os.path.exists(VAULT_DIR) and VAULT_DIR != v_dir:
         for fname in os.listdir(VAULT_DIR):
             if fname.startswith("DP-B-"):
                 digits = re.findall(r"\d+", fname)
@@ -549,7 +571,8 @@ def backup_db_to_s3() -> Dict[str, Any]:
         _last_s3_sync["status"] = "skipped_no_s3"
         return {"ok": False, "error": "S3 not configured"}
 
-    if not os.path.exists(DB_PATH):
+    cur_db = get_db_path()
+    if not os.path.exists(cur_db):
         return {"ok": False, "error": "Database file does not exist"}
 
     with _sync_lock:
@@ -559,7 +582,7 @@ def backup_db_to_s3() -> Dict[str, Any]:
 
         try:
             # Атомарный безопасный снимок без блокировки чтения и записи
-            with sqlite3.connect(DB_PATH) as src, sqlite3.connect(tmp_path) as dst:
+            with sqlite3.connect(cur_db) as src, sqlite3.connect(tmp_path) as dst:
                 src.backup(dst)
 
             with open(tmp_path, "rb") as f:
@@ -627,14 +650,15 @@ def restore_db_from_s3() -> Dict[str, Any]:
         return {"ok": False, "error": "S3 not configured"}
 
     latest_key = "backups/db/catalog_latest.db"
+    cur_db = get_db_path()
     try:
         response = client.get_object(Bucket=bucket, Key=latest_key)
         content = response["Body"].read()
 
-        if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
-            shutil.copyfile(DB_PATH, DB_PATH + ".bak")
+        if os.path.exists(cur_db) and os.path.getsize(cur_db) > 0:
+            shutil.copyfile(cur_db, cur_db + ".bak")
 
-        with open(DB_PATH, "wb") as f:
+        with open(cur_db, "wb") as f:
             f.write(content)
 
         print(f"📥 [DB:S3] База данных успешно восстановлена из S3 ({len(content)} байт)")

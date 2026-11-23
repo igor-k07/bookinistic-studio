@@ -24,7 +24,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from config import DB_PATH
+from config import DB_PATH, get_db_path
 from core.domain.rules import (
     SLOT_CARD,
     SLOT_COVER_BACK,
@@ -270,7 +270,7 @@ def run_smart_ozon_s3_sync(
 
             prod_items = get_all_ozon_product_ids(visibility="ALL")
             if prod_items:
-                conn = sqlite3.connect(DB_PATH)
+                conn = sqlite3.connect(get_db_path())
                 cursor = conn.cursor()
                 cursor.execute("SELECT article FROM books")
                 existing_articles = set(r[0] for r in cursor.fetchall())
@@ -290,7 +290,7 @@ def run_smart_ozon_s3_sync(
                         attrs = get_products_attributes_batch(product_ids=p_ids, offer_ids=offer_ids)
                         attr_by_art = {item.get("offer_id"): item for item in attrs}
 
-                        conn = sqlite3.connect(DB_PATH)
+                        conn = sqlite3.connect(get_db_path())
                         cur = conn.cursor()
                         for art in offer_ids:
                             it_info = info_by_art.get(art) or {}
@@ -325,7 +325,7 @@ def run_smart_ozon_s3_sync(
         if not s3_client or not bucket:
             raise RuntimeError("Yandex S3 не настроен или учетные данные недействительны")
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(get_db_path())
         cursor = conn.cursor()
         cursor.execute("SELECT article, title, data FROM books")
         rows = cursor.fetchall()
@@ -356,7 +356,7 @@ def run_smart_ozon_s3_sync(
             def _flush_batch_to_db(batch):
                 if not batch:
                     return
-                c = sqlite3.connect(DB_PATH)
+                c = sqlite3.connect(get_db_path())
                 cur = c.cursor()
                 for item in batch:
                     cur.execute("""

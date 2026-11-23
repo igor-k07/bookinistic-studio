@@ -207,14 +207,17 @@ def open_guide(ctx: RequestContext) -> Dict[str, Any]:
 
 def open_ready_folder(ctx: RequestContext) -> Dict[str, Any]:
     """GET /api/open_ready_folder"""
+    from config import get_ready_tables_dir
+    base_folder = get_ready_tables_dir()
     mode = ctx.get_query("mode")
     if mode == "pre2011":
-        folder_to_open = READY_TABLES_PRE2011_DIR
+        folder_to_open = os.path.join(base_folder, "1942-2010") if base_folder != READY_TABLES_DIR else READY_TABLES_PRE2011_DIR
     elif mode in ("post2011", "post"):
-        folder_to_open = READY_TABLES_POST2011_DIR
+        folder_to_open = os.path.join(base_folder, "с_2011") if base_folder != READY_TABLES_DIR else READY_TABLES_POST2011_DIR
     else:
-        folder_to_open = READY_TABLES_DIR
+        folder_to_open = base_folder
 
+    os.makedirs(folder_to_open, exist_ok=True)
     subprocess.Popen(["open", folder_to_open])
     return {
         "success": True,
@@ -275,15 +278,25 @@ def ozon_status(ctx: RequestContext) -> Dict[str, Any]:
 
 def ozon_switch_profile(ctx: RequestContext) -> Dict[str, Any]:
     """POST /api/ozon/switch_profile: Переключение между основным и тестовым магазинами Ozon."""
-    from config import switch_ozon_profile
+    from config import switch_ozon_profile, get_active_store_id
+    from services.db_service import init_db, get_next_article_number
     body = ctx.get_json()
     prof_key = (body.get("profile") or "").strip().lower()
     if not prof_key:
         return {"success": False, "error": "Не указан профиль магазина (primary/test)"}
     ok = switch_ozon_profile(prof_key)
     if ok:
+        s_id = get_active_store_id()
+        init_db(s_id)
         conn = ozon_service.check_ozon_connection()
-        return {"success": True, "active_profile": prof_key, "connection": conn}
+        next_art = get_next_article_number()
+        return {
+            "success": True,
+            "active_profile": prof_key,
+            "client_id": s_id,
+            "connection": conn,
+            "next_article": next_art,
+        }
     return {"success": False, "error": f"Профиль магазина '{prof_key}' не найден"}
 
 

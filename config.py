@@ -75,46 +75,6 @@ def load_dotenv() -> None:
 load_dotenv()
 
 
-def get_target_excel_file(mode: str) -> str:
-    """
-    Возвращает актуальный путь к готовой таблице за сегодняшнюю дату.
-    Книги 1942-2010 сохраняются в папке ready_tables/1942-2010/.
-    Книги с 2011 сохраняются в папке ready_tables/с_2011/.
-    Если файла за сегодня ещё нет, инициализирует его из чистого шаблона Ozon.
-    """
-    today_str = datetime.now().strftime("%d.%m.%Y")
-    if mode == "pre2011":
-        folder = READY_TABLES_PRE2011_DIR
-        os.makedirs(folder, exist_ok=True)
-        filename = f"{today_str}_Печатная книга_до_2011.xlsx"
-        target_path = os.path.join(folder, filename)
-
-        # Проверяем миграцию: если файл остался в корне ready_tables/, переносим
-        old_root_path = os.path.join(READY_TABLES_DIR, filename)
-        if os.path.exists(old_root_path) and not os.path.exists(target_path):
-            shutil.move(old_root_path, target_path)
-
-        if not os.path.exists(target_path):
-            if os.path.exists(BACKUP_FILE_PRE2011) and os.path.getsize(BACKUP_FILE_PRE2011) > 0:
-                shutil.copyfile(BACKUP_FILE_PRE2011, target_path)
-        return target_path
-    else:
-        folder = READY_TABLES_POST2011_DIR
-        os.makedirs(folder, exist_ok=True)
-        filename = f"{today_str}_Печатная книга_после_2011.xlsx"
-        target_path = os.path.join(folder, filename)
-
-        # Проверяем миграцию: если файл остался в корне ready_tables/, переносим
-        old_root_path = os.path.join(READY_TABLES_DIR, filename)
-        if os.path.exists(old_root_path) and not os.path.exists(target_path):
-            shutil.move(old_root_path, target_path)
-
-        if not os.path.exists(target_path):
-            if os.path.exists(BACKUP_FILE_POST2011) and os.path.getsize(BACKUP_FILE_POST2011) > 0:
-                shutil.copyfile(BACKUP_FILE_POST2011, target_path)
-        return target_path
-
-
 def get_card_image_path() -> Optional[str]:
     """Возвращает актуальный путь к файлу постоянной инфо-карточки card.png"""
     candidates = [
@@ -246,6 +206,114 @@ def save_ozon_config(client_id: str, api_key: str, profile_name: Optional[str] =
         pass
 
 
+def get_active_store_id() -> str:
+    """Возвращает идентификатор (client_id) текущего активного магазина Ozon."""
+    cfg = get_ozon_config()
+    if cfg and cfg.get("client_id"):
+        return str(cfg.get("client_id")).strip()
+    return "870997"
+
+
+def get_store_dir(store_id: Optional[str] = None) -> str:
+    """Возвращает изолированную директорию хранилища для указанного магазина."""
+    s_id = str(store_id or get_active_store_id()).strip()
+    d = os.path.join(BASE_DIR, "storage", "stores", s_id)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def get_db_path(store_id: Optional[str] = None) -> str:
+    """
+    Возвращает путь к базе данных catalog.db для указанного (или активного) магазина.
+    Для основного магазина (870997) сохраняет совместимость с storage/catalog.db.
+    Для тестового магазина (2727930) использует storage/stores/2727930/catalog.db.
+    """
+    s_id = str(store_id or get_active_store_id()).strip()
+    store_dir = get_store_dir(s_id)
+    store_db = os.path.join(store_dir, "catalog.db")
+
+    if s_id in ("870997", "primary"):
+        legacy_db = os.path.join(BASE_DIR, "storage", "catalog.db")
+        if not os.path.exists(store_db) and os.path.exists(legacy_db):
+            try:
+                os.link(legacy_db, store_db)
+            except Exception:
+                shutil.copy2(legacy_db, store_db)
+        return store_db if os.path.exists(store_db) else legacy_db
+
+    return store_db
+
+
+def get_vault_dir(store_id: Optional[str] = None) -> str:
+    """Возвращает путь к архиву книг books_vault для магазина."""
+    s_id = str(store_id or get_active_store_id()).strip()
+    if s_id in ("870997", "primary"):
+        return os.path.join(BASE_DIR, "storage", "books_vault")
+    store_dir = get_store_dir(s_id)
+    v_dir = os.path.join(store_dir, "books_vault")
+    os.makedirs(v_dir, exist_ok=True)
+    return v_dir
+
+
+def get_draft_file_path(store_id: Optional[str] = None) -> str:
+    """Возвращает путь к файлу черновика сессии для магазина."""
+    s_id = str(store_id or get_active_store_id()).strip()
+    if s_id in ("870997", "primary"):
+        return os.path.join(BASE_DIR, "storage", "session_draft.json")
+    return os.path.join(get_store_dir(s_id), "session_draft.json")
+
+
+def get_ready_tables_dir(store_id: Optional[str] = None) -> str:
+    """Возвращает корневую папку готовых таблиц Excel для магазина."""
+    s_id = str(store_id or get_active_store_id()).strip()
+    if s_id in ("870997", "primary"):
+        return READY_TABLES_DIR
+    p = os.path.join(READY_TABLES_DIR, "stores", s_id)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
+def get_target_excel_file(mode: str, store_id: Optional[str] = None) -> str:
+    """
+    Возвращает актуальный путь к готовой таблице за сегодняшнюю дату.
+    Книги 1942-2010 сохраняются в папке 1942-2010/.
+    Книги с 2011 сохраняются в папке с_2011/.
+    Если файла за сегодня ещё нет, инициализирует его из чистого шаблона Ozon.
+    """
+    base_folder = get_ready_tables_dir(store_id)
+    today_str = datetime.now().strftime("%d.%m.%Y")
+    if mode == "pre2011":
+        folder = os.path.join(base_folder, "1942-2010") if base_folder != READY_TABLES_DIR else READY_TABLES_PRE2011_DIR
+        os.makedirs(folder, exist_ok=True)
+        filename = f"{today_str}_Печатная книга_до_2011.xlsx"
+        target_path = os.path.join(folder, filename)
+
+        if base_folder == READY_TABLES_DIR:
+            old_root_path = os.path.join(READY_TABLES_DIR, filename)
+            if os.path.exists(old_root_path) and not os.path.exists(target_path):
+                shutil.move(old_root_path, target_path)
+
+        if not os.path.exists(target_path):
+            if os.path.exists(BACKUP_FILE_PRE2011) and os.path.getsize(BACKUP_FILE_PRE2011) > 0:
+                shutil.copyfile(BACKUP_FILE_PRE2011, target_path)
+        return target_path
+    else:
+        folder = os.path.join(base_folder, "с_2011") if base_folder != READY_TABLES_DIR else READY_TABLES_POST2011_DIR
+        os.makedirs(folder, exist_ok=True)
+        filename = f"{today_str}_Печатная книга_после_2011.xlsx"
+        target_path = os.path.join(folder, filename)
+
+        if base_folder == READY_TABLES_DIR:
+            old_root_path = os.path.join(READY_TABLES_DIR, filename)
+            if os.path.exists(old_root_path) and not os.path.exists(target_path):
+                shutil.move(old_root_path, target_path)
+
+        if not os.path.exists(target_path):
+            if os.path.exists(BACKUP_FILE_POST2011) and os.path.getsize(BACKUP_FILE_POST2011) > 0:
+                shutil.copyfile(BACKUP_FILE_POST2011, target_path)
+        return target_path
+
+
 def get_ozon_profiles() -> dict:
     """Возвращает список сохраненных профилей магазинов Ozon и текущий активный профиль."""
     import json
@@ -293,8 +361,20 @@ def switch_ozon_profile(profile_key: str) -> bool:
         api_key = p_data.get("api_key")
         if client_id and api_key:
             save_ozon_config(client_id, api_key, profile_name=profile_key)
+            update_active_store_paths()
             return True
     return False
+
+
+def update_active_store_paths():
+    global DB_PATH, VAULT_DIR, DRAFT_FILE
+    DB_PATH = get_db_path()
+    VAULT_DIR = get_vault_dir()
+    DRAFT_FILE = get_draft_file_path()
+
+
+# Инициализируем пути под текущий активный магазин
+update_active_store_paths()
 
 
 

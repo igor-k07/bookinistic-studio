@@ -32,6 +32,8 @@ cloudflared
 *.db-wal
 catalog.db
 storage/catalog.db*
+storage/stores/*
+!storage/stores/.gitkeep
 storage/backups/
 storage/archive/
 *.bak

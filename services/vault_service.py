@@ -15,7 +15,17 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-from config import BASE_DIR, DRAFT_FILE, INBOX_DIR, SESSION_PHOTOS_DIR, VAULT_DIR, get_card_image_path
+from config import (
+    BASE_DIR,
+    DRAFT_FILE,
+    INBOX_DIR,
+    SESSION_PHOTOS_DIR,
+    VAULT_DIR,
+    get_card_image_path,
+    get_vault_dir,
+    get_draft_file_path,
+    get_active_store_id,
+)
 from core.domain.rules import (
     SLOT_CARD,
     SLOT_COVER_BACK,
@@ -128,15 +138,21 @@ def resolve_photo_bytes(photo_obj_or_data: Any) -> Optional[bytes]:
         if not raw_bytes and (clean_val.startswith("/") or clean_val.startswith("storage/")):
             clean_rel = clean_val.lstrip("/")
             clean_unquoted = urllib.parse.unquote(clean_rel)
+            active_v = get_vault_dir()
+            clean_sub = clean_unquoted.replace("vault/", "", 1) if clean_unquoted.startswith("vault/") else clean_unquoted
             candidates = [
+                os.path.join(active_v, clean_sub),
+                os.path.join(VAULT_DIR, clean_sub),
+                os.path.join(BASE_DIR, "storage", "books_vault", clean_sub),
                 os.path.join(BASE_DIR, clean_unquoted),
                 os.path.join(BASE_DIR, "storage", clean_unquoted),
                 os.path.join(SESSION_PHOTOS_DIR, os.path.basename(clean_unquoted)),
                 os.path.join(INBOX_DIR, os.path.basename(clean_unquoted)),
-                os.path.join(VAULT_DIR, clean_unquoted.replace("vault/", "", 1) if clean_unquoted.startswith("vault/") else clean_unquoted),
                 os.path.join(BASE_DIR, clean_rel),
                 os.path.join(BASE_DIR, "storage", clean_rel),
+                os.path.join(active_v, clean_rel.replace("vault/", "", 1) if clean_rel.startswith("vault/") else clean_rel),
                 os.path.join(VAULT_DIR, clean_rel.replace("vault/", "", 1) if clean_rel.startswith("vault/") else clean_rel),
+                os.path.join(BASE_DIR, "storage", "books_vault", clean_rel.replace("vault/", "", 1) if clean_rel.startswith("vault/") else clean_rel),
             ]
             for cand in candidates:
                 if os.path.exists(cand) and os.path.isfile(cand):
@@ -228,10 +244,11 @@ def save_book_vault_photos(
     title: str,
     slots_photos: Optional[Dict[str, Any]]
 ) -> Tuple[str, List[str]]:
-    """Сохраняет обработанные фото книги в архив storage/books_vault/{article}_{clean_title}/"""
+    """Сохраняет обработанные фото книги в архив хранилища активного магазина books_vault/{article}_{clean_title}/"""
     clean_title = re.sub(r"[^\w\s-]", "", title or "book").strip().replace(" ", "_")[:40]
     folder_name = f"{article}_{clean_title}".strip("_")
-    book_dir = os.path.join(VAULT_DIR, folder_name)
+    active_vault = get_vault_dir()
+    book_dir = os.path.join(active_vault, folder_name)
     os.makedirs(book_dir, exist_ok=True)
 
     if not slots_photos and not get_card_image_path():
@@ -537,20 +554,23 @@ def save_session_draft_file(draft_data: Dict[str, Any]) -> Dict[str, Dict[str, s
             else:
                 slots[s] = []
 
-    # 3. Атомарно сохраняем ультра-компактный JSON на диск
-    temp_draft = DRAFT_FILE + ".tmp"
+    # 3. Атомарно сохраняем ультра-компактный JSON на диск для активного магазина
+    draft_file = get_draft_file_path()
+    os.makedirs(os.path.dirname(draft_file), exist_ok=True)
+    temp_draft = draft_file + ".tmp"
     with open(temp_draft, "w", encoding="utf-8") as f:
         json.dump(draft_data, f, ensure_ascii=False, indent=2)
-    os.replace(temp_draft, DRAFT_FILE)
+    os.replace(temp_draft, draft_file)
 
     return updated_urls
 
 
 def clear_session_draft_storage():
-    """Удаляет файл черновика и очищает временные фотографии сессии и неразобранного инбокса."""
-    if os.path.exists(DRAFT_FILE):
+    """Удаляет файл черновика активного магазина и очищает временные фотографии сессии и неразобранного инбокса."""
+    draft_file = get_draft_file_path()
+    if os.path.exists(draft_file):
         try:
-            os.remove(DRAFT_FILE)
+            os.remove(draft_file)
         except Exception:
             pass
     if os.path.exists(SESSION_PHOTOS_DIR):
@@ -579,29 +599,45 @@ def clear_session_draft_storage():
 
 def reopen_book_from_vault(article: str) -> Optional[Dict[str, Any]]:
     """
-    Восстанавливает сохраненную книгу из storage/books_vault/<article>_* обратно в активную сессию:
-    - Считывает book_state.json или запись из catalog.db
+    Восстанавливает сохраненную книгу из хранилища активного магазина обратно в активную сессию:
+    - Считывает book_state.json или запись из catalog.db активного магазина
     - Восстанавливает слоты с URL к файлам vault и живыми рамками кропа
     - Возвращает структуру книги для отображения в студии
     """
-    if not article or not os.path.exists(VAULT_DIR):
+    if not article:
         return None
 
     clean_art = article.strip()
+    s_id = get_active_store_id()
+    active_vault = get_vault_dir(s_id)
+
     target_dir = None
     folder_name = None
 
-    for d in os.listdir(VAULT_DIR):
-        if d == clean_art or d.startswith(f"{clean_art}_"):
-            candidate = os.path.join(VAULT_DIR, d)
-            if os.path.isdir(candidate):
-                target_dir = candidate
-                folder_name = d
-                break
+    # Ищем в vault активного магазина
+    if os.path.exists(active_vault):
+        for d in os.listdir(active_vault):
+            if d == clean_art or d.startswith(f"{clean_art}_"):
+                candidate = os.path.join(active_vault, d)
+                if os.path.isdir(candidate):
+                    target_dir = candidate
+                    folder_name = d
+                    break
+
+    # Для основного магазина проверяем также исторический общий каталог
+    if not target_dir and s_id in ("870997", "primary") and os.path.exists(VAULT_DIR) and VAULT_DIR != active_vault:
+        for d in os.listdir(VAULT_DIR):
+            if d == clean_art or d.startswith(f"{clean_art}_"):
+                candidate = os.path.join(VAULT_DIR, d)
+                if os.path.isdir(candidate):
+                    target_dir = candidate
+                    folder_name = d
+                    break
 
     from services.db_service import get_book_from_db
     db_book = get_book_from_db(clean_art) or {}
 
+    # Если книги нет ни в БД активного магазина, ни в vault активного магазина — доступ запрещен
     if not target_dir:
         if not db_book:
             return None

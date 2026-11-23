@@ -309,6 +309,19 @@
       }
     }
 
+    const headerStoreBadge = document.getElementById('headerStoreBadge');
+    if (headerStoreBadge) {
+      if (activeProf === 'test') {
+        headerStoreBadge.className = 'text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 transition hover:scale-105 cursor-pointer';
+        headerStoreBadge.textContent = '🧪 Тестовый (2727930)';
+        headerStoreBadge.title = 'Активен тестовый магазин Ozon. Нажмите для смены';
+      } else {
+        headerStoreBadge.className = 'text-[10px] font-mono px-2.5 py-0.5 rounded-full font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 transition hover:scale-105 cursor-pointer';
+        headerStoreBadge.textContent = '🏢 Основной (870997)';
+        headerStoreBadge.title = 'Активен основной магазин Ozon. Нажмите для смены';
+      }
+    }
+
     if (btnTest && btnPrimary) {
       if (activeProf === 'test') {
         btnTest.className = 'py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition bg-amber-600/30 border-amber-500 text-amber-200 shadow-sm';
@@ -370,6 +383,11 @@
 
   async function switchOzonStore(profileKey) {
     try {
+      // 1. Принудительно сохраняем черновик текущего магазина перед переключением
+      if (typeof window.forceSaveDraft === 'function') {
+        try { await window.forceSaveDraft(); } catch(e) {}
+      }
+
       const data = window.ApiClient
         ? await window.ApiClient.switchOzonProfile(profileKey)
         : await fetch('/api/ozon/switch_profile', {
@@ -381,11 +399,14 @@
       if (data && data.success) {
         const storeTitle = profileKey === 'test' ? 'Тестовый (2727930)' : 'Основной (870997)';
         if (window.showToast) {
-          window.showToast(`Магазин Ozon переключен на: ${storeTitle}`, 'success');
+          window.showToast(`Магазин Ozon переключен на: ${storeTitle}. Перезагрузка каталога...`, 'success');
         } else {
           alert(`✅ Активный магазин переключен на: ${storeTitle}`);
         }
-        await loadOzonStatus();
+        // Перезагружаем страницу через короткую паузу, чтобы все таблицы, вкладки и артикул загрузились для нового магазина
+        setTimeout(() => {
+          window.location.reload();
+        }, 500);
       } else {
         const errMsg = data?.error || 'Неизвестная ошибка';
         if (window.showToast) {

@@ -120,7 +120,8 @@
 
       // Дублируем сохранение в localStorage на случай мгновенного закрытия/перезагрузки страницы
       try {
-        localStorage.setItem('bookinistic_session_draft', JSON.stringify(payload));
+        const storeKey = 'bookinistic_session_draft_' + (window.currentStoreProfile || 'default');
+        localStorage.setItem(storeKey, JSON.stringify(payload));
       } catch (locErr) {}
 
       const resData = window.ApiClient
@@ -188,8 +189,13 @@
         : await fetch('/api/get_session_draft').then(r => r.json());
 
       if (!draft || !draft.booksSession || draft.booksSession.length === 0) {
+        if (draft && draft.has_draft === false) {
+          // Для текущего магазина сохраненного черновика нет — чистая сессия
+          return false;
+        }
         try {
-          const localStr = localStorage.getItem('bookinistic_session_draft');
+          const storeKey = 'bookinistic_session_draft_' + (window.currentStoreProfile || 'default');
+          const localStr = localStorage.getItem(storeKey);
           if (localStr) {
             draft = JSON.parse(localStr);
           }
@@ -1306,7 +1312,8 @@
         })),
         timestamp: Date.now()
       };
-      localStorage.setItem('bookinistic_session_draft', JSON.stringify(payload));
+      const storeKey = 'bookinistic_session_draft_' + (window.currentStoreProfile || 'default');
+      localStorage.setItem(storeKey, JSON.stringify(payload));
     } catch (e) {}
   });
 

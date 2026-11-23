@@ -233,20 +233,41 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            full_file_path = os.path.join(VAULT_DIR, safe_rel_path)
-            if not (os.path.exists(full_file_path) and os.path.isfile(full_file_path)) and "/" in safe_rel_path:
-                parts = safe_rel_path.split("/", 1)
-                art_prefix = parts[0]
-                inner_file = parts[1]
-                if os.path.exists(VAULT_DIR):
-                    for d in os.listdir(VAULT_DIR):
+            from config import get_vault_dir, VAULT_DIR, BASE_DIR
+            candidate_vaults = []
+            try:
+                active_v = get_vault_dir()
+                if os.path.exists(active_v):
+                    candidate_vaults.append(active_v)
+            except Exception:
+                pass
+            if os.path.exists(VAULT_DIR) and VAULT_DIR not in candidate_vaults:
+                candidate_vaults.append(VAULT_DIR)
+            stores_root = os.path.join(BASE_DIR, "storage", "stores")
+            if os.path.exists(stores_root):
+                for sd in os.listdir(stores_root):
+                    sv = os.path.join(stores_root, sd, "books_vault")
+                    if os.path.exists(sv) and sv not in candidate_vaults:
+                        candidate_vaults.append(sv)
+
+            full_file_path = None
+            for v_dir in candidate_vaults:
+                f_path = os.path.join(v_dir, safe_rel_path)
+                if os.path.exists(f_path) and os.path.isfile(f_path):
+                    full_file_path = f_path
+                    break
+                if "/" in safe_rel_path:
+                    parts = safe_rel_path.split("/", 1)
+                    art_prefix = parts[0]
+                    inner_file = parts[1]
+                    for d in os.listdir(v_dir):
                         if d == art_prefix or d.startswith(f"{art_prefix}_"):
-                            cand = os.path.join(VAULT_DIR, d, inner_file)
+                            cand = os.path.join(v_dir, d, inner_file)
                             if os.path.exists(cand) and os.path.isfile(cand):
                                 full_file_path = cand
                                 break
                             if any(k in inner_file.lower() for k in ("cover_front", "front", "01")):
-                                d_path = os.path.join(VAULT_DIR, d)
+                                d_path = os.path.join(v_dir, d)
                                 if os.path.isdir(d_path):
                                     for f in sorted(os.listdir(d_path)):
                                         if f.lower().endswith(('.jpg', '.jpeg', '.png')) and ('front' in f.lower() or f.startswith('01_')):
@@ -254,6 +275,11 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                                             break
                                 if os.path.exists(full_file_path) and os.path.isfile(full_file_path):
                                     break
+                    if full_file_path:
+                        break
+
+            if not full_file_path:
+                full_file_path = os.path.join(candidate_vaults[0] if candidate_vaults else VAULT_DIR, safe_rel_path)
 
             self._serve_file_stream(full_file_path, tag="VAULT", rel_label=safe_rel_path)
             return

@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any, Dict
 
-from config import DRAFT_FILE, INBOX_DIR
+from config import DRAFT_FILE, INBOX_DIR, get_draft_file_path
 from server.router import RequestContext
 from server.state import add_mobile_chunk, check_mobile_events
 from services.vault_service import clear_session_draft_storage, save_session_draft_file
@@ -66,9 +66,10 @@ def save_session_draft(ctx: RequestContext) -> Dict[str, Any]:
 
 def get_session_draft(ctx: RequestContext) -> Any:
     """GET /api/get_session_draft: Чтение черновика сессии с автоматическим восстановлением ссылок на фото."""
-    if os.path.exists(DRAFT_FILE) and os.path.getsize(DRAFT_FILE) > 5:
+    draft_file = get_draft_file_path()
+    if os.path.exists(draft_file) and os.path.getsize(draft_file) > 5:
         try:
-            with open(DRAFT_FILE, "r", encoding="utf-8") as f:
+            with open(draft_file, "r", encoding="utf-8") as f:
                 import json
                 draft = json.load(f)
 
@@ -149,7 +150,7 @@ def get_session_draft(ctx: RequestContext) -> Any:
                 if draft_modified:
                     draft["photoPool"] = list(pool_map.values())
                     try:
-                        with open(DRAFT_FILE, "w", encoding="utf-8") as f_out:
+                        with open(draft_file, "w", encoding="utf-8") as f_out:
                             json.dump(draft, f_out, ensure_ascii=False, indent=2)
                     except Exception:
                         pass

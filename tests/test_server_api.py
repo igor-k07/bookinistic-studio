@@ -53,6 +53,16 @@ class TestServerAPI(unittest.TestCase):
 
     def setUp(self):
         self.router = build_router()
+        from config import switch_ozon_profile, get_active_store_id
+        self.original_store = get_active_store_id()
+        switch_ozon_profile("primary")
+
+    def tearDown(self):
+        from config import switch_ozon_profile
+        if self.original_store == "2727930":
+            switch_ozon_profile("test")
+        else:
+            switch_ozon_profile("primary")
 
     def test_get_next_article_endpoint(self):
         handler = MockHTTPHandler("/api/get_next_article", method="GET")
