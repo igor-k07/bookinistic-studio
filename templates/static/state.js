@@ -171,12 +171,14 @@ function isPhotoProcessed(photo) {
   if (!photo) return false;
   return Boolean(
     photo.isProcessed ||
+    photo.isAiProcessed ||
     (photo.whiten !== undefined && photo.whiten > 0) ||
     (photo.brightness !== undefined && photo.brightness !== 0) ||
     (photo.contrast !== undefined && photo.contrast !== 0) ||
     (photo.saturation !== undefined && photo.saturation !== 0) ||
     (photo.rotation !== undefined && photo.rotation !== 0) ||
-    photo.isCropped
+    photo.isCropped ||
+    photo.croppedBase
   );
 }
 

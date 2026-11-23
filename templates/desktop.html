@@ -2198,6 +2198,54 @@
     </div>
   </div>
 
+  <!-- ПОЛНОРАЗМЕРНЫЙ ИНСПЕКТОР ФОТО (LIGHTBOX 1:1 ДЛЯ ПРОВЕРКИ OZON) -->
+  <div id="photoLightboxModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6" onclick="if(event.target===this)closePhotoLightbox()">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <!-- Шапка инспектора -->
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950/80 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center text-base font-bold">👁️</div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="lightboxTitle" class="text-sm font-bold text-white truncate max-w-xs sm:max-w-md">Предпросмотр фото</h3>
+              <span id="lightboxBadge" class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[10px]">✅ ГОТОВО К OZON</span>
+            </div>
+            <div class="flex items-center gap-2 text-[11px] text-slate-400 font-mono mt-0.5">
+              <span id="lightboxSlot" class="text-amber-400 font-semibold">Слот: Главная обложка</span>
+              <span>•</span>
+              <span id="lightboxRes">0 × 0 px</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="openStudioFromLightbox()" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow transition cursor-pointer" title="Открыть это фото в редакторе (кадрирование, отбеливание)">
+            <span>✏️</span> <span>Редактировать</span>
+          </button>
+          <button type="button" onclick="closePhotoLightbox()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition text-sm cursor-pointer" title="Закрыть (Esc)">✕</button>
+        </div>
+      </div>
+
+      <!-- Рабочая область инспектора (честный 1:1 масштаб с поддержкой скролла) -->
+      <div class="flex-1 min-h-0 bg-slate-950 p-4 flex items-center justify-center overflow-auto relative">
+        <img id="lightboxImg" src="" alt="Full view" class="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl border border-slate-800/80 select-none">
+      </div>
+
+      <!-- Информационный подвал -->
+      <div class="px-5 py-2.5 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between text-xs text-slate-400 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="text-sky-400 font-bold">ℹ️</span>
+          <span>Отображается финальный срез: именно в таком виде и кадрировании фото уходит покупателю в карточку Ozon.</span>
+        </div>
+        <div class="font-mono text-[11px] text-slate-500">
+          Нажмите <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">Esc</kbd> чтобы закрыть
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ВСПЛЫВАЮЩЕЕ МЕНЮ АВТОДОПОЛНЕНИЯ (НЕ ЧУВСТВИТЕЛЬНОЕ К РЕГИСТРУ) -->
   <div id="customAutocompleteMenu" class="hidden fixed z-[999999] bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl shadow-2xl max-h-64 overflow-y-auto text-xs py-1 scrollbar-thin"></div>
 

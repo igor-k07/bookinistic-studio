@@ -445,21 +445,122 @@
     }
     function getPhotoDisplayUrl(p) {
       if (!p) return '';
-      // 1. Приоритет: актуальная ссылка на облако Yandex S3 (наиболее актуальная версия)
-      if (p.s3_url) return p.s3_url;
-      // 2. Свежий отредактированный срез из сессии
-      if (p.croppedBase && typeof p.croppedBase === 'string' && (p.croppedBase.startsWith('data:') || p.croppedBase.startsWith('blob:') || p.croppedBase.startsWith('http') || p.croppedBase.startsWith('/'))) {
+      // 1. Приоритет #1: Свежий финальный запеченный результат из редактора (со всеми кропами, разворотами и фильтрами)
+      if (p.preview && typeof p.preview === 'string') {
+        return p.preview;
+      }
+      // 2. Если есть чистые base64 данные (то, что уходит в Ozon API и хранилище)
+      if (p.data && typeof p.data === 'string') {
+        return p.data.startsWith('data:') ? p.data : `data:image/jpeg;base64,${p.data}`;
+      }
+      // 3. Свежий отредактированный срез из сессии
+      if (p.croppedBase && typeof p.croppedBase === 'string') {
         return p.croppedBase;
       }
-      // 3. Превью кадра (локальное или облачное)
-      if (p.preview) return p.preview;
-      // 4. Постоянная ссылка из vault
+      // 4. Актуальная ссылка на облако Yandex S3
+      if (p.s3_url) return p.s3_url;
+      // 5. Постоянная ссылка из vault
       if (p.url) return p.url;
-      // 5. Исходный снимок с камеры
+      // 6. Исходный снимок с камеры
       return p.cameraOriginal || p.rawOriginal || '';
     }
     window.getPhotoDisplayUrl = getPhotoDisplayUrl;
     window.isPhotoInAnyBookSlot = isPhotoInAnyBookSlot;
+
+    let currentLightboxPhotoId = null;
+
+    function inspectPhotoLightbox(photoId, e) {
+      if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      const photo = findPhotoById(photoId);
+      if (!photo) return;
+
+      currentLightboxPhotoId = photo.id;
+      const modal = document.getElementById('photoLightboxModal');
+      const img = document.getElementById('lightboxImg');
+      const titleEl = document.getElementById('lightboxTitle');
+      const resEl = document.getElementById('lightboxRes');
+      const slotEl = document.getElementById('lightboxSlot');
+      const badgeEl = document.getElementById('lightboxBadge');
+
+      if (!modal || !img) return;
+
+      const src = getPhotoDisplayUrl(photo);
+      img.src = src;
+
+      if (titleEl) {
+        titleEl.textContent = photo.name || photo.filename || photo.id;
+      }
+
+      if (resEl) {
+        resEl.textContent = 'Определение разрешения...';
+        const temp = new Image();
+        temp.onload = () => {
+          if (resEl && currentLightboxPhotoId === photo.id) {
+            resEl.textContent = `${temp.naturalWidth} × ${temp.naturalHeight} px`;
+          }
+        };
+        temp.src = src;
+      }
+
+      if (slotEl) {
+        const slotNames = {
+          'cover_front': '1. Главная обложка (Лицо)',
+          'cover_back': '2. Задняя сторона (Оборот)',
+          'info_pages': '3. Титул / Год / Страницы (ИИ)',
+          'illustrations': '4. Иллюстрации и развороты',
+          'mantra_defects': '5. Дефекты и нюансы'
+        };
+        slotEl.textContent = slotNames[photo.assignedSlot] || (photo.assignedSlot ? `Слот: ${photo.assignedSlot}` : 'В пуле (без слота)');
+      }
+
+      if (badgeEl) {
+        const processed = isPhotoProcessed(photo);
+        if (processed) {
+          badgeEl.className = 'px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-xs shadow flex items-center gap-1.5';
+          badgeEl.innerHTML = `<span>✅</span> <span>ГОТОВО К OZON (ФИНАЛЬНЫЙ СРЕЗ)</span>`;
+        } else {
+          badgeEl.className = 'px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-xs shadow flex items-center gap-1.5';
+          badgeEl.innerHTML = `<span>📷</span> <span>СЫРОЙ ИСХОДНИК С КАМЕРЫ</span>`;
+        }
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closePhotoLightbox() {
+      const modal = document.getElementById('photoLightboxModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      currentLightboxPhotoId = null;
+    }
+
+    function openStudioFromLightbox() {
+      const pid = currentLightboxPhotoId;
+      closePhotoLightbox();
+      if (pid) {
+        openPhotoStudio(pid);
+      }
+    }
+
+    window.inspectPhotoLightbox = inspectPhotoLightbox;
+    window.closePhotoLightbox = closePhotoLightbox;
+    window.openStudioFromLightbox = openStudioFromLightbox;
+
+    // Esc handler for lightbox modal
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('photoLightboxModal');
+        if (modal && !modal.classList.contains('hidden')) {
+          closePhotoLightbox();
+        }
+      }
+    });
 
     function renderPool() {
       const container = document.getElementById('poolContainer');
@@ -517,14 +618,20 @@
                 ${isBusy ? `
                   <span class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 text-[9px] font-black animate-pulse shadow">⏳ ОБРАБОТКА...</span>
                 ` : (processed ? `
-                  <span class="px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 text-[9px] font-black shadow tracking-tight" title="Фото обработано">${p.isCropped ? '✂️ ОБРЕЗАНО' : (p.isAiProcessed ? '✨ ИИ БЕЛЫЙ' : (p.whiten > 0 ? '⚪ ОТБЕЛЕНО' : '✓ ОБРАБОТАНО'))}</span>
+                  <span class="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold shadow flex items-center gap-1" title="Финальная версия готова к публикации на Ozon">
+                    <span>✅</span> <span>ГОТОВО К OZON</span>
+                  </span>
                 ` : `
-                  <span class="px-1.5 py-0.5 rounded bg-slate-850 text-amber-300 border border-amber-500/40 text-[9px] font-bold shadow tracking-tight" title="Сырой исходник">📷 ИСХОДНИК</span>
+                  <span class="px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[9px] font-bold shadow flex items-center gap-1" title="Исходный снимок без обрезки и фильтров">
+                    <span>📷</span> <span>ИСХОДНИК</span>
+                  </span>
                 `)}
+                ${p.isCropped ? '<span class="px-1.5 py-0.2 rounded bg-slate-850 text-slate-300 border border-slate-750 text-[8px]" title="Кадрировано под пропорции">✂️ КРОП</span>' : ''}
                 ${p.s3_url ? '<span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[9px] font-bold shadow" title="Выгружено в Yandex S3 CDN">☁️ S3</span>' : ''}
                 ${p.status === 'ERROR' ? `<span class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[9px] font-bold shadow cursor-pointer" onclick="quickAiProcessPhoto('${p.id}', event)" title="Ошибка обработки. Кликните для повтора">⚠️ СБОЙ</span>` : ''}
               </div>
               <div class="flex items-center gap-0.5 bg-black/90 backdrop-blur-sm p-0.5 rounded-lg shadow border border-slate-700/60 shrink-0">
+                <button type="button" onclick="inspectPhotoLightbox('${p.id}', event)" class="p-1 rounded hover:bg-sky-600 hover:text-white text-sky-300 text-xs transition" title="👁️ Быстрый просмотр 1:1 (как в Ozon)">👁️</button>
                 <button type="button" onclick="quickAiProcessPhoto('${p.id}', event)" class="p-1 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-xs transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                 <button type="button" onclick="openPhotoStudio('${p.id}', event)" class="p-1 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-xs transition" title="✏️ Редактор: кадрирование и фильтры">✏️</button>
                 ${(p.cameraOriginal || p.isAiProcessed || processed || p.isCropped || (p.history && p.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-1 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-xs transition flex items-center justify-center shadow-xs" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
@@ -533,10 +640,10 @@
 
             </div>
 
-            <!-- БОЛЬШАЯ КАРТИНКА ПРЕВЬЮ -->
-            <div class="relative w-full ${curScale.imgH} rounded-xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-slate-700 transition cursor-pointer"
+            <!-- БОЛЬШАЯ КАРТИНКА ПРЕВЬЮ В РЕЖИМЕ OBJECT-CONTAIN -->
+            <div class="relative w-full ${curScale.imgH} rounded-xl overflow-hidden bg-slate-950/80 border border-slate-800/80 group-hover:border-slate-700 transition cursor-pointer flex items-center justify-center p-1.5 shadow-inner"
                  ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${getPhotoDisplayUrl(p)}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+              <img src="${getPhotoDisplayUrl(p)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- КНОПКА БЫСТРОГО УДАЛЕНИЯ ИЗ ПУЛА В ЛЕВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="deletePhotoFromPool('${p.id}', event)" ondblclick="event.stopPropagation()" class="absolute top-2 left-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-rose-600 hover:text-white text-slate-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="🗑️ Удалить фото из пула">🗑️</button>
@@ -1157,15 +1264,21 @@
                 ${isBusy ? `
                   <span class="px-2 py-0.5 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[9px] animate-pulse shadow">${isThisBookRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ОБРАБОТКА...'}</span>
                 ` : (processed ? `
-                  <span class="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[9px] shadow tracking-tight" title="Фото обработано">${photo.isCropped ? '✂️ ОБРЕЗАНО' : (photo.isAiProcessed ? '✨ ИИ БЕЛЫЙ' : (photo.whiten > 0 ? '⚪ ОТБЕЛЕНО' : '✓ ОБРАБОТАНО'))}</span>
+                  <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[9px] shadow flex items-center gap-1" title="Финальная версия готова к публикации на Ozon">
+                    <span>✅</span> <span>ГОТОВО К OZON</span>
+                  </span>
                 ` : `
-                  <span class="px-2 py-0.5 rounded bg-slate-900/90 text-amber-300 border border-amber-500/40 font-bold text-[9px] shadow tracking-tight" title="Сырой снимок">📷 ИСХОДНИК</span>
+                  <span class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-[9px] shadow flex items-center gap-1" title="Исходный снимок без обрезки и фильтров">
+                    <span>📷</span> <span>ИСХОДНИК</span>
+                  </span>
                 `)}
+                ${photo.isCropped ? '<span class="px-1.5 py-0.2 rounded bg-slate-850 text-slate-300 border border-slate-750 text-[8px]" title="Кадрировано под пропорции">✂️ КРОП</span>' : ''}
                 ${(photo.s3_url || photo.is_s3_uploaded) ? '<span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[9px] font-bold shadow" title="Выгружено в Yandex S3 CDN">☁️ S3</span>' : ''}
                 <span class="px-1.5 py-0.5 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[8px] font-bold shadow" title="Главное фото витрины Ozon">🌐 OZON</span>
                 ${photo.status === 'ERROR' ? `<span class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[9px] font-bold shadow cursor-pointer" onclick="quickAiProcessPhoto('${photo.id}', event)" title="Ошибка обработки. Кликните для повтора">⚠️ СБОЙ</span>` : ''}
               </div>
               <div class="flex items-center gap-0.5 bg-black/90 p-0.5 rounded-lg shadow backdrop-blur-xs border border-slate-700/60">
+                <button type="button" onclick="inspectPhotoLightbox('${photo.id}', event)" class="p-1 rounded hover:bg-sky-600 hover:text-white text-sky-300 text-xs transition" title="👁️ Быстрый просмотр 1:1 (как в Ozon)">👁️</button>
                 <button type="button" onclick="quickAiProcessPhoto('${photo.id}', event)" class="p-1 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-xs transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                 <button type="button" onclick="openPhotoStudio('${photo.id}', event)" class="p-1 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-xs transition" title="✏️ Редактор (кадрирование, фильтры)">✏️</button>
                 ${(photo.cameraOriginal || photo.isAiProcessed || processed || photo.isCropped || (photo.history && photo.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${photo.id}', event)" class="p-1 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-xs transition flex items-center justify-center shadow-xs" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
@@ -1173,10 +1286,10 @@
               </div>
             </div>
 
-            <!-- БОЛЬШАЯ КАРТИНКА КНИГИ (ВЫСОТА 176px) -->
-            <div class="relative w-full h-44 rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
+            <!-- БОЛЬШАЯ КАРТИНКА КНИГИ (ВЫСОТА 176px) В РЕЖИМЕ OBJECT-CONTAIN (ЧЕСТНЫЕ ГРАНИЦЫ И МАСШТАБ) -->
+            <div class="relative w-full h-44 rounded-lg overflow-hidden bg-slate-950/80 border border-slate-800 flex items-center justify-center p-1.5 cursor-pointer shadow-inner"
                  ondblclick="openPhotoStudio('${photo.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-              <img src="${getPhotoDisplayUrl(photo)}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${photo.preview || photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+              <img src="${getPhotoDisplayUrl(photo)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${photo.preview || photo.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${photo.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
@@ -1235,10 +1348,15 @@
                   ${isBusy ? `
                     <span class="px-1 py-0.2 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[8px] animate-pulse shadow">${isThisBookRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ИИ...'}</span>
                   ` : (processed ? `
-                    <span class="px-1 py-0.2 rounded bg-emerald-500 text-slate-950 font-black text-[8px] shadow">${p.isCropped ? '✂️ ОБРЕЗ.' : (p.isAiProcessed ? '✨ ИИ БЕЛЫЙ' : (p.whiten > 0 ? '⚪ ОТБЕЛ.' : '✓ ОБРАБ.'))}</span>
+                    <span class="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[8px] shadow flex items-center gap-1" title="Финальная версия готова к публикации на Ozon">
+                      <span>✅</span> <span>ГОТОВО К OZON</span>
+                    </span>
                   ` : `
-                    <span class="px-1 py-0.2 rounded bg-slate-850 text-amber-300 border border-amber-500/40 font-bold text-[8px] shadow">📷 СЫРОЕ</span>
+                    <span class="px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-[8px] shadow flex items-center gap-1" title="Исходный снимок без обрезки и фильтров">
+                      <span>📷</span> <span>ИСХОДНИК</span>
+                    </span>
                   `)}
+                  ${p.isCropped ? '<span class="px-1 py-0.2 rounded bg-slate-850 text-slate-300 border border-slate-750 text-[8px]" title="Кадрировано под пропорции">✂️ КРОП</span>' : ''}
                   ${(p.s3_url || p.is_s3_uploaded) ? '<span class="px-1 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800 text-[8px] font-bold shadow" title="Выгружено в Yandex S3 CDN">☁️ S3</span>' : ''}
                   ${slotId === 'slot_info_pages' ? `
                     <span class="px-1.5 py-0.2 rounded bg-amber-950 text-amber-300 border border-amber-600/70 font-bold text-[8px] shadow" title="Фото титульного листа для ИИ распознавания. Сохраняется в архив и НЕ отправляется покупателям на Ozon.">🔒 ТОЛЬКО ИИ (НЕ НА OZON)</span>
@@ -1248,6 +1366,7 @@
                   ${p.status === 'ERROR' ? `<span class="px-1 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[8px] font-bold shadow cursor-pointer" onclick="quickAiProcessPhoto('${p.id}', event)" title="Ошибка обработки. Кликните для повтора">⚠️</span>` : ''}
                 </div>
                 <div class="flex items-center gap-0.5 bg-black/85 p-0.5 rounded shadow border border-slate-700/60">
+                  <button type="button" onclick="inspectPhotoLightbox('${p.id}', event)" class="p-0.5 rounded hover:bg-sky-600 hover:text-white text-sky-300 text-[10px] transition" title="👁️ Быстрый просмотр 1:1 (как в Ozon)">👁️</button>
                   <button type="button" onclick="quickAiProcessPhoto('${p.id}', event)" class="p-0.5 rounded hover:bg-violet-600 hover:text-white text-violet-300 text-[10px] transition" title="✨ ИИ-вырезание фона на чистый белый Ozon (rembg)">✨</button>
                   <button type="button" onclick="openPhotoStudio('${p.id}', event)" class="p-0.5 rounded hover:bg-amber-500 hover:text-black text-amber-300 text-[10px] transition" title="Редактор">✏️</button>
                   ${(p.cameraOriginal || p.isAiProcessed || processed || p.isCropped || (p.history && p.historyIndex > 0)) ? `<button type="button" onclick="revertPhotoToOriginal('${p.id}', event)" class="p-0.5 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700/50 text-rose-300 hover:text-white text-[10px] transition" title="↩️ Вернуть исходное фото с камеры (1 шаг)">↩️</button>` : ''}
@@ -1256,10 +1375,10 @@
               </div>
 
 
-              <!-- КАРТИНКА (ВЫСОТА 144px) -->
-              <div class="relative w-full h-36 rounded-lg overflow-hidden bg-slate-900 border border-slate-800 cursor-pointer"
+              <!-- КАРТИНКА (ВЫСОТА 144px) В РЕЖИМЕ OBJECT-CONTAIN (ЧЕСТНЫЕ ГРАНИЦЫ И МАСШТАБ) -->
+              <div class="relative w-full h-36 rounded-lg overflow-hidden bg-slate-950/80 border border-slate-800 flex items-center justify-center p-1.5 cursor-pointer shadow-inner"
                    ondblclick="openPhotoStudio('${p.id}', event)" title="Двойной клик по картинке — открыть фоторедактор">
-                <img src="${getPhotoDisplayUrl(p)}" class="w-full h-full object-cover pointer-events-none" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
+                <img src="${getPhotoDisplayUrl(p)}" class="max-w-full max-h-full object-contain pointer-events-none drop-shadow select-none transition-transform duration-200" loading="lazy" onerror="const alt='${p.preview || p.cameraOriginal || ''}'; if(alt && this.src!==alt) this.src=alt;">
 
                 <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
                 <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
