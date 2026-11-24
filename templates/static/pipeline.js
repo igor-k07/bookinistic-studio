@@ -850,14 +850,6 @@
         selectedPoolPhotoId = remaining.length > 0 ? remaining[0].id : null;
       }
 
-      // Согласно п. 3.2 спецификации: удаление фона нейросетью запускается ТОЛЬКО для обложки и задника!
-      if (slotName === 'cover_front' || slotName === 'cover_back') {
-        queueAiBackgroundRemoval(photo.id);
-      }
-
-      // Шаг 3 спецификации: планируем упреждающую фоновую выгрузку в S3 с таймером покоя 2.5 сек
-      scheduleProactiveS3Upload(photo.id, slotName, 2500);
-
       // Синхронизация привязки слота с SQLite-реестром ассетов
       if (photo.id && (photo.id.startsWith('ast_') || photo.id.startsWith('photo_'))) {
         try {
@@ -1682,6 +1674,15 @@
         renderActiveBookSlots();
         if (typeof window.updateAiBatchBtnState === 'function') window.updateAiBatchBtnState();
       }
+
+      // Параллельно запускаем фоновое вырезание фона для обложки и задника этой книги
+      if (book.slots && book.slots.cover_front && !book.slots.cover_front.isAiProcessed) {
+        queueAiBackgroundRemoval(book.slots.cover_front.id);
+      }
+      const backPhotos = Array.isArray(book.slots?.cover_back) ? book.slots.cover_back : (book.slots?.cover_back ? [book.slots.cover_back] : []);
+      backPhotos.forEach(p => {
+        if (p && !p.isAiProcessed) queueAiBackgroundRemoval(p.id);
+      });
 
       try {
         const result = await ApiClient.recognizeBook(sendImages, currentApiKey, hasIllustrations);
