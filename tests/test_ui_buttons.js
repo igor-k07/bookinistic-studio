@@ -92,6 +92,9 @@ async function run() {
     `--remote-debugging-port=${port}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--incognito',
+    '--disable-cache',
+    '--user-data-dir=/tmp/test_chrome_profile',
     '--window-size=1400,900',
     'http://localhost:8095/'
   ], { stdio: 'ignore' });

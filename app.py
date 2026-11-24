@@ -5,6 +5,7 @@ app.py: Точка входа сервера Bookinistic Studio.
 
 import os
 import sys
+import threading
 from http.server import ThreadingHTTPServer
 
 from config import PORT, get_target_excel_file
@@ -13,8 +14,21 @@ from services.db_service import init_db
 import services.tunnel_service as tunnel_service
 
 
+def _warmup_background_ai():
+    """Фоновый прогрев нейросетевой модели rembg, чтобы первый запрос пользователя был мгновенным."""
+    try:
+        from services.image_service import get_rembg_session
+        get_rembg_session()
+        print(" ⚡ [Warmup] Нейросетевая сессия rembg прогрета и готова к мгновенной обработке.")
+    except Exception as e:
+        print(f" ℹ️ [Warmup] Прогрев rembg пропущен: {e}")
+
+
 def run_server():
     init_db()
+    # Запускаем фоновый прогрев нейросети без задержки старта сервера
+    threading.Thread(target=_warmup_background_ai, daemon=True, name="rembg_warmup").start()
+
     server_address = ("", PORT)
     ThreadingHTTPServer.allow_reuse_address = True
     httpd = ThreadingHTTPServer(server_address, BatchHandler)

@@ -629,8 +629,8 @@
         const isBusy = Boolean(p.isAiProcessing || p.isProcessing);
 
         return `
-          <div class="relative shrink-0 group rounded-2xl overflow-hidden border ${isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-xl shadow-amber-400/20' : 'border-slate-800 hover:border-slate-600'} ${curScale.cardW} ${curScale.minH} bg-slate-950 flex flex-col justify-between p-1.5 transition-all cursor-grab active:cursor-grabbing select-none shadow-md ${isBusy ? 'opacity-90 select-none' : ''}"
-               draggable="${!isBusy}" ondragstart="handlePhotoDragStart(event, '${p.id}', 'pool')" ondragend="handlePhotoDragEnd(event)" onclick="selectPoolPhoto('${p.id}')">
+          <div class="relative shrink-0 group rounded-2xl overflow-hidden border ${isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 shadow-xl shadow-amber-400/20' : (isBusy ? 'border-violet-500/60 shadow-lg shadow-violet-500/10' : 'border-slate-800 hover:border-slate-600')} ${curScale.cardW} ${curScale.minH} bg-slate-950 flex flex-col justify-between p-1.5 transition-all cursor-grab active:cursor-grabbing select-none shadow-md"
+               draggable="true" ondragstart="handlePhotoDragStart(event, '${p.id}', 'pool')" ondragend="handlePhotoDragEnd(event)" onclick="selectPoolPhoto('${p.id}')">
 
             
             <!-- ВЕРХНЯЯ ПАНЕЛЬКА КАРТОЧКИ: ИНДЕКС, СТАТУС И БЫСТРЫЕ КНОПКИ -->
@@ -638,7 +638,10 @@
               <div class="flex items-center gap-1 min-w-0">
                 <span class="px-1.5 py-0.5 rounded bg-black/85 text-[10px] font-mono font-bold text-slate-300 shadow">#${globalIdx+1}</span>
                 ${isBusy ? `
-                  <span class="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 text-[9px] font-black animate-pulse shadow">⏳ ОБРАБОТКА...</span>
+                  <span class="px-1.5 py-0.5 rounded ${p.isAiProcessing ? 'bg-violet-600' : 'bg-amber-500'} text-slate-950 text-[9px] font-black animate-pulse shadow flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                    <span>${p.isAiProcessing ? '⏳ ИИ ВЫРЕЗАЕТ' : '⏳ ОБРАБОТКА'}</span>
+                  </span>
                 ` : (processed ? `
                   <span class="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold shadow flex items-center gap-1" title="Финальная версия готова к публикации на Ozon">
                     <span>✅</span> <span>ГОТОВО К OZON</span>
@@ -673,11 +676,11 @@
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
 
-              <!-- БЛОКИРОВКА И СПИННЕР ПРИ ОБРАБОТКЕ -->
+              <!-- НЕБЛОКИРУЮЩИЙ ИНДИКАТОР В УГЛУ ПРИ ФОНОВОЙ ОБРАБОТКЕ -->
               ${isBusy ? `
-                <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 pointer-events-none select-none">
-                  <div class="w-8 h-8 border-3 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-                  <span class="text-[10px] font-bold text-amber-300 tracking-wide animate-pulse">${p.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...'}</span>
+                <div class="absolute bottom-2 right-2 bg-black/85 backdrop-blur-xs text-amber-300 text-[10px] font-bold px-2 py-1 rounded-lg border border-amber-500/50 shadow-lg flex items-center gap-1.5 pointer-events-none select-none z-20 animate-pulse">
+                  <div class="w-2.5 h-2.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>${p.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...'}</span>
                 </div>
               ` : ''}
             </div>
@@ -975,7 +978,7 @@
 // -------------------------------------------------------------
     const aiProcessQueue = [];
     let activeAiWorkers = 0;
-    const MAX_CONCURRENT_AI = 4;
+    const MAX_CONCURRENT_AI = 2; // Оптимальная параллельность: быстрая фоновая очередь без троттлинга CPU
 
     function queueAiBackgroundRemoval(photoId, force = false) {
       const photo = findPhotoById(photoId);
@@ -1061,62 +1064,47 @@
           });
           const aiData = await aiResp.json();
           if (aiData.success) {
-            photo.aiWhiteOriginal = `/api/assets/${photo.id}/full?t=${Date.now()}`;
-            photo.preview = `/api/assets/${photo.id}/preview?t=${Date.now()}`;
-            photo.isProcessed = true;
-            photo.isAiProcessed = true;
-            photo.isAiProcessing = false;
-            let effectiveCropRel = photo.cropRelative || photo.aiCropRelative || aiData.crop_relative;
+            const newWhite = `/api/assets/${photo.id}/full?t=${Date.now()}`;
+            const newPrev = `/api/assets/${photo.id}/preview?t=${Date.now()}`;
+            const effectiveCropRel = photo.cropRelative || photo.aiCropRelative || aiData.crop_relative;
             if (effectiveCropRel) {
               photo.cropRelative = effectiveCropRel;
               photo.aiCropRelative = effectiveCropRel;
               photo.isCropped = true;
             }
 
-            const rot = photo.rotation || 0;
-            let croppedUrl = null;
-            if (effectiveCropRel && typeof window.renderCroppedFromFullSourceAsync === 'function') {
-              try {
-                croppedUrl = await window.renderCroppedFromFullSourceAsync(photo.aiWhiteOriginal, rot, effectiveCropRel);
-              } catch (err) {
-                console.warn('Ошибка обрезки при быстром ИИ (ассет):', err);
+            // Плавное бесшовное обновление: предзагружаем в памяти браузера, чтобы картинка ни на миг не исчезала
+            const preloader = new Image();
+            const applyLoaded = () => {
+              photo.aiWhiteOriginal = newWhite;
+              photo.preview = newPrev;
+              photo.croppedBase = null; // Сервер уже нарезал preview по контуру книги
+              photo.isProcessed = true;
+              photo.isAiProcessed = true;
+              photo.isAiProcessing = false;
+              if (typeof initPhotoHistory === 'function') initPhotoHistory(photo);
+
+              if (typeof currentEditingPhoto !== 'undefined' && currentEditingPhoto && currentEditingPhoto.id === photo.id && typeof isStudioOpen !== 'undefined' && isStudioOpen) {
+                if (typeof reloadStudioCropper === 'function') {
+                  reloadStudioCropper(photo.preview, () => {
+                    if (typeof fitStudioImageToContainer === 'function') fitStudioImageToContainer(false);
+                    if (typeof setStudioInteractionMode === 'function') setStudioInteractionMode('move');
+                    if (typeof updateZoomBadge === 'function') updateZoomBadge();
+                    if (typeof updateCropResolution === 'function') updateCropResolution();
+                    if (typeof updateStudioHistoryUI === 'function') updateStudioHistoryUI();
+                  }, 'cropped');
+                }
               }
-            } else if (effectiveCropRel && typeof window.cropImageSourceAsync === 'function') {
-              try {
-                croppedUrl = await window.cropImageSourceAsync(photo.aiWhiteOriginal, effectiveCropRel);
-              } catch (err) {
-                console.warn('Ошибка обрезки при быстром ИИ (ассет):', err);
-              }
-            }
 
-            if (croppedUrl) {
-              photo.croppedBase = croppedUrl;
-              photo.preview = croppedUrl;
-            }
+              renderPool();
+              renderActiveBookSlots();
+              scheduleAutoSave();
+            };
+            preloader.onload = applyLoaded;
+            preloader.onerror = applyLoaded;
+            preloader.src = newPrev;
 
-            if (typeof initPhotoHistory === 'function') initPhotoHistory(photo);
-
-            if (typeof currentEditingPhoto !== 'undefined' && currentEditingPhoto && currentEditingPhoto.id === photo.id && typeof isStudioOpen !== 'undefined' && isStudioOpen) {
-              const displaySrc = photo.croppedBase || photo.aiWhiteOriginal;
-              const displayType = photo.croppedBase ? 'cropped' : 'full';
-              if (typeof reloadStudioCropper === 'function') {
-                reloadStudioCropper(displaySrc, () => {
-                  if (displayType === 'full' && rot !== 0 && typeof cropperInstance !== 'undefined' && cropperInstance) {
-                    cropperInstance.rotateTo(rot);
-                  }
-                  if (typeof fitStudioImageToContainer === 'function') fitStudioImageToContainer(false);
-                  if (typeof setStudioInteractionMode === 'function') setStudioInteractionMode('move');
-                  if (typeof updateZoomBadge === 'function') updateZoomBadge();
-                  if (typeof updateCropResolution === 'function') updateCropResolution();
-                  if (typeof updateStudioHistoryUI === 'function') updateStudioHistoryUI();
-                }, displayType);
-              }
-            }
-
-            renderPool();
-            renderActiveBookSlots();
             if (!silent) showToast(`✨ ИИ вырезал фон на чистый белый (rembg)!`);
-            scheduleAutoSave();
             return;
           }
         }
@@ -1277,14 +1265,17 @@
         const isBusy = Boolean(isThisBookRecognizing || isPhotoBusy);
 
         el.innerHTML = `
-          <div class="relative w-full h-full min-h-[190px] group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 flex flex-col justify-between p-1.5 shadow-md transition-all cursor-grab active:cursor-grabbing select-none hover:border-amber-400 ${isBusy ? 'opacity-90 select-none' : ''}"
-               draggable="${!isBusy}" ondragstart="handlePhotoDragStart(event, '${photo.id}', '${slotId}')" ondragend="handlePhotoDragEnd(event)">
+          <div class="relative w-full h-full min-h-[190px] group rounded-xl overflow-hidden border ${isBusy ? 'border-violet-500/60 shadow-lg shadow-violet-500/10' : 'border-slate-700 hover:border-amber-400'} bg-slate-950 flex flex-col justify-between p-1.5 shadow-md transition-all cursor-grab active:cursor-grabbing select-none"
+               draggable="true" ondragstart="handlePhotoDragStart(event, '${photo.id}', '${slotId}')" ondragend="handlePhotoDragEnd(event)">
             
             <!-- ВЕРХНЯЯ СТРОКА: СТАТУС ОБРАБОТКИ И БЫСТРЫЕ КНОПКИ -->
             <div class="flex items-center justify-between gap-1 mb-1 z-30" ondblclick="event.stopPropagation()">
               <div class="flex items-center gap-1">
                 ${isBusy ? `
-                  <span class="px-2 py-0.5 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[9px] animate-pulse shadow">${isThisBookRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ОБРАБОТКА...'}</span>
+                  <span class="px-2 py-0.5 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[9px] animate-pulse shadow flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                    <span>${isThisBookRecognizing ? '⏳ АНАЛИЗ GEMINI' : '⏳ ИИ ВЫРЕЗАЕТ'}</span>
+                  </span>
                 ` : (processed ? `
                   <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[9px] shadow flex items-center gap-1" title="Финальная версия готова к публикации на Ozon">
                     <span>✅</span> <span>ГОТОВО К OZON</span>
@@ -1316,15 +1307,18 @@
               <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
               <button type="button" onclick="quickRotatePhoto('${photo.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow-md flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
 
-              <!-- БЛОКИРОВКА И СПИННЕР ПРИ ОБРАБОТКЕ -->
-              ${isBusy ? `
-                <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 pointer-events-none select-none">
-                  <div class="w-8 h-8 border-3 ${isThisBookRecognizing ? 'border-amber-400' : 'border-violet-400'} border-t-transparent rounded-full animate-spin"></div>
-                  <span class="text-[10px] font-bold ${isThisBookRecognizing ? 'text-amber-300' : 'text-violet-300'} tracking-wide animate-pulse">
-                    ${isThisBookRecognizing ? 'Анализ Gemini...' : (photo.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...')}
-                  </span>
+              <!-- НЕБЛОКИРУЮЩИЙ ИНДИКАТОР В УГЛУ ПРИ ФОНОВОЙ ОБРАБОТКЕ -->
+              ${photo.isAiProcessing ? `
+                <div class="absolute bottom-2 left-2 bg-black/85 backdrop-blur-xs text-violet-300 text-[10px] font-bold px-2 py-1 rounded-lg border border-violet-500/50 shadow-lg flex items-center gap-1.5 pointer-events-none select-none z-20 animate-pulse">
+                  <div class="w-2.5 h-2.5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Удаление фона (rembg)...</span>
                 </div>
-              ` : ''}
+              ` : (isThisBookRecognizing ? `
+                <div class="absolute bottom-2 left-2 bg-black/85 backdrop-blur-xs text-amber-300 text-[10px] font-bold px-2 py-1 rounded-lg border border-amber-500/50 shadow-lg flex items-center gap-1.5 pointer-events-none select-none z-20 animate-pulse">
+                  <div class="w-2.5 h-2.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Анализ Gemini в фоне...</span>
+                </div>
+              ` : '')}
             </div>
 
             <!-- ПОДВАЛ: ИМЯ ФАЙЛА И ПЕРЕМЕЩЕНИЕ В ДРУГУЮ КАТЕГОРИЮ -->
@@ -1359,8 +1353,8 @@
           const isBusy = Boolean(isThisBookRecognizing || isPhotoBusy);
 
           return `
-            <div class="relative group rounded-xl overflow-hidden bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shadow-md transition-all cursor-grab active:cursor-grabbing select-none hover:border-amber-400 ${isBusy ? 'opacity-90 select-none' : ''}"
-                 draggable="${!isBusy}" ondragstart="handlePhotoDragStart(event, '${p.id}', '${slotId}')" ondragend="handlePhotoDragEnd(event)">
+            <div class="relative group rounded-xl overflow-hidden bg-slate-950 border ${isBusy ? 'border-violet-500/60 shadow-lg shadow-violet-500/10' : 'border-slate-700/80 hover:border-amber-400'} p-1 flex flex-col justify-between shadow-md transition-all cursor-grab active:cursor-grabbing select-none"
+                 draggable="true" ondragstart="handlePhotoDragStart(event, '${p.id}', '${slotId}')" ondragend="handlePhotoDragEnd(event)">
 
               
               <!-- ВЕРХ КАРТОЧКИ: НОМЕР И СТАТУС -->
@@ -1368,7 +1362,10 @@
                 <div class="flex items-center gap-1">
                   <span class="px-1.5 py-0.2 rounded bg-black/80 text-[9px] font-mono font-bold text-white">#${idx+1}</span>
                   ${isBusy ? `
-                    <span class="px-1 py-0.2 rounded ${isThisBookRecognizing ? 'bg-amber-500' : 'bg-violet-600'} text-slate-950 font-black text-[8px] animate-pulse shadow">${isThisBookRecognizing ? '⏳ АНАЛИЗ...' : '⏳ ИИ...'}</span>
+                    <span class="px-1 py-0.2 rounded ${p.isAiProcessing ? 'bg-violet-600' : 'bg-amber-500'} text-slate-950 font-black text-[8px] animate-pulse shadow flex items-center gap-0.5">
+                      <span class="w-1 h-1 rounded-full bg-white animate-ping"></span>
+                      <span>${isThisBookRecognizing ? '⏳ АНАЛИЗ' : '⏳ ИИ...'}</span>
+                    </span>
                   ` : (processed ? `
                     <span class="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold text-[8px] shadow flex items-center gap-1" title="Финальная версия готова к публикации на Ozon">
                       <span>✅</span> <span>ГОТОВО К OZON</span>
@@ -1405,15 +1402,18 @@
                 <!-- ФИКСИРОВАННАЯ КНОПКА РАЗВОРОТА НА 90° В ПРАВОМ ВЕРХНЕМ УГЛУ КАРТИНКИ -->
                 <button type="button" onclick="quickRotatePhoto('${p.id}', 90, event)" ondblclick="event.stopPropagation()" class="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-black/85 hover:bg-amber-500 hover:text-black text-amber-300 border border-slate-700/80 shadow flex items-center justify-center text-xs transition active:scale-90 z-10" title="Повернуть на 90° (всегда на этом месте)">🔄</button>
 
-                <!-- БЛОКИРОВКА И СПИННЕР ПРИ ОБРАБОТКЕ -->
-                ${isBusy ? `
-                  <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-20 pointer-events-none select-none">
-                    <div class="w-7 h-7 border-3 ${isThisBookRecognizing ? 'border-amber-400' : 'border-violet-400'} border-t-transparent rounded-full animate-spin"></div>
-                    <span class="text-[9px] font-bold ${isThisBookRecognizing ? 'text-amber-300' : 'text-violet-300'} tracking-wide animate-pulse">
-                      ${isThisBookRecognizing ? 'Анализ...' : (p.isAiProcessing ? 'ИИ вырезает...' : 'Отбеливание...')}
-                    </span>
+                <!-- НЕБЛОКИРУЮЩИЙ ИНДИКАТОР В УГЛУ ПРИ ФОНОВОЙ ОБРАБОТКЕ -->
+                ${p.isAiProcessing ? `
+                  <div class="absolute bottom-1.5 left-1.5 bg-black/85 backdrop-blur-xs text-violet-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-violet-500/50 shadow flex items-center gap-1 pointer-events-none select-none z-20 animate-pulse">
+                    <div class="w-2 h-2 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Удаление фона...</span>
                   </div>
-                ` : ''}
+                ` : (isThisBookRecognizing ? `
+                  <div class="absolute bottom-1.5 left-1.5 bg-black/85 backdrop-blur-xs text-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/50 shadow flex items-center gap-1 pointer-events-none select-none z-20 animate-pulse">
+                    <div class="w-2 h-2 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Анализ в фоне...</span>
+                  </div>
+                ` : '')}
               </div>
 
               <!-- ПОДВАЛ МИНИАТЮРЫ -->
@@ -1859,7 +1859,9 @@
       bookGroups.forEach((group, chunkIdx) => {
         const bookArtNum = currentNum + chunkIdx;
         const bookArtStr = `DP-B-${String(bookArtNum).padStart(5, '0')}`;
-        const bookBarcode = generateEan13FromArticle(bookArtStr);
+        const bookBarcode = window.BookCalculators
+          ? window.BookCalculators.generateEan13FromArticle(bookArtStr)
+          : (typeof generateEan13FromArticle === 'function' ? generateEan13FromArticle(bookArtStr) : '');
 
         let targetBook = null;
         if (chunkIdx === 0 && booksSession.length > 0) {

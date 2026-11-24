@@ -69,14 +69,14 @@ def create_asset_from_bytes(
 
     width, height = im.size
 
-    # 1. Сохраняем raw.jpg
-    im.save(raw_path, format="JPEG", quality=88, optimize=True)
+    # 1. Сохраняем raw.jpg (быстрое однопроходное кодирование)
+    im.save(raw_path, format="JPEG", quality=88, optimize=False)
     file_size = os.path.getsize(raw_path)
 
     # 2. Генерируем компактный thumbnail preview.jpg (макс 400px)
     thumb = im.copy()
     thumb.thumbnail((400, 400), Image.Resampling.LANCZOS)
-    thumb.save(preview_path, format="JPEG", quality=82, optimize=True)
+    thumb.save(preview_path, format="JPEG", quality=82, optimize=False)
 
     # 3. Добавляем запись в SQLite
     now_str = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -265,10 +265,18 @@ def run_ai_background(asset_id: str) -> Dict[str, Any]:
         with open(ai_white_path, "wb") as f_out:
             f_out.write(full_bytes)
 
-        # Обновляем preview.jpg с белым фоном
+        # Обновляем preview.jpg с белым фоном и вычисленным авто-кропом книги
         thumb = Image.open(io.BytesIO(full_bytes))
+        if crop_relative and isinstance(crop_relative, dict):
+            tw, th = thumb.size
+            cx = max(0, int(crop_relative.get("x", 0) * tw))
+            cy = max(0, int(crop_relative.get("y", 0) * th))
+            cw = min(tw - cx, int(crop_relative.get("w", 1) * tw))
+            ch = min(th - cy, int(crop_relative.get("h", 1) * th))
+            if cw > 20 and ch > 20:
+                thumb = thumb.crop((cx, cy, cx + cw, cy + ch))
         thumb.thumbnail((400, 400), Image.Resampling.LANCZOS)
-        thumb.save(asset.preview_path, format="JPEG", quality=82, optimize=True)
+        thumb.save(asset.preview_path, format="JPEG", quality=84, optimize=False)
 
         # Сохраняем в transformations auto-crop от ИИ
         trans = dict(asset.transformations or {})

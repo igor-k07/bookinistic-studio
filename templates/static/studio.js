@@ -2930,7 +2930,7 @@
       if (e) e.stopPropagation();
       const photo = findPhotoById(photoId);
       const photoBook = photo && photo.assignedBookId ? (window.booksSession || []).find(b => b.id === photo.assignedBookId) : (typeof window.getActiveBook === 'function' ? window.getActiveBook() : null);
-      const isPhotoBusy = Boolean(photo && (photo.isProcessing || photo.isAiProcessing || (photoBook && photoBook.isAiRecognizing)));
+      const isPhotoBusy = Boolean(photo && (photo.isProcessing || photo.isAiProcessing));
       if (!photo || isPhotoBusy) return;
 
       initPhotoHistory(photo);
@@ -2979,7 +2979,7 @@
       if (e) e.stopPropagation();
       const photo = findPhotoById(photoId);
       const photoBook = photo && photo.assignedBookId ? (window.booksSession || []).find(b => b.id === photo.assignedBookId) : (typeof window.getActiveBook === 'function' ? window.getActiveBook() : null);
-      const isPhotoBusy = Boolean(photo && (photo.isProcessing || photo.isAiProcessing || (photoBook && photoBook.isAiRecognizing)));
+      const isPhotoBusy = Boolean(photo && (photo.isProcessing || photo.isAiProcessing));
       if (!photo || isPhotoBusy) return;
       photo.isProcessing = true;
       renderPool();
