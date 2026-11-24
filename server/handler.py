@@ -19,6 +19,7 @@ from config import (
     TEMPLATES_DIR,
     VAULT_DIR,
     get_card_image_path,
+    get_vault_dir,
 )
 from server.routes import build_router
 
@@ -233,7 +234,6 @@ class BatchHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            from config import get_vault_dir, VAULT_DIR, BASE_DIR
             candidate_vaults = []
             try:
                 active_v = get_vault_dir()
