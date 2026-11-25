@@ -153,9 +153,10 @@ class FantLabClient:
             except Exception as e:
                 logger.warning("Database cache read failed: %s", e)
 
+        now_dt = datetime.now(timezone.utc)
         if query_hash in self._mem_cache:
             exp_dt, cached_val = self._mem_cache[query_hash]
-            if exp_dt > now:
+            if exp_dt > now_dt:
                 return cached_val
         return None
 
