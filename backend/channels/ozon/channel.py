@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from backend.channels.base import IMarketplaceChannel
+from backend.channels.ozon.excel_exporter import OpenXmlDomExporter
 from backend.channels.ozon.gateway import OzonGateway
 from backend.channels.ozon.mapper import (
     book_to_ozon_attributes_payload,
@@ -67,6 +68,8 @@ class OzonChannel(IMarketplaceChannel):
         """Check status of asynchronous import task."""
         return self.gateway.get_import_info(task_id)
 
-    def export_file(self, books: List[Book], output_path: Path) -> Path:
-        """Export catalog books to Ozon template Excel file (implemented in Step 4.3)."""
-        raise NotImplementedError("OpenXmlDomExporter handles Excel file exports")
+    def export_file(self, books: List[Book], output_path: Path, mode: str = "pre2011") -> Path:
+        """Export catalog books to Ozon template Excel file using OpenXmlDomExporter."""
+        exporter = OpenXmlDomExporter()
+        return exporter.rebuild_sheet(books, mode, output_path)
+
