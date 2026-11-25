@@ -54,6 +54,7 @@ class Book:
     field_sources: Dict[str, FieldSource] = field(default_factory=dict)
     suggestions: Dict[str, Any] = field(default_factory=dict)
     photos: List[str] = field(default_factory=list)
+    ozon_sync_status: Optional[OzonSyncStatus] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -65,6 +66,12 @@ class Book:
         d["condition"] = self.condition.value
         d["field_sources"] = {k: v.value if isinstance(v, FieldSource) else int(v) for k, v in self.field_sources.items()}
         d["dimensions"] = self.dimensions.to_dict()
+        if self.ozon_sync_status:
+            d["ozon_sync_status"] = (
+                self.ozon_sync_status.value
+                if isinstance(self.ozon_sync_status, OzonSyncStatus)
+                else str(self.ozon_sync_status)
+            )
         return d
 
     @classmethod
@@ -102,6 +109,12 @@ class Book:
             except (ValueError, TypeError):
                 price_val = 0.0
 
+        sync_val = data.get("ozon_sync_status")
+        try:
+            sync_status = OzonSyncStatus(sync_val) if sync_val else None
+        except ValueError:
+            sync_status = None
+
         return cls(
             article=str(data.get("article", "")).strip().upper(),
             title=str(data.get("title", "")).strip(),
@@ -135,6 +148,7 @@ class Book:
             field_sources=sources,
             suggestions=data.get("suggestions") or {},
             photos=list(data.get("photos") or []),
+            ozon_sync_status=sync_status,
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
         )
@@ -209,12 +223,52 @@ class Asset:
 class WorkspaceTab:
     """Active desktop workspace tab model."""
 
-    id: str
-    book_article: str
+    id: str = ""
+    book_article: str = ""
     tab_order: int = 0
     is_active: bool = False
     is_edit_mode: bool = False
+    title: str = ""
+    book_data: Dict[str, Any] = field(default_factory=dict)
     created_at: Optional[str] = None
+
+    def __init__(
+        self,
+        id: str = "",
+        book_article: str = "",
+        tab_order: int = 0,
+        is_active: bool = False,
+        is_edit_mode: bool = False,
+        title: str = "",
+        book_data: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+        tab_id: Optional[str] = None,
+        article: Optional[str] = None,
+    ) -> None:
+        self.id = tab_id or id or ""
+        self.book_article = article or book_article or ""
+        self.tab_order = tab_order
+        self.is_active = is_active
+        self.is_edit_mode = is_edit_mode
+        self.title = title
+        self.book_data = book_data or {}
+        self.created_at = created_at
+
+    @property
+    def tab_id(self) -> str:
+        return self.id
+
+    @tab_id.setter
+    def tab_id(self, val: str) -> None:
+        self.id = val
+
+    @property
+    def article(self) -> str:
+        return self.book_article
+
+    @article.setter
+    def article(self, val: str) -> None:
+        self.book_article = val
 
 
 @dataclass
@@ -239,6 +293,19 @@ class OutboxItem:
 class EnrichmentCandidate:
     """Candidate match returned by external bibliographic provider."""
 
-    provider: str
+    provider: str = ""
     exact_match: bool = False
     fields: Dict[str, Any] = field(default_factory=dict)
+    match_type: str = "exact"
+
+    def __init__(
+        self,
+        provider: str = "",
+        exact_match: bool = False,
+        fields: Optional[Dict[str, Any]] = None,
+        match_type: Optional[str] = None,
+    ) -> None:
+        self.provider = provider
+        self.fields = fields or {}
+        self.match_type = match_type or ("exact" if exact_match else "fuzzy")
+        self.exact_match = exact_match or (self.match_type == "exact")

@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
+from backend.domain.enums import AssetStatus
 from backend.domain.exceptions import ConcurrencyError
 from backend.domain.models import Asset
 from backend.domain.ports import IAssetRepository
@@ -149,6 +150,26 @@ class SqliteAssetRepository(IAssetRepository):
             ORDER BY slot_order ASC;
         """
         cursor = self.uow.execute(sql, (article,))
+        assets = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            d["transformations"] = json.loads(d["transformations"] or "{}")
+            d["created_at"] = str(d["created_at"]) if d["created_at"] else None
+            d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
+            assets.append(Asset.from_dict(d))
+        return assets
+
+    def list_by_status(self, status: AssetStatus) -> List[Asset]:
+        """List all assets with given status."""
+        sql = """
+            SELECT id, book_article, slot, slot_order, status, status_message,
+                   original_path, preview_path, ai_white_path, transformations,
+                   render_hash, s3_staging_url, s3_final_url, s3_uploaded_hash,
+                   version, width, height, file_size_bytes, created_at, updated_at
+            FROM assets WHERE status = ?
+            ORDER BY id ASC;
+        """
+        cursor = self.uow.execute(sql, (status.value,))
         assets = []
         for row in cursor.fetchall():
             d = dict(row)

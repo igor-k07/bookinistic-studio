@@ -20,7 +20,7 @@
 - [x] **Step 4.2 — Ozon Channel Module (`backend/channels/ozon/`)**
 - [x] **Step 4.3 — Pure `OpenXmlDomExporter` (Zero Regex!)**
 - [x] **Step 5.1 — `SSEBroker`, `JobManager` & `OzonOutboxWorker`**
-- [ ] **Step 5.2 — 6 Pure Use Cases (Depending ONLY on `domain/ports.py`)**
+- [x] **Step 5.2 — 6 Pure Use Cases (Depending ONLY on `domain/ports.py`)**
 - [ ] **Step 6.1 — `CloudflareTunnelManager` & `SecurityMiddleware`**
 - [ ] **Step 6.2 — FastAPI Routers, Pydantic DTOs, SSE & Composition Root (`backend/main.py`)**
 - [ ] **Step 7.1 — Initialize `frontend/` & Generate OpenAPI Types**
@@ -46,6 +46,7 @@
 - 2026-11-25: Step 4.2 completed — Implemented Ozon Channel Module (OzonChannel, OzonGateway with Token Bucket and current v3/v4 endpoints chunking by 50, OzonValidator < 5ms era boundary check, and symmetric OzonMapper without hardcoded brand fallback); verified by unit tests, ruff, and mypy. (Note: commit cd60cd7 saved locally; push deferred due to transient sandbox proxy reset).
 - 2026-11-25: Step 4.3 completed — Implemented pure OpenXmlDomExporter (zero regex, 100% lxml.etree DOM, declarative SheetSchema for pre2011/post2011, XML 1.0 control-char sanitization, strict numeric <v> validation, fcntl.flock + RLock concurrency, single-pass O(N) rebuild, and atomic .tmp file swap); verified by integration tests against real templates, ruff, and mypy.
 - 2026-11-25: Step 5.1 completed — Implemented SSEBroker (thread-safe pub/sub, W3C format, bounded overflow protection), JobManager (CPU/IO pools, job_key deduplication, cooperative cancellation, progress tracking), and OzonOutboxWorker (polling marketplace_outbox, task_id moderation checks, exponential backoff); verified by unit tests, ruff, and mypy.
+- 2026-11-25: Step 5.2 completed — Implemented 6 pure use cases depending strictly on domain ports (AssetPipelineUseCase, RecognizeBookUseCase, SaveBookUseCase, ReopenBookUseCase, SyncCatalogUseCase, CleanupStorageUseCase); verified 100% offline with in-memory fakes (11 tests in 0.01s), ruff, and mypy.
 
 
 

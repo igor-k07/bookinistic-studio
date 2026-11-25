@@ -35,6 +35,9 @@ class ResourceNotFoundError(DomainError):
     pass
 
 
+EntityNotFoundError = ResourceNotFoundError
+
+
 class StorageError(DomainError):
     """Raised when media, vault, or cloud storage operations fail."""
     pass

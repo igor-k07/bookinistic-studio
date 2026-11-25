@@ -3,6 +3,7 @@
 Pure Python stdlib only (ADR-3).
 """
 
+import re
 from enum import Enum, IntEnum
 from typing import Optional
 
@@ -30,7 +31,8 @@ class PhotoRole(str, Enum):
     @classmethod
     def from_str(cls, val: Optional[str]) -> "PhotoRole":
         """Safe parsing of strings and legacy aliases to PhotoRole."""
-        v = (val or "").strip().lower()
+        raw = (val or "").strip().lower()
+        v = re.sub(r"^\d+_", "", raw)
         if v in ("cover_front", "cover", "front", "обложка", "лицевая", "slot_1"):
             return cls.COVER_FRONT
         if v in ("cover_back", "back", "задник", "оборот", "slot_2"):

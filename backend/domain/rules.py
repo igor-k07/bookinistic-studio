@@ -303,3 +303,37 @@ def classify_filename_to_slot(filename_or_url: str) -> str:
         return "illustrations"
 
     return "other"
+
+
+# Aliases for consistent naming
+normalize_photo_role = classify_filename_to_slot
+determine_book_era = resolve_book_era
+calculate_dimensions_and_weight = calculate_physical_dimensions
+
+
+def merge_field_value(
+    field_name: str,
+    current_value: Any,
+    current_source: Any,
+    incoming_value: Any,
+    incoming_source: Any,
+) -> Tuple[Any, Any]:
+    """Merge incoming field value according to FieldProvenance priority (ADR-8).
+
+    Priority: EMPTY(0) < DEFAULT(1) < AI_GEMINI(2) < DB_CANONICAL(3) < FANTLAB_EXACT(4) < USER_MANUAL(5).
+    USER_MANUAL is strictly protected and never overwritten.
+    """
+    if incoming_value is None or incoming_value == "":
+        return current_value, current_source
+
+    curr_prio = int(current_source) if current_source is not None else 0
+    inc_prio = int(incoming_source) if incoming_source is not None else 0
+
+    if inc_prio > curr_prio:
+        return incoming_value, incoming_source
+
+    if inc_prio == curr_prio:
+        if current_value is None or current_value == "" or current_value == 0:
+            return incoming_value, incoming_source
+
+    return current_value, current_source

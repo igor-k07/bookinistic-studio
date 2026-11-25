@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
+from backend.domain.enums import AssetStatus
 from backend.domain.models import Asset, Book, EnrichmentCandidate, WorkspaceTab
 
 
@@ -67,6 +68,9 @@ class IAssetRepository(Protocol):
         ...
 
     def list_by_article(self, article: str) -> List[Asset]:
+        ...
+
+    def list_by_status(self, status: AssetStatus) -> List[Asset]:
         ...
 
     def delete(self, asset_id: str) -> bool:
@@ -136,10 +140,19 @@ class IEnrichmentClient(Protocol):
 class IMarketplaceChannel(Protocol):
     """Contract for marketplace adapters (Ozon, Avito, etc.)."""
 
+    def validate(self, book: Book) -> Dict[str, str]:
+        ...
+
     def validate_book(self, book: Book) -> Dict[str, str]:
         ...
 
-    def publish_or_update(self, book: Book) -> str:
+    def publish_or_update(self, book: Book) -> Any:
+        ...
+
+    def check_status(self, task_id: int) -> Dict[str, Any]:
+        ...
+
+    def export_file(self, books: List[Book], output_path: Any) -> Any:
         ...
 
 
@@ -148,5 +161,64 @@ class IEventBroker(Protocol):
     """Contract for real-time Server-Sent Events broker."""
 
     def publish(self, event_type: str, data: Dict[str, Any]) -> None:
+        ...
+
+
+@runtime_checkable
+class IImageProcessor(Protocol):
+    """Contract for image transformation and background removal."""
+
+    def render(
+        self,
+        image_bytes: bytes,
+        crop: Optional[tuple[int, int, int, int]] = None,
+        rotation: float = 0.0,
+        filter_name: str = "original",
+        remove_bg: bool = False,
+    ) -> tuple[bytes, str]:
+        ...
+
+    def remove_background(self, image_bytes: bytes) -> bytes:
+        ...
+
+
+@runtime_checkable
+class IBarcodeScanner(Protocol):
+    """Contract for local barcode detection."""
+
+    def scan(self, image_bytes: bytes) -> Optional[str]:
+        ...
+
+
+@runtime_checkable
+class IVaultStore(Protocol):
+    """Local physical book archive storage contract."""
+
+    def save_book_vault(
+        self,
+        article: str,
+        book_metadata: Dict[str, Any],
+        photos: List[tuple[str, bytes, Optional[bytes]]],
+    ) -> Any:
+        ...
+
+    def get_manifest(self, article: str) -> Optional[Dict[str, Any]]:
+        ...
+
+    def list_photos(self, article: str) -> List[Any]:
+        ...
+
+    def create_ozon_zip(self, article: str, zip_output_path: Any) -> int:
+        ...
+
+
+@runtime_checkable
+class IExcelExporter(Protocol):
+    """Contract for OpenXML Excel catalog export."""
+
+    def export_book(self, book: Book) -> str:
+        ...
+
+    def remove_book(self, article: str) -> bool:
         ...
 
