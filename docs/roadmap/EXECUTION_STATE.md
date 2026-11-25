@@ -17,7 +17,7 @@
 - [x] **Step 3.2 — Local Archive `VaultStore` (`books_vault/{article}/`)**
 - [x] **Step 3.3 — Two-Tier `YandexS3Adapter`**
 - [x] **Step 4.1 — `GeminiVisionClient` & `EnrichmentClients`**
-- [ ] **Step 4.2 — Ozon Channel Module (`backend/channels/ozon/`)**
+- [x] **Step 4.2 — Ozon Channel Module (`backend/channels/ozon/`)**
 - [ ] **Step 4.3 — Pure `OpenXmlDomExporter` (Zero Regex!)**
 - [ ] **Step 5.1 — `SSEBroker`, `JobManager` & `OzonOutboxWorker`**
 - [ ] **Step 5.2 — 6 Pure Use Cases (Depending ONLY on `domain/ports.py`)**
@@ -43,6 +43,8 @@
 - 2026-11-25: Step 3.2 completed — Implemented VaultStore with strict article-only folder hierarchy (preventing title-rename duplication), atomic manifest.json (Base64 stripped), raw_sources isolation, and streaming Ozon ZIP exports (strictly excluding info pages); verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 3.3 completed — Implemented two-tier YandexS3Adapter (staging upload, server-side copy_object promotion, render_hash dedup, ThreadPoolExecutor parallel workers, shared static card, and Ozon 14-photo cap); verified by unit tests, ruff, and mypy.
 - 2026-11-25: Step 4.1 completed — Implemented GeminiVisionClient (httpx, x-goog-api-key header, 1200px resize, thinking parts extraction, recitation retry, model cascade) and EnrichmentClients (FantLabClient with 30-day cache, max 5 parallel detail fetches, strict illustrator role parsing, Cyrillic format, and OpenLibraryClient with \\bпо\\b word-boundary fix); verified by unit tests, ruff, and mypy.
+- 2026-11-25: Step 4.2 completed — Implemented Ozon Channel Module (OzonChannel, OzonGateway with Token Bucket and current v3/v4 endpoints chunking by 50, OzonValidator < 5ms era boundary check, and symmetric OzonMapper without hardcoded brand fallback); verified by unit tests, ruff, and mypy.
+
 
 
 

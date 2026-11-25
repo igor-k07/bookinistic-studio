@@ -38,12 +38,25 @@ class Book:
     cover_type: str = "Твердый переплет"
     condition: BookCondition = BookCondition.GOOD
     annotation: str = ""
+    brand: str = ""
+    author_cover: str = ""
+    original_title: str = ""
+    barcode: str = ""
+    genre: str = "Проза"
+    paper_type: str = ""
+    age_limit: str = ""
+    translator: str = ""
+    illustrator: str = ""
+    old_price: Optional[float] = None
+    main_photo_url: str = ""
+    add_photo_urls: List[str] = field(default_factory=list)
     dimensions: Dimensions = field(default_factory=Dimensions)
     field_sources: Dict[str, FieldSource] = field(default_factory=dict)
     suggestions: Dict[str, Any] = field(default_factory=dict)
     photos: List[str] = field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert Book model to JSON-serializable dictionary."""
@@ -106,6 +119,18 @@ class Book:
             cover_type=str(data.get("cover_type", "Твердый переплет")),
             condition=cond,
             annotation=str(data.get("annotation", "")).strip(),
+            brand=str(data.get("brand", "")).strip(),
+            author_cover=str(data.get("author_cover", "")).strip(),
+            original_title=str(data.get("original_title", "")).strip(),
+            barcode=str(data.get("barcode", "")).strip(),
+            genre=str(data.get("genre", "Проза")).strip() or "Проза",
+            paper_type=str(data.get("paper_type", "")).strip(),
+            age_limit=str(data.get("age_limit", "")).strip(),
+            translator=str(data.get("translator", "")).strip(),
+            illustrator=str(data.get("illustrator", "")).strip(),
+            old_price=float(data["old_price"]) if data.get("old_price") is not None else None,
+            main_photo_url=str(data.get("main_photo_url", "")).strip(),
+            add_photo_urls=list(data.get("add_photo_urls") or []),
             dimensions=dims,
             field_sources=sources,
             suggestions=data.get("suggestions") or {},
@@ -113,6 +138,7 @@ class Book:
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
         )
+
 
 
 @dataclass
