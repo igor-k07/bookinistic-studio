@@ -103,3 +103,10 @@ venv/
 .Spotlight-V100
 .Trashes
 .idea/
+
+# ==========================================
+# 10. Frontend Node.js & Vite Build
+# ==========================================
+frontend/node_modules/
+frontend/dist/
+
