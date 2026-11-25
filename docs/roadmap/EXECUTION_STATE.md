@@ -26,7 +26,7 @@
 - [x] **Step 7.1 — Initialize `frontend/` & Generate OpenAPI Types**
 - [x] **Step 7.2 — Mobile Capture PWA (`frontend/src/mobile/`)**
 - [x] **Step 7.3 — Desktop Core Store, Tabs, Photo Pool & Book Form**
-- [ ] **Step 7.4 — Modular Photo Studio (`features/photo-studio/`), Catalog & Settings**
+- [x] **Step 7.4 — Modular Photo Studio (`features/photo-studio/`), Catalog & Settings**
 - [ ] **Step 8.1 — Full Automated Verification Suite**
 - [ ] **Step 8.2 — Live Smoke Check & Cutover**
 
@@ -52,6 +52,7 @@
 - 2026-11-25: Step 7.1 completed — Initialized frontend (React 19, TypeScript, Vite, Tailwind CSS, Zustand), generated OpenAPI types (src/shared/types/api.d.ts), implemented typed apiClient with cancellation and sseClient with backoff; verified by vitest, tsc, and multi-page vite build.
 - 2026-11-25: Step 7.2 completed — Implemented Mobile Capture PWA in frontend/src/mobile/ (IndexedDB persistence surviving Safari tab suspension, client resize to 1600px with canvas memory cleanup, multi-book organizer, 1-tap 5-role express tagger, chunked upload of 2 photos with X-Mobile-Token and commit ack wipe); verified by vitest and offline-capable mobile.html build.
 - 2026-11-25: Step 7.3 completed — Implemented Desktop Core Stores (workspaceStore, poolStore, systemStore), context-aware ShortcutManager, 5-slot PhotoPool, 40-field BookForm with BrandAutocomplete and GOST physics calculator (ADR-4/5/7/9), and pure SVG EAN-13 BarcodeLabel; verified by 22 vitest tests, tsc, and vite build.
+- 2026-11-25: Step 7.4 completed — Implemented Modular Photo Studio (StudioEngine encapsulating Cropper.js with guaranteed destroy(), diff-based HistoryStack for undo/redo, 4 presets, 8 synchronized sliders, Spacebar compare, honest Esc cancel, ✨ rembg toggle), CatalogTable (FTS5 search with AbortController, outbox badges, book re-opening, Excel/ZIP exports), SettingsModal (unified DOM, storage cleanup, mobile QR with CSPRNG token rotation, memos); verified by 33 vitest tests, tsc, vite build, and 134 pytest tests.
 
 
 

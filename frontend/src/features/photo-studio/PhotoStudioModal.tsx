@@ -1,0 +1,325 @@
+/**
+ * PhotoStudioModal — Modular Photo Studio for desktop image post-processing.
+ *
+ * Implements Step 7.4 & Architectural Guardrails 9 & 10:
+ * - Isolated Cropper lifecycle with guaranteed engine.destroy() in cleanup
+ * - Diff-based HistoryStack for undo/redo
+ * - Honest Esc / Cancel: edits mutate draft and persist only on Enter / Apply
+ * - Spacebar original image comparison
+ * - Zero Base64 in DOM / memory (uses /api/assets/{id}/preview)
+ * - Strict LOC <= 400
+ */
+
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import type { AssetData } from "../../store/poolStore";
+import { HistoryStack, type StudioTransformState } from "./HistoryStack";
+import {
+  StudioEngine,
+  STUDIO_PRESETS,
+  type CropRatio,
+} from "./StudioEngine";
+import { StudioAdjustments } from "./StudioAdjustments";
+
+interface Props {
+  asset: AssetData;
+  isOpen: boolean;
+  onClose: () => void;
+  onApplyTransform: (assetId: string, transform: StudioTransformState) => Promise<void>;
+}
+
+function extractTransformFromAsset(asset: AssetData): StudioTransformState {
+  const t = (asset.transformations || {}) as Record<string, unknown>;
+  const f = ((t.filters as Record<string, unknown>) || {}) as Record<string, unknown>;
+  return {
+    crop: (t.crop as StudioTransformState["crop"]) || null,
+    rotation: typeof t.rotation === "number" ? t.rotation : 0,
+    useAiWhite: Boolean(t.use_ai_white || asset.ai_white_path),
+    filters: {
+      brightness: Number(f.brightness) || 0,
+      contrast: Number(f.contrast) || 0,
+      saturation: Number(f.saturation) || 0,
+      sharpness: Number(f.sharpness) || 0,
+      highlights: Number(f.highlights) || 0,
+      shadows: Number(f.shadows) || 0,
+      whiten: Number(f.whiten) || 0,
+      warmth: Number(f.warmth) || 0,
+    },
+  };
+}
+
+export function PhotoStudioModal({
+  asset,
+  isOpen,
+  onClose,
+  onApplyTransform,
+}: Props): React.JSX.Element | null {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const engineRef = useRef<StudioEngine | null>(null);
+  const historyRef = useRef<HistoryStack | null>(null);
+
+  const [currentTransform, setCurrentTransform] = useState<StudioTransformState>(() =>
+    extractTransformFromAsset(asset)
+  );
+
+  const [cropRatio, setCropRatio] = useState<CropRatio>("3:4");
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const syncHistoryState = useCallback(() => {
+    if (historyRef.current) {
+      setCanUndo(historyRef.current.canUndo());
+      setCanRedo(historyRef.current.canRedo());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const initial = extractTransformFromAsset(asset);
+    const history = new HistoryStack(initial);
+    historyRef.current = history;
+
+    const engine = new StudioEngine(initial, (newState) => {
+      setCurrentTransform(newState);
+      history.push(newState);
+      syncHistoryState();
+    });
+    engineRef.current = engine;
+
+    if (imgRef.current) {
+      engine.init(imgRef.current);
+    }
+
+    return () => {
+      engine.destroy();
+      engineRef.current = null;
+      historyRef.current = null;
+    };
+  }, [isOpen, asset, syncHistoryState]);
+
+  const handleApply = async () => {
+    if (!engineRef.current || isApplying) return;
+    setIsApplying(true);
+    try {
+      const finalTransform = engineRef.current.getTransform();
+      await onApplyTransform(asset.id, finalTransform);
+      onClose();
+    } catch (err) {
+      console.error("Failed to save transform:", err);
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleApply();
+      } else if (e.code === "Space" && !showOriginal && !e.repeat) {
+        e.preventDefault();
+        setShowOriginal(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        setShowOriginal(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [isOpen, showOriginal, onClose]);
+
+  const handleUndo = () => {
+    if (!historyRef.current || !engineRef.current) return;
+    const prev = historyRef.current.undo();
+    if (prev) {
+      engineRef.current.applyState(prev);
+      setCurrentTransform(prev);
+      syncHistoryState();
+    }
+  };
+
+  const handleRedo = () => {
+    if (!historyRef.current || !engineRef.current) return;
+    const next = historyRef.current.redo();
+    if (next) {
+      engineRef.current.applyState(next);
+      setCurrentTransform(next);
+      syncHistoryState();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const previewUrl = `/api/assets/${asset.id}/preview`;
+  const fileName = asset.original_path ? asset.original_path.split("/").pop() : asset.id;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-6">
+      <div className="flex h-full max-h-[92vh] w-full max-w-7xl flex-col rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+        {/* Top Control Bar */}
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6">
+          <div className="flex items-center gap-3">
+            <span className="font-bold text-slate-200">📸 Фото-студия:</span>
+            <span className="text-xs text-slate-400 font-mono">{fileName}</span>
+
+            {/* Presets */}
+            <div className="ml-4 flex items-center gap-1.5 border-l border-slate-800 pl-4">
+              {(Object.keys(STUDIO_PRESETS) as Array<keyof typeof STUDIO_PRESETS>).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => engineRef.current?.applyPreset(k)}
+                  className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white"
+                >
+                  {STUDIO_PRESETS[k].name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Undo / Redo */}
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                canUndo ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "opacity-40 text-slate-500"
+              }`}
+            >
+              ↩ Назад
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={!canRedo}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                canRedo ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "opacity-40 text-slate-500"
+              }`}
+            >
+              ↪ Вперед
+            </button>
+
+            {/* Aspect Ratio Toggle */}
+            <div className="flex rounded-lg border border-slate-700 bg-slate-800 p-0.5 text-xs">
+              <button
+                onClick={() => {
+                  setCropRatio("3:4");
+                  engineRef.current?.setCropRatio("3:4");
+                }}
+                className={`rounded-md px-2 py-0.5 ${
+                  cropRatio === "3:4" ? "bg-emerald-600 text-white font-semibold" : "text-slate-400"
+                }`}
+              >
+                3:4
+              </button>
+              <button
+                onClick={() => {
+                  setCropRatio("free");
+                  engineRef.current?.setCropRatio("free");
+                }}
+                className={`rounded-md px-2 py-0.5 ${
+                  cropRatio === "free" ? "bg-emerald-600 text-white font-semibold" : "text-slate-400"
+                }`}
+              >
+                Свободный
+              </button>
+            </div>
+
+            {/* AI Rembg Toggle */}
+            <button
+              onClick={() => {
+                const next = !currentTransform.useAiWhite;
+                engineRef.current?.setAiWhite(next);
+              }}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                currentTransform.useAiWhite
+                  ? "bg-purple-600 text-white ring-2 ring-purple-400/40 shadow-lg"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              ✨ AI Фон {currentTransform.useAiWhite ? "ВКЛ" : "ВЫКЛ"}
+            </button>
+
+            {/* Spacebar compare hint */}
+            <span className="text-[11px] text-slate-400">
+              (Зажмите <kbd className="rounded bg-slate-800 px-1 py-0.5 text-amber-300">Пробел</kbd> — оригинал)
+            </span>
+
+            {/* Action buttons */}
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700"
+            >
+              Отмена (Esc)
+            </button>
+            <button
+              onClick={handleApply}
+              disabled={isApplying}
+              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+            >
+              {isApplying ? "Применение..." : "Применить (Enter)"}
+            </button>
+          </div>
+        </div>
+
+        {/* Studio Workspace: Left Canvas, Right Controls */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Main Photo Viewport */}
+          <div className="relative flex flex-1 items-center justify-center bg-slate-950 p-4">
+            {showOriginal ? (
+              <div className="flex flex-col items-center gap-2">
+                <span className="rounded-full bg-amber-500/20 px-3 py-0.5 text-xs font-bold text-amber-300 border border-amber-500/40">
+                  Оригинал без правок
+                </span>
+                <img
+                  src={previewUrl}
+                  alt="Original"
+                  className="max-h-[70vh] max-w-full rounded-lg object-contain shadow-2xl"
+                />
+              </div>
+            ) : (
+              <div className="max-h-[72vh] max-w-full overflow-hidden rounded-lg">
+                <img
+                  ref={imgRef}
+                  src={previewUrl}
+                  alt="Editable"
+                  crossOrigin="anonymous"
+                  className="block max-h-[70vh] max-w-full object-contain"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Right Adjustments Panel */}
+          <StudioAdjustments
+            currentTransform={currentTransform}
+            onRotate={(deg) => engineRef.current?.rotateStep(deg)}
+            onStraighten={(deg) => engineRef.current?.setRotation(deg)}
+            onFilterChange={(key, val) => engineRef.current?.setFilter(key, val)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

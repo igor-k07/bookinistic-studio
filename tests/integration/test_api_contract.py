@@ -183,6 +183,16 @@ def test_switch_store_profile(client: TestClient):
     assert resp_switch.json()["active_store"] == target_store
 
 
+def test_rotate_session_token_endpoint(client: TestClient):
+    """POST /api/system/tokens/rotate rotates session token."""
+    resp = client.post("/api/system/tokens/rotate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "mobile_token" in data
+    assert len(data["mobile_token"]) >= 16
+
+
 def test_openapi_json_file_exported_and_valid():
     """Verify openapi.json exists, is valid JSON, and has all expected endpoints."""
     openapi_file = Path("openapi.json")

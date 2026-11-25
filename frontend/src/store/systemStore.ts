@@ -30,6 +30,7 @@ interface SystemState {
   hydrateFromBootstrap: () => Promise<void>;
   switchActiveStore: (storeId: string) => Promise<void>;
   fetchOzonStatus: () => Promise<void>;
+  rotateMobileToken: () => Promise<void>;
 }
 
 export const useSystemStore = create<SystemState>((set, get) => ({
@@ -116,6 +117,20 @@ export const useSystemStore = create<SystemState>((set, get) => ({
       }
     } catch {
       // Background probe failure is non-blocking
+    }
+  },
+
+  rotateMobileToken: async () => {
+    try {
+      const res = await apiRequest<{ mobile_token: string }>("/api/system/tokens/rotate", {
+        method: "POST",
+      });
+      if (res.mobile_token) {
+        set({ mobileToken: res.mobile_token });
+      }
+    } catch (err: unknown) {
+      console.error("Failed to rotate token:", err);
+      throw err;
     }
   },
 }));

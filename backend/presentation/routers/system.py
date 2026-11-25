@@ -123,3 +123,13 @@ def open_system_folder(request: Request, folder: str = Query(...)) -> Any:
         raise HTTPException(status_code=500, detail=f"Failed to open folder: {e}")
 
     return {"status": "opened", "folder": clean_folder}
+
+
+@router.post("/system/tokens/rotate")
+def rotate_session_token(request: Request) -> Dict[str, str]:
+    """Rotate mobile CSPRNG token."""
+    token_mgr = getattr(request.app.state, "token_manager", None)
+    if not token_mgr:
+        raise HTTPException(status_code=500, detail="Token manager not initialized")
+    new_token = token_mgr.rotate_token()
+    return {"status": "ok", "mobile_token": new_token}

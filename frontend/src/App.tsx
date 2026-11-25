@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { BarcodeLabel } from "./features/barcode-label/BarcodeLabel";
 import { BookForm } from "./features/book-form/BookForm";
+import { CatalogTable } from "./features/catalog-table/CatalogTable";
 import { PhotoPool } from "./features/photo-pool/PhotoPool";
+import { PhotoStudioModal } from "./features/photo-studio/PhotoStudioModal";
+import { SettingsModal } from "./features/settings-modals/SettingsModal";
+import { usePoolStore, type AssetData } from "./store/poolStore";
 import { useSystemStore } from "./store/systemStore";
 import { useWorkspaceStore } from "./store/workspaceStore";
 
@@ -23,7 +27,12 @@ export default function App(): React.JSX.Element {
     setActiveTab,
   } = useWorkspaceStore();
 
+  const { updateAssetTransform } = usePoolStore();
+
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
+  const [selectedStudioAsset, setSelectedStudioAsset] = useState<AssetData | null>(null);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     hydrateFromBootstrap();
@@ -79,18 +88,37 @@ export default function App(): React.JSX.Element {
           </div>
         </div>
 
-        {/* Live Outbox Status Stats */}
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-slate-400">Ozon Outbox:</span>
-          <span className="rounded bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 text-amber-300 font-semibold">
-            В очереди: {outboxCounts["QUEUED"] || 0}
-          </span>
-          <span className="rounded bg-blue-950/80 border border-blue-800/80 px-2 py-0.5 text-blue-300 font-semibold">
-            Модерация: {outboxCounts["PROCESSING"] || outboxCounts["MODERATION"] || 0}
-          </span>
-          <span className="rounded bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 text-emerald-300 font-semibold">
-            Опубликовано: {outboxCounts["PUBLISHED"] || 0}
-          </span>
+        {/* Center/Right Navigation Buttons & Live Outbox Status Stats */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCatalogOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-all"
+            >
+              📚 Каталог
+            </button>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-all"
+            >
+              ⚙️ Настройки
+            </button>
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-800" />
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-slate-400">Ozon:</span>
+            <span className="rounded bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 text-amber-300 font-semibold">
+              В очереди: {outboxCounts["QUEUED"] || 0}
+            </span>
+            <span className="rounded bg-blue-950/80 border border-blue-800/80 px-2 py-0.5 text-blue-300 font-semibold">
+              Модерация: {outboxCounts["PROCESSING"] || outboxCounts["MODERATION"] || 0}
+            </span>
+            <span className="rounded bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 text-emerald-300 font-semibold">
+              Опубликовано: {outboxCounts["PUBLISHED"] || 0}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -140,7 +168,10 @@ export default function App(): React.JSX.Element {
 
         {/* Right Column: Photo Pool & Barcode Label */}
         <div className="flex w-96 shrink-0 flex-col gap-4 overflow-y-auto pl-1 scrollbar-thin">
-          <PhotoPool />
+          <PhotoPool
+            onOpenStudio={(asset) => setSelectedStudioAsset(asset)}
+            isStudioOpen={Boolean(selectedStudioAsset)}
+          />
           <BarcodeLabel
             article={currentBook.article}
             barcode={currentBook.barcode}
@@ -151,6 +182,37 @@ export default function App(): React.JSX.Element {
           />
         </div>
       </div>
+
+      {/* Modals */}
+      {selectedStudioAsset && (
+        <PhotoStudioModal
+          asset={selectedStudioAsset}
+          isOpen={Boolean(selectedStudioAsset)}
+          onClose={() => setSelectedStudioAsset(null)}
+          onApplyTransform={async (assetId, transform) => {
+            await updateAssetTransform(
+              assetId,
+              {
+                crop: transform.crop,
+                rotation: transform.rotation,
+                use_ai_white: transform.useAiWhite,
+                filters: transform.filters,
+              },
+              selectedStudioAsset.version || 1
+            );
+          }}
+        />
+      )}
+
+      <CatalogTable
+        isOpen={isCatalogOpen}
+        onClose={() => setIsCatalogOpen(false)}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   );
 }

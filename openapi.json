@@ -1385,6 +1385,32 @@
         }
       }
     },
+    "/api/system/tokens/rotate": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Rotate Session Token",
+        "description": "Rotate mobile CSPRNG token.",
+        "operationId": "rotate_session_token_api_system_tokens_rotate_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Rotate Session Token Api System Tokens Rotate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/image-proxy": {
       "get": {
         "tags": [
