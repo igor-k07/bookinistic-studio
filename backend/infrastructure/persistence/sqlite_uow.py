@@ -310,9 +310,11 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
     # 7. Reference Brands and Enrichment Cache
     conn.execute("""
         CREATE TABLE IF NOT EXISTS reference_brands (
-            name             TEXT PRIMARY KEY COLLATE NOCASE
+            name            TEXT PRIMARY KEY,
+            name_normalized TEXT NOT NULL DEFAULT ''
         );
     """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ref_brands_norm ON reference_brands(name_normalized);")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS enrichment_cache (
             cache_key        TEXT PRIMARY KEY,
@@ -324,7 +326,10 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
 
     # Seed reference brands from DEFAULT_BRANDS and books
     for brand in DEFAULT_BRANDS:
-        conn.execute("INSERT OR IGNORE INTO reference_brands (name) VALUES (?);", (brand,))
+        conn.execute(
+            "INSERT OR IGNORE INTO reference_brands (name, name_normalized) VALUES (?, ?);",
+            (brand, brand.strip().lower()),
+        )
 
     # Seed verified brands from existing catalog
     for row in conn.execute("SELECT data_json FROM books;").fetchall():
@@ -332,6 +337,9 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
             d = json.loads(row["data_json"] or "{}")
             b = str(d.get("brand") or "").strip()
             if b:
-                conn.execute("INSERT OR IGNORE INTO reference_brands (name) VALUES (?);", (b,))
+                conn.execute(
+                    "INSERT OR IGNORE INTO reference_brands (name, name_normalized) VALUES (?, ?);",
+                    (b, b.lower()),
+                )
         except Exception:
             pass
