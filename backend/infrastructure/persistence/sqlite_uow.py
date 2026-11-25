@@ -31,41 +31,47 @@ class SqliteUnitOfWork:
         self.db_path = Path(db_path)
         self.conn: Optional[sqlite3.Connection] = None
         self._in_transaction = False
+        self._depth = 0
 
     def __enter__(self) -> "SqliteUnitOfWork":
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(
-            str(self.db_path),
-            timeout=30.0,
-            isolation_level=None,  # Explicit transaction management
-        )
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode = WAL;")
-        self.conn.execute("PRAGMA synchronous = NORMAL;")
-        self.conn.execute("PRAGMA foreign_keys = ON;")
+        self._depth += 1
+        if self._depth == 1:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.conn = sqlite3.connect(
+                str(self.db_path),
+                timeout=30.0,
+                isolation_level=None,  # Explicit transaction management
+            )
+            self.conn.row_factory = sqlite3.Row
+            self.conn.execute("PRAGMA journal_mode = WAL;")
+            self.conn.execute("PRAGMA synchronous = NORMAL;")
+            self.conn.execute("PRAGMA foreign_keys = ON;")
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> Optional[bool]:
-        try:
-            if self.conn:
-                if exc_type is not None and self._in_transaction:
+        self._depth -= 1
+        if self._depth <= 0:
+            self._depth = 0
+            try:
+                if self.conn:
+                    if exc_type is not None and self._in_transaction:
+                        try:
+                            self.conn.execute("ROLLBACK;")
+                        except Exception:
+                            pass
+                    elif self._in_transaction:
+                        try:
+                            self.conn.execute("COMMIT;")
+                        except Exception:
+                            pass
+            finally:
+                if self.conn:
                     try:
-                        self.conn.execute("ROLLBACK;")
+                        self.conn.close()
                     except Exception:
                         pass
-                elif self._in_transaction:
-                    try:
-                        self.conn.execute("COMMIT;")
-                    except Exception:
-                        pass
-        finally:
-            if self.conn:
-                try:
-                    self.conn.close()
-                except Exception:
-                    pass
-                self.conn = None
-                self._in_transaction = False
+                    self.conn = None
+                    self._in_transaction = False
         return None
 
     def begin(self) -> None:

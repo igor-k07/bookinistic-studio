@@ -68,6 +68,13 @@ class SqliteBookRepository(IBookRepository):
                 data_json = excluded.data_json,
                 updated_at = CURRENT_TIMESTAMP;
         """
+        price_num = (
+            float(book.price.amount)
+            if hasattr(book.price, "amount")
+            else float(book.price)
+            if book.price is not None
+            else 0.0
+        )
         self.uow.execute(
             sql,
             (
@@ -75,7 +82,7 @@ class SqliteBookRepository(IBookRepository):
                 book.title,
                 book.author,
                 book.year,
-                book.price,
+                price_num,
                 book.template_mode.value,
                 book.status,
                 book.storage_location,

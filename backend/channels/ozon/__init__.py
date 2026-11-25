@@ -10,12 +10,14 @@ from backend.channels.ozon.mapper import (
     build_ozon_book_attributes,
     ozon_response_to_book_dict,
 )
+from backend.channels.ozon.outbox_worker import OzonOutboxWorker
 from backend.channels.ozon.validator import OzonValidator
 
 __all__ = [
     "OzonChannel",
     "OzonGateway",
     "OzonValidator",
+    "OzonOutboxWorker",
     "OpenXmlDomExporter",
     "SheetSchema",
     "build_ozon_book_attributes",
@@ -23,3 +25,4 @@ __all__ = [
     "book_to_ozon_attributes_payload",
     "ozon_response_to_book_dict",
 ]
+

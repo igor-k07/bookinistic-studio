@@ -250,3 +250,9 @@ class Price:
 
     def __str__(self) -> str:
         return f"{int(self.amount)} ₽" if self.amount.is_integer() else f"{self.amount:.2f} ₽"
+
+    def __float__(self) -> float:
+        return float(self.amount)
+
+    def __int__(self) -> int:
+        return int(self.amount)
