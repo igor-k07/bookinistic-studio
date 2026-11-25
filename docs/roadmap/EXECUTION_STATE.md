@@ -8,7 +8,7 @@
 
 - [x] **Step 1.1 — Git branch & `pyproject.toml`**
 - [x] **Step 1.2 — Configuration & Multi-Store `StoreContext`**
-- [ ] **Step 1.3 — Domain Enums, Value Objects & Exceptions**
+- [x] **Step 1.3 — Domain Enums, Value Objects & Exceptions**
 - [ ] **Step 1.4 — Unified Domain Rules (`domain/rules.py`), Models (`domain/models.py`) & Ports (`domain/ports.py`)**
 - [ ] **Step 2.1 — `SqliteUnitOfWork` & Versioned Migrations**
 - [ ] **Step 2.2 — Repositories (`book_repo.py`, `asset_repo.py`, `reference_repo.py`)**
@@ -34,4 +34,5 @@
 *(Entries added upon step completion)*
 - 2026-11-25: Step 1.1 completed — Created branch `v2-architecture`, configured `pyproject.toml`, updated `requirements.txt`, installed dependencies into Python 3.12 venv, verified ruff/mypy/pytest.
 - 2026-11-25: Step 1.2 completed — Implemented AppSettings, StoreContext, StoreRegistry, and safe_path with zero side effects; verified by unit tests, ruff, and mypy.
+- 2026-11-25: Step 1.3 completed — Implemented domain enums (PhotoRole, BookCondition, AssetStatus, BookEra, OzonSyncStatus, FieldSource), value objects (Article, Isbn, Ean13, Dimensions, Price), and domain exceptions; verified by unit tests, ruff, and mypy.
 
