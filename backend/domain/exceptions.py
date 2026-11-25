@@ -33,3 +33,4 @@ class ConcurrencyError(DomainError):
 class ResourceNotFoundError(DomainError):
     """Raised when a requested domain entity (book, asset, tab) cannot be found."""
     pass
+

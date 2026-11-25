@@ -162,3 +162,4 @@ class SqliteAssetRepository(IAssetRepository):
         """Delete asset record."""
         cursor = self.uow.execute("DELETE FROM assets WHERE id = ?;", (asset_id,))
         return cursor.rowcount > 0
+

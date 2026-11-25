@@ -274,3 +274,4 @@ class StoreRegistry:
 
         profile = self._profiles[self._active_store_id]
         return StoreContext(profile=profile, base_dir=self.base_dir)
+

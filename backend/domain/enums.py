@@ -124,3 +124,4 @@ class FieldSource(IntEnum):
     DB_CANONICAL = 3
     FANTLAB_EXACT = 4
     USER_MANUAL = 5
+

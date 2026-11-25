@@ -202,3 +202,4 @@ class SqliteBookRepository(IBookRepository):
         """Delete workspace tab."""
         cursor = self.uow.execute("DELETE FROM workspace_tabs WHERE id = ?;", (tab_id,))
         return cursor.rowcount > 0
+

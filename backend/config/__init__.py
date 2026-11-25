@@ -17,3 +17,4 @@ __all__ = [
     "StoreRegistry",
     "safe_path",
 ]
+

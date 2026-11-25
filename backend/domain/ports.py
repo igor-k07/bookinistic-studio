@@ -149,3 +149,4 @@ class IEventBroker(Protocol):
 
     def publish(self, event_type: str, data: Dict[str, Any]) -> None:
         ...
+

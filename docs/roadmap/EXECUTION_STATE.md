@@ -13,7 +13,7 @@
 - [x] **Step 2.1 — `SqliteUnitOfWork` & Versioned Migrations**
 - [x] **Step 2.2 — Repositories (`book_repo.py`, `asset_repo.py`, `reference_repo.py`)**
 - [x] **Step 2.3 — Store-Scoped Cloud Backup & WAL-Safe Restore**
-- [ ] **Step 3.1 — `ImageRenderPipeline`, `RembgImageProcessor` & `BarcodeScanner`**
+- [x] **Step 3.1 — `ImageRenderPipeline`, `RembgImageProcessor` & `BarcodeScanner`**
 - [ ] **Step 3.2 — Local Archive `VaultStore` (`books_vault/{article}/`)**
 - [ ] **Step 3.3 — Two-Tier `YandexS3Adapter`**
 - [ ] **Step 4.1 — `GeminiVisionClient` & `EnrichmentClients`**
@@ -39,4 +39,5 @@
 - 2026-11-25: Step 2.1 completed — Implemented SqliteUnitOfWork with guaranteed conn.close() in finally, WAL mode, foreign keys, and versioned non-destructive migrations preserving 2,378 existing books, FTS5 sync, and sequences; verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 2.2 completed — Implemented SqliteBookRepository (FTS5 search, workspace tabs, atomic sequences without 10000 ceiling), SqliteAssetRepository (Optimistic Locking via version), and SqliteReferenceRepository (fast normalized brand autocomplete); verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 2.3 completed — Implemented BackupService with debounced sqlite3.backup() snapshots, strict store isolation in S3 keys (backups/db/{store_id}/...), integrity validation, and WAL/SHM-safe atomic swap restore; verified by integration tests, ruff, and mypy.
+- 2026-11-25: Step 3.1 completed — Implemented unified Pillow ImageRenderPipeline with float rotation (white fillcolor), clamped crop, 8 photo filters, and SHA-256 hashing; thread-safe RembgImageProcessor with OpenCV white-cover protection; and local OpenCV BarcodeScanner; verified by integration tests, ruff, and mypy.
 

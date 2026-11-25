@@ -117,3 +117,4 @@ class AppSettings(BaseSettings):
                 except (json.JSONDecodeError, OSError):
                     pass
         return None
+
