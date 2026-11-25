@@ -14,7 +14,7 @@
 - [x] **Step 2.2 — Repositories (`book_repo.py`, `asset_repo.py`, `reference_repo.py`)**
 - [x] **Step 2.3 — Store-Scoped Cloud Backup & WAL-Safe Restore**
 - [x] **Step 3.1 — `ImageRenderPipeline`, `RembgImageProcessor` & `BarcodeScanner`**
-- [ ] **Step 3.2 — Local Archive `VaultStore` (`books_vault/{article}/`)**
+- [x] **Step 3.2 — Local Archive `VaultStore` (`books_vault/{article}/`)**
 - [ ] **Step 3.3 — Two-Tier `YandexS3Adapter`**
 - [ ] **Step 4.1 — `GeminiVisionClient` & `EnrichmentClients`**
 - [ ] **Step 4.2 — Ozon Channel Module (`backend/channels/ozon/`)**
@@ -40,4 +40,5 @@
 - 2026-11-25: Step 2.2 completed — Implemented SqliteBookRepository (FTS5 search, workspace tabs, atomic sequences without 10000 ceiling), SqliteAssetRepository (Optimistic Locking via version), and SqliteReferenceRepository (fast normalized brand autocomplete); verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 2.3 completed — Implemented BackupService with debounced sqlite3.backup() snapshots, strict store isolation in S3 keys (backups/db/{store_id}/...), integrity validation, and WAL/SHM-safe atomic swap restore; verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 3.1 completed — Implemented unified Pillow ImageRenderPipeline with float rotation (white fillcolor), clamped crop, 8 photo filters, and SHA-256 hashing; thread-safe RembgImageProcessor with OpenCV white-cover protection; and local OpenCV BarcodeScanner; verified by integration tests, ruff, and mypy.
+- 2026-11-25: Step 3.2 completed — Implemented VaultStore with strict article-only folder hierarchy (preventing title-rename duplication), atomic manifest.json (Base64 stripped), raw_sources isolation, and streaming Ozon ZIP exports (strictly excluding info pages); verified by integration tests, ruff, and mypy.
 
