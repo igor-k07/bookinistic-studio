@@ -22,7 +22,6 @@ from backend.application.jobs.sse_broker import (
 from backend.channels.ozon.outbox_worker import OzonOutboxWorker
 from backend.domain.enums import BookEra
 from backend.domain.models import Book
-from backend.domain.value_objects import Price
 from backend.infrastructure.persistence.book_repo import SqliteBookRepository
 from backend.infrastructure.persistence.sqlite_uow import SqliteUnitOfWork, run_migrations
 
