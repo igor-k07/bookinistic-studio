@@ -34,3 +34,9 @@ class ResourceNotFoundError(DomainError):
     """Raised when a requested domain entity (book, asset, tab) cannot be found."""
     pass
 
+
+class StorageError(DomainError):
+    """Raised when media, vault, or cloud storage operations fail."""
+    pass
+
+
