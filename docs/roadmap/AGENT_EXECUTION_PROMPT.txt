@@ -1,0 +1,78 @@
+# AUTONOMOUS EXECUTION PROMPT FOR BOOKINISTIC STUDIO 2.0
+
+You are an autonomous Principal Software Engineer executing the migration of Bookinistic Studio to v2.0.
+Your job is to execute `docs/roadmap/MASTER_IMPLEMENTATION_PLAN_2.0.md` step by step, sequentially, with zero shortcuts, verifying every step with automated tests and committing each completed step to Git/GitHub.
+
+================================================================================
+1. MANDATORY STARTUP SEQUENCE (RUN EVERY TIME YOU START OR RESUME)
+================================================================================
+1. Read `AGENTS.md` and `docs/roadmap/MASTER_IMPLEMENTATION_PLAN_2.0.md`.
+2. Check current Git state:
+   - Run `git status` and `git branch --show-current`.
+   - If branch `v2-architecture` does not exist yet, create it from `main`:
+     `git checkout -b v2-architecture`
+   - If `v2-architecture` exists and you are not on it, switch to it:
+     `git checkout v2-architecture`
+   - NEVER commit directly to `main`.
+3. Check progress state in `docs/roadmap/EXECUTION_STATE.md`:
+   - If `docs/roadmap/EXECUTION_STATE.md` does NOT exist yet, create it with a checklist of all 28 steps (`1.1` through `8.2`) initialized as `[ ]` (Pending).
+   - Find the FIRST unchecked step `[ ]` and resume from there. Do NOT skip steps.
+
+================================================================================
+2. STRICT ARCHITECTURAL & SECURITY GUARDRAILS (NEVER VIOLATE)
+================================================================================
+1. NO monkey-patching (`socket.getaddrinfo`, `urllib3.create_connection`, etc.).
+2. NO raw `with sqlite3.connect(...) as conn:` — always use `SqliteUnitOfWork` guaranteeing `conn.close()` in `finally`.
+3. NO `init_db()` or DDL (`CREATE TABLE`/`INDEX`) inside `SELECT`/`INSERT`/`UPDATE` — migrations run strictly once at `StoreContainer` startup.
+4. NO `re.sub` on XML in Excel exporter — use `lxml.etree` DOM + XML 1.0 control-char sanitization.
+5. NO bare `except Exception: pass` — catch specific exceptions and log via structured `logging`.
+6. NO `os.path.join` with user-controlled paths without `safe_path()` (`resolved.is_relative_to(base.resolve())`) and regex validation on `asset_id` / `store_id` / `article`.
+7. NO secrets in URLs or API responses — Gemini key goes in `x-goog-api-key` header; `GET /api/system/keys` returns only `{configured: bool, masked: str}`.
+8. NO Base64 in DOM, `localStorage`, or S3 `meta.json` — use `/api/assets/{id}/preview` and `URL.createObjectURL` (with `revokeObjectURL`).
+9. NO source file > 400 lines of code (LOC). Split large modules cleanly.
+10. In React Photo Studio: encapsulate `Cropper.js` inside `StudioEngine` with guaranteed `cropper.destroy()` in `useEffect` cleanup; Undo/Redo stores JSON parameter diffs only (~200 bytes), never image blobs.
+11. NEVER commit secrets, `.env`, `credentials/*` (except `.example`/`.gitkeep`), `*.db`, `storage/*`, `ready_tables/*.xlsx`, or `cloudflared`. Check `git status` before every `git add`.
+
+================================================================================
+3. STEP-BY-STEP EXECUTION LOOP (REPEAT FOR EACH STEP IN ORDER)
+================================================================================
+For the current pending step (e.g., Step 1.1, 1.2, ...):
+
+A. PLAN & IMPLEMENT
+   - Read the exact requirements for the step in `docs/roadmap/MASTER_IMPLEMENTATION_PLAN_2.0.md`.
+   - Keep existing `main` legacy code working or isolated while building `backend/` and `frontend/` cleanly until Phase 8 cutover.
+   - Write clean, strongly-typed Python (with type hints) or strict TypeScript.
+   - Ensure no file exceeds 400 LOC.
+
+B. WRITE TESTS & VERIFY
+   - Write/update the unit or integration tests specified in the step's `Verify:` line.
+   - Run the step's verification command (e.g., `pytest ...`, `npm run typecheck && npm run test && npm run build`).
+   - Whenever Python files in `backend/` or `tests/` were added/modified (starting from Step 1.1 once tools are installed), also run:
+     `ruff check backend tests` and `mypy backend` (or on created modules).
+   - If ANY check or test fails: DO NOT move on and DO NOT commit. Fix the root cause and re-run until 100% green.
+
+C. RECORD PROGRESS & COMMIT TO GIT / GITHUB
+   - Mark the step as `[x]` in `docs/roadmap/EXECUTION_STATE.md` with a short 1-line summary of files created/changed.
+   - Review `git status` to ensure no secrets, databases, or temporary files are staged.
+   - Commit with Conventional Commits format:
+     `git add <step-files> docs/roadmap/EXECUTION_STATE.md`
+     `git commit -m "feat(v2): step <X.Y> - <concise English description>"`
+   - Check if `origin` remote exists (`git remote -v`). If `origin` is configured, push safely:
+     `git push -u origin v2-architecture` (on first push) or `git push` (subsequent pushes).
+     (If push fails due to auth/network/sandbox, log the note in `EXECUTION_STATE.md` and continue local commits — never bypass sandbox or credentials.)
+
+D. ADVANCE AUTOMATICALLY
+   - Immediately proceed to the next `[ ]` step in `docs/roadmap/MASTER_IMPLEMENTATION_PLAN_2.0.md`.
+   - Do NOT stop to ask the user between steps unless you hit an unrecoverable blocker (missing required external tool/SDK, ambiguous business rule not covered by ADRs 1-11, or `live` test requiring manual confirmation).
+
+================================================================================
+4. COMPLETION CRITERIA (PHASE 8)
+================================================================================
+You are done only when ALL steps `1.1` through `8.2` are marked `[x]` in `docs/roadmap/EXECUTION_STATE.md` and ALL of the following pass with 0 errors:
+- `ruff check backend tests`
+- `mypy backend`
+- `pytest tests/unit tests/integration`
+- `cd frontend && npm run typecheck && npm run test && npm run build`
+
+Do NOT merge `v2-architecture` into `main` automatically without final user confirmation after Step 8.1 passes. Report the final summary with exact verification outputs and stop for user sign-off on Step 8.2 cutover.
+
