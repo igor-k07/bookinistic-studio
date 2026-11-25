@@ -24,7 +24,7 @@
 - [x] **Step 6.1 — `CloudflareTunnelManager` & `SecurityMiddleware`**
 - [x] **Step 6.2 — FastAPI Routers, Pydantic DTOs, SSE & Composition Root (`backend/main.py`)**
 - [x] **Step 7.1 — Initialize `frontend/` & Generate OpenAPI Types**
-- [ ] **Step 7.2 — Mobile Capture PWA (`frontend/src/mobile/`)**
+- [x] **Step 7.2 — Mobile Capture PWA (`frontend/src/mobile/`)**
 - [ ] **Step 7.3 — Desktop Core Store, Tabs, Photo Pool & Book Form**
 - [ ] **Step 7.4 — Modular Photo Studio (`features/photo-studio/`), Catalog & Settings**
 - [ ] **Step 8.1 — Full Automated Verification Suite**
@@ -50,6 +50,7 @@
 - 2026-11-25: Step 6.1 completed — Implemented CloudflareTunnelManager (PID-scoped subprocess lifecycle, zero pkill, watchdog auto-recovery) and SecurityMiddleware (Zero-Trust perimeter isolation, CSPRNG session token rotation, path traversal defense, and SSRF/dangerous script blocking); verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 6.2 completed — Implemented FastAPI presentation layer (Pydantic DTOs, 10 modular routers, SSE streaming, OpenAPI contract with 33 endpoints) and Composition Root in backend/main.py wiring domain use cases and StoreContext; verified by integration tests, openapi.json export, ruff, and mypy.
 - 2026-11-25: Step 7.1 completed — Initialized frontend (React 19, TypeScript, Vite, Tailwind CSS, Zustand), generated OpenAPI types (src/shared/types/api.d.ts), implemented typed apiClient with cancellation and sseClient with backoff; verified by vitest, tsc, and multi-page vite build.
+- 2026-11-25: Step 7.2 completed — Implemented Mobile Capture PWA in frontend/src/mobile/ (IndexedDB persistence surviving Safari tab suspension, client resize to 1600px with canvas memory cleanup, multi-book organizer, 1-tap 5-role express tagger, chunked upload of 2 photos with X-Mobile-Token and commit ack wipe); verified by vitest and offline-capable mobile.html build.
 
 
 
