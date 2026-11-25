@@ -30,16 +30,17 @@ class SqliteAssetRepository(IAssetRepository):
                    version, width, height, file_size_bytes, created_at, updated_at
             FROM assets WHERE id = ?;
         """
-        cursor = self.uow.execute(sql, (asset_id,))
-        row = cursor.fetchone()
-        if not row:
-            return None
+        with self.uow:
+            cursor = self.uow.execute(sql, (asset_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
 
-        d = dict(row)
-        d["transformations"] = json.loads(d["transformations"] or "{}")
-        d["created_at"] = str(d["created_at"]) if d["created_at"] else None
-        d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
-        return Asset.from_dict(d)
+            d = dict(row)
+            d["transformations"] = json.loads(d["transformations"] or "{}")
+            d["created_at"] = str(d["created_at"]) if d["created_at"] else None
+            d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
+            return Asset.from_dict(d)
 
     def save(self, asset: Asset) -> None:
         """Save asset: performs insert if new, or update with Optimistic Locking.
@@ -49,95 +50,96 @@ class SqliteAssetRepository(IAssetRepository):
         """
         trans_json = json.dumps(asset.transformations, ensure_ascii=False)
 
-        # Check if asset already exists
-        cursor = self.uow.execute("SELECT version FROM assets WHERE id = ?;", (asset.id,))
-        existing = cursor.fetchone()
+        with self.uow:
+            # Check if asset already exists
+            cursor = self.uow.execute("SELECT version FROM assets WHERE id = ?;", (asset.id,))
+            existing = cursor.fetchone()
 
-        if not existing:
-            # New asset insert
-            sql = """
-                INSERT INTO assets (
-                    id, book_article, slot, slot_order, status, status_message,
-                    original_path, preview_path, ai_white_path, transformations,
-                    render_hash, s3_staging_url, s3_final_url, s3_uploaded_hash,
-                    version, width, height, file_size_bytes, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
-            """
-            self.uow.execute(
-                sql,
-                (
-                    asset.id,
-                    asset.book_article,
-                    asset.slot,
-                    asset.slot_order,
-                    asset.status.value,
-                    asset.status_message,
-                    asset.original_path,
-                    asset.preview_path,
-                    asset.ai_white_path,
-                    trans_json,
-                    asset.render_hash,
-                    asset.s3_staging_url,
-                    asset.s3_final_url,
-                    asset.s3_uploaded_hash,
-                    asset.version,
-                    asset.width,
-                    asset.height,
-                    asset.file_size_bytes,
-                ),
-            )
-        else:
-            # Update with Optimistic Locking
-            sql = """
-                UPDATE assets SET
-                    book_article = ?,
-                    slot = ?,
-                    slot_order = ?,
-                    status = ?,
-                    status_message = ?,
-                    original_path = ?,
-                    preview_path = ?,
-                    ai_white_path = ?,
-                    transformations = ?,
-                    render_hash = ?,
-                    s3_staging_url = ?,
-                    s3_final_url = ?,
-                    s3_uploaded_hash = ?,
-                    width = ?,
-                    height = ?,
-                    file_size_bytes = ?,
-                    version = version + 1,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ? AND version = ?;
-            """
-            cursor = self.uow.execute(
-                sql,
-                (
-                    asset.book_article,
-                    asset.slot,
-                    asset.slot_order,
-                    asset.status.value,
-                    asset.status_message,
-                    asset.original_path,
-                    asset.preview_path,
-                    asset.ai_white_path,
-                    trans_json,
-                    asset.render_hash,
-                    asset.s3_staging_url,
-                    asset.s3_final_url,
-                    asset.s3_uploaded_hash,
-                    asset.width,
-                    asset.height,
-                    asset.file_size_bytes,
-                    asset.id,
-                    asset.version,
-                ),
-            )
-            if cursor.rowcount == 0:
-                raise ConcurrencyError(
-                    f"Optimistic lock conflict on asset '{asset.id}': expected version {asset.version}"
+            if not existing:
+                # New asset insert
+                sql = """
+                    INSERT INTO assets (
+                        id, book_article, slot, slot_order, status, status_message,
+                        original_path, preview_path, ai_white_path, transformations,
+                        render_hash, s3_staging_url, s3_final_url, s3_uploaded_hash,
+                        version, width, height, file_size_bytes, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+                """
+                self.uow.execute(
+                    sql,
+                    (
+                        asset.id,
+                        asset.book_article,
+                        asset.slot,
+                        asset.slot_order,
+                        asset.status.value,
+                        asset.status_message,
+                        asset.original_path,
+                        asset.preview_path,
+                        asset.ai_white_path,
+                        trans_json,
+                        asset.render_hash,
+                        asset.s3_staging_url,
+                        asset.s3_final_url,
+                        asset.s3_uploaded_hash,
+                        asset.version,
+                        asset.width,
+                        asset.height,
+                        asset.file_size_bytes,
+                    ),
                 )
-            asset.version += 1
+            else:
+                # Update with Optimistic Locking
+                sql = """
+                    UPDATE assets SET
+                        book_article = ?,
+                        slot = ?,
+                        slot_order = ?,
+                        status = ?,
+                        status_message = ?,
+                        original_path = ?,
+                        preview_path = ?,
+                        ai_white_path = ?,
+                        transformations = ?,
+                        render_hash = ?,
+                        s3_staging_url = ?,
+                        s3_final_url = ?,
+                        s3_uploaded_hash = ?,
+                        width = ?,
+                        height = ?,
+                        file_size_bytes = ?,
+                        version = version + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND version = ?;
+                """
+                cursor = self.uow.execute(
+                    sql,
+                    (
+                        asset.book_article,
+                        asset.slot,
+                        asset.slot_order,
+                        asset.status.value,
+                        asset.status_message,
+                        asset.original_path,
+                        asset.preview_path,
+                        asset.ai_white_path,
+                        trans_json,
+                        asset.render_hash,
+                        asset.s3_staging_url,
+                        asset.s3_final_url,
+                        asset.s3_uploaded_hash,
+                        asset.width,
+                        asset.height,
+                        asset.file_size_bytes,
+                        asset.id,
+                        asset.version,
+                    ),
+                )
+                if cursor.rowcount == 0:
+                    raise ConcurrencyError(
+                        f"Optimistic lock conflict on asset '{asset.id}': expected version {asset.version}"
+                    )
+                asset.version += 1
 
     def list_by_article(self, article: str) -> List[Asset]:
         """List all assets assigned to a book ordered by slot_order."""
@@ -149,15 +151,16 @@ class SqliteAssetRepository(IAssetRepository):
             FROM assets WHERE book_article = ? COLLATE NOCASE
             ORDER BY slot_order ASC;
         """
-        cursor = self.uow.execute(sql, (article,))
-        assets = []
-        for row in cursor.fetchall():
-            d = dict(row)
-            d["transformations"] = json.loads(d["transformations"] or "{}")
-            d["created_at"] = str(d["created_at"]) if d["created_at"] else None
-            d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
-            assets.append(Asset.from_dict(d))
-        return assets
+        with self.uow:
+            cursor = self.uow.execute(sql, (article,))
+            assets = []
+            for row in cursor.fetchall():
+                d = dict(row)
+                d["transformations"] = json.loads(d["transformations"] or "{}")
+                d["created_at"] = str(d["created_at"]) if d["created_at"] else None
+                d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
+                assets.append(Asset.from_dict(d))
+            return assets
 
     def list_by_status(self, status: AssetStatus) -> List[Asset]:
         """List all assets with given status."""
@@ -169,18 +172,20 @@ class SqliteAssetRepository(IAssetRepository):
             FROM assets WHERE status = ?
             ORDER BY id ASC;
         """
-        cursor = self.uow.execute(sql, (status.value,))
-        assets = []
-        for row in cursor.fetchall():
-            d = dict(row)
-            d["transformations"] = json.loads(d["transformations"] or "{}")
-            d["created_at"] = str(d["created_at"]) if d["created_at"] else None
-            d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
-            assets.append(Asset.from_dict(d))
-        return assets
+        with self.uow:
+            cursor = self.uow.execute(sql, (status.value,))
+            assets = []
+            for row in cursor.fetchall():
+                d = dict(row)
+                d["transformations"] = json.loads(d["transformations"] or "{}")
+                d["created_at"] = str(d["created_at"]) if d["created_at"] else None
+                d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
+                assets.append(Asset.from_dict(d))
+            return assets
 
     def delete(self, asset_id: str) -> bool:
         """Delete asset record."""
-        cursor = self.uow.execute("DELETE FROM assets WHERE id = ?;", (asset_id,))
-        return cursor.rowcount > 0
+        with self.uow:
+            cursor = self.uow.execute("DELETE FROM assets WHERE id = ?;", (asset_id,))
+            return cursor.rowcount > 0
 

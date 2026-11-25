@@ -1,0 +1,2273 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Bookinistic Studio 2.0 API",
+    "description": "High-performance autonomous book cataloging engine",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/api/bootstrap": {
+      "get": {
+        "tags": [
+          "Bootstrap"
+        ],
+        "summary": "Get Bootstrap Data",
+        "description": "Return bootstrap payload: active store, references, tabs, and security token.",
+        "operationId": "get_bootstrap_data_api_bootstrap_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tabs": {
+      "get": {
+        "tags": [
+          "Workspace Tabs"
+        ],
+        "summary": "List Workspace Tabs",
+        "description": "List all open workspace tabs.",
+        "operationId": "list_workspace_tabs_api_tabs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceTabDTO"
+                  },
+                  "type": "array",
+                  "title": "Response List Workspace Tabs Api Tabs Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workspace Tabs"
+        ],
+        "summary": "Create Workspace Tab",
+        "description": "Open or create a new workspace tab.",
+        "operationId": "create_workspace_tab_api_tabs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceTabDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceTabDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tabs/{tab_id}": {
+      "patch": {
+        "tags": [
+          "Workspace Tabs"
+        ],
+        "summary": "Update Workspace Tab",
+        "description": "Update active state or order of a tab.",
+        "operationId": "update_workspace_tab_api_tabs__tab_id__patch",
+        "parameters": [
+          {
+            "name": "tab_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tab Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Updates"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceTabDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workspace Tabs"
+        ],
+        "summary": "Delete Workspace Tab",
+        "description": "Close a workspace tab.",
+        "operationId": "delete_workspace_tab_api_tabs__tab_id__delete",
+        "parameters": [
+          {
+            "name": "tab_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tab Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Delete Workspace Tab Api Tabs  Tab Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/save": {
+      "post": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Save Book",
+        "description": "Save book atomically: pre-validation, SQLite, VaultStore, S3 promotion, outbox enqueue.",
+        "operationId": "save_book_api_books_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Save Book Api Books Save Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/validate": {
+      "post": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Validate Book",
+        "description": "Validate book fields against Ozon category rules in ~5 ms.",
+        "operationId": "validate_book_api_books_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Validate Book Api Books Validate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/reopen": {
+      "post": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Reopen Book",
+        "description": "Reopen cataloged book from DB or Vault manifest into active workspace tab.",
+        "operationId": "reopen_book_api_books_reopen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReopenBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Reopen Book Api Books Reopen Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/catalog": {
+      "get": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Search Catalog",
+        "description": "Search catalog using SQLite FTS5 full-text index (< 2 ms).",
+        "operationId": "search_catalog_api_books_catalog_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/{article}": {
+      "get": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Get Book",
+        "description": "Get single book by article.",
+        "operationId": "get_book_api_books__article__get",
+        "parameters": [
+          {
+            "name": "article",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Article"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Delete Book",
+        "description": "Delete book and cascade to workspace tabs and outbox.",
+        "operationId": "delete_book_api_books__article__delete",
+        "parameters": [
+          {
+            "name": "article",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Article"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Delete Book Api Books  Article  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/upload": {
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Upload Asset",
+        "description": "Upload binary photo, create Asset with deterministic hash and auto-classify slot.",
+        "operationId": "upload_asset_api_assets_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_asset_api_assets_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}/assign": {
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Assign Asset Slot",
+        "description": "Assign asset to a semantic photo slot.",
+        "operationId": "assign_asset_slot_api_assets__asset_id__assign_post",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignAssetSlotRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}/transform": {
+      "patch": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Transform Asset",
+        "description": "Apply non-destructive crop/rotation/filters with Optimistic Locking.",
+        "operationId": "transform_asset_api_assets__asset_id__transform_patch",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransformAssetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}/run-ai": {
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Run Ai Rembg",
+        "description": "Trigger background removal strictly for book covers.",
+        "operationId": "run_ai_rembg_api_assets__asset_id__run_ai_post",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}": {
+      "delete": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Delete Asset",
+        "description": "Delete an asset from workspace and media storage.",
+        "operationId": "delete_asset_api_assets__asset_id__delete",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Delete Asset Api Assets  Asset Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}/preview": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Get Asset Preview",
+        "description": "Serve fast preview image (avoids Base64 in DOM/manifest).",
+        "operationId": "get_asset_preview_api_assets__asset_id__preview_get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/{asset_id}/full": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Get Asset Full",
+        "description": "Serve full resolution original photo.",
+        "operationId": "get_asset_full_api_assets__asset_id__full_get",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/recognize": {
+      "post": {
+        "tags": [
+          "AI & Enrichment"
+        ],
+        "summary": "Recognize Book",
+        "description": "Run full AI recognition: candidate filtering, barcode lookup, Gemini Vision, and FantLab.",
+        "operationId": "recognize_book_api_ai_recognize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecognizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/apply-suggestion": {
+      "post": {
+        "tags": [
+          "AI & Enrichment"
+        ],
+        "summary": "Apply Suggestion",
+        "description": "Apply an AI suggestion or alternative match to the draft book.",
+        "operationId": "apply_suggestion_api_ai_apply_suggestion_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplySuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/classify-batch": {
+      "post": {
+        "tags": [
+          "AI & Enrichment"
+        ],
+        "summary": "Classify Batch Photos",
+        "description": "Classify multiple photo filenames into standard slots based on regex/token heuristics.",
+        "operationId": "classify_batch_photos_api_ai_classify_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassifyBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Classify Batch Photos Api Ai Classify Batch Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/upload-chunk": {
+      "post": {
+        "tags": [
+          "Mobile Studio"
+        ],
+        "summary": "Upload Mobile Chunk",
+        "description": "Idempotently receive binary photo chunk from mobile camera/gallery.",
+        "operationId": "upload_mobile_chunk_api_mobile_upload_chunk_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_mobile_chunk_api_mobile_upload_chunk_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Upload Mobile Chunk Api Mobile Upload Chunk Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/commit": {
+      "post": {
+        "tags": [
+          "Mobile Studio"
+        ],
+        "summary": "Commit Mobile Session",
+        "description": "Commit mobile upload session: create assets in the active store photo pool.",
+        "operationId": "commit_mobile_session_api_mobile_commit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileCommitDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Commit Mobile Session Api Mobile Commit Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ozon/status": {
+      "get": {
+        "tags": [
+          "Ozon Marketplace"
+        ],
+        "summary": "Get Ozon Status",
+        "description": "Return status of outbox queue, background sync worker, and channel connectivity.",
+        "operationId": "get_ozon_status_api_ozon_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Ozon Status Api Ozon Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ozon/switch-profile": {
+      "post": {
+        "tags": [
+          "Ozon Marketplace"
+        ],
+        "summary": "Switch Store Profile",
+        "description": "Switch the active store profile in the StoreRegistry.",
+        "operationId": "switch_store_profile_api_ozon_switch_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwitchProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Switch Store Profile Api Ozon Switch Profile Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ozon/retry/{article}": {
+      "post": {
+        "tags": [
+          "Ozon Marketplace"
+        ],
+        "summary": "Retry Outbox Article",
+        "description": "Reset outbox item attempts and retry immediate submission.",
+        "operationId": "retry_outbox_article_api_ozon_retry__article__post",
+        "parameters": [
+          {
+            "name": "article",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Article"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Retry Outbox Article Api Ozon Retry  Article  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ozon/import": {
+      "post": {
+        "tags": [
+          "Ozon Marketplace"
+        ],
+        "summary": "Run Outbox Batch",
+        "description": "Trigger immediate processing of the marketplace outbox queue.",
+        "operationId": "run_outbox_batch_api_ozon_import_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Run Outbox Batch Api Ozon Import Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ozon/sync/smart-s3": {
+      "post": {
+        "tags": [
+          "Ozon Marketplace"
+        ],
+        "summary": "Trigger Smart S3 Sync",
+        "description": "Trigger incremental Ozon -> S3 -> SQLite photo URL sync strictly chunked by 50.",
+        "operationId": "trigger_smart_s3_sync_api_ozon_sync_smart_s3_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncSmartS3Request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Trigger Smart S3 Sync Api Ozon Sync Smart S3 Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health Check",
+        "description": "Public health probe.",
+        "operationId": "health_check_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/keys": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Get System Keys",
+        "description": "Return masked API key statuses (strictly NO plaintext secrets).",
+        "operationId": "get_system_keys_api_system_keys_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get System Keys Api System Keys Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/cleanup": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Trigger Storage Cleanup",
+        "description": "Trigger transactional disk cleanup of archived assets.",
+        "operationId": "trigger_storage_cleanup_api_system_cleanup_post",
+        "parameters": [
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Dry Run"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Trigger Storage Cleanup Api System Cleanup Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/excel/download": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Download Excel Catalog",
+        "description": "Download OpenXML catalog spreadsheet.",
+        "operationId": "download_excel_catalog_api_system_excel_download_get",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all_books.xlsx",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/photos-zip": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Download Photos Zip",
+        "description": "Download clean streaming ZIP for Ozon seller portal (excluding raw/info pages).",
+        "operationId": "download_photos_zip_api_system_photos_zip_get",
+        "parameters": [
+          {
+            "name": "article",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Article"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/open-folder": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Open System Folder",
+        "description": "Open folder in native desktop file manager (127.0.0.1 and allowlist only).",
+        "operationId": "open_system_folder_api_system_open_folder_post",
+        "parameters": [
+          {
+            "name": "folder",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Folder"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Open System Folder Api System Open Folder Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/image-proxy": {
+      "get": {
+        "tags": [
+          "Proxy"
+        ],
+        "summary": "Proxy Image",
+        "description": "Stream remote image securely to UI without CORS or SSRF vulnerabilities.",
+        "operationId": "proxy_image_api_image_proxy_get",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Url"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/stream": {
+      "get": {
+        "tags": [
+          "Real-time Events"
+        ],
+        "summary": "Event Stream",
+        "description": "Subscribe to real-time UI notifications via Server-Sent Events (W3C text/event-stream).",
+        "operationId": "event_stream_api_events_stream_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApplySuggestionRequest": {
+        "properties": {
+          "book_article": {
+            "type": "string",
+            "title": "Book Article"
+          },
+          "field_name": {
+            "type": "string",
+            "title": "Field Name"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "book_article",
+          "field_name",
+          "value"
+        ],
+        "title": "ApplySuggestionRequest"
+      },
+      "AssetDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "book_article": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Article"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          },
+          "slot_order": {
+            "type": "integer",
+            "title": "Slot Order",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "UPLOADED"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message",
+            "default": ""
+          },
+          "original_path": {
+            "type": "string",
+            "title": "Original Path",
+            "default": ""
+          },
+          "preview_path": {
+            "type": "string",
+            "title": "Preview Path",
+            "default": ""
+          },
+          "ai_white_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai White Path"
+          },
+          "transformations": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Transformations"
+          },
+          "render_hash": {
+            "type": "string",
+            "title": "Render Hash",
+            "default": ""
+          },
+          "s3_staging_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S3 Staging Url"
+          },
+          "s3_final_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "S3 Final Url"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          },
+          "file_size_bytes": {
+            "type": "integer",
+            "title": "File Size Bytes",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "AssetDTO"
+      },
+      "AssignAssetSlotRequest": {
+        "properties": {
+          "slot": {
+            "type": "string",
+            "title": "Slot"
+          },
+          "slot_order": {
+            "type": "integer",
+            "title": "Slot Order",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot"
+        ],
+        "title": "AssignAssetSlotRequest"
+      },
+      "Body_upload_asset_api_assets_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "book_article": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Article"
+          },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_asset_api_assets_upload_post"
+      },
+      "Body_upload_mobile_chunk_api_mobile_upload_chunk_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "default": "cover_front"
+          },
+          "book_index": {
+            "type": "integer",
+            "title": "Book Index",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "session_id",
+          "chunk_index"
+        ],
+        "title": "Body_upload_mobile_chunk_api_mobile_upload_chunk_post"
+      },
+      "BookDTO": {
+        "properties": {
+          "article": {
+            "type": "string",
+            "title": "Article",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "author": {
+            "type": "string",
+            "title": "Author",
+            "default": "не указан"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Price",
+            "default": 0.0
+          },
+          "old_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Price"
+          },
+          "template_mode": {
+            "type": "string",
+            "title": "Template Mode",
+            "default": "pre2011"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "DRAFT"
+          },
+          "storage_location": {
+            "type": "string",
+            "title": "Storage Location",
+            "default": ""
+          },
+          "publisher": {
+            "type": "string",
+            "title": "Publisher",
+            "default": ""
+          },
+          "series": {
+            "type": "string",
+            "title": "Series",
+            "default": ""
+          },
+          "isbn": {
+            "type": "string",
+            "title": "Isbn",
+            "default": ""
+          },
+          "format_code": {
+            "type": "string",
+            "title": "Format Code",
+            "default": ""
+          },
+          "pages": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Pages",
+            "default": 0
+          },
+          "cover_type": {
+            "type": "string",
+            "title": "Cover Type",
+            "default": "Твердый переплет"
+          },
+          "condition": {
+            "type": "string",
+            "title": "Condition",
+            "default": "Хорошая"
+          },
+          "annotation": {
+            "type": "string",
+            "title": "Annotation",
+            "default": ""
+          },
+          "brand": {
+            "type": "string",
+            "title": "Brand",
+            "default": ""
+          },
+          "author_cover": {
+            "type": "string",
+            "title": "Author Cover",
+            "default": ""
+          },
+          "original_title": {
+            "type": "string",
+            "title": "Original Title",
+            "default": ""
+          },
+          "barcode": {
+            "type": "string",
+            "title": "Barcode",
+            "default": ""
+          },
+          "genre": {
+            "type": "string",
+            "title": "Genre",
+            "default": "Проза"
+          },
+          "paper_type": {
+            "type": "string",
+            "title": "Paper Type",
+            "default": ""
+          },
+          "age_limit": {
+            "type": "string",
+            "title": "Age Limit",
+            "default": ""
+          },
+          "translator": {
+            "type": "string",
+            "title": "Translator",
+            "default": ""
+          },
+          "illustrator": {
+            "type": "string",
+            "title": "Illustrator",
+            "default": ""
+          },
+          "main_photo_url": {
+            "type": "string",
+            "title": "Main Photo Url",
+            "default": ""
+          },
+          "add_photo_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Add Photo Urls"
+          },
+          "dimensions": {
+            "$ref": "#/components/schemas/DimensionsDTO"
+          },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Field Sources"
+          },
+          "suggestions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Suggestions"
+          },
+          "ozon_sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ozon Sync Status"
+          }
+        },
+        "type": "object",
+        "title": "BookDTO"
+      },
+      "BootstrapResponse": {
+        "properties": {
+          "stores": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Stores"
+          },
+          "active_store": {
+            "type": "string",
+            "title": "Active Store"
+          },
+          "brands": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Brands"
+          },
+          "gost_formats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Gost Formats"
+          },
+          "tabs": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceTabDTO"
+            },
+            "type": "array",
+            "title": "Tabs"
+          },
+          "mobile_token": {
+            "type": "string",
+            "title": "Mobile Token"
+          },
+          "tunnel_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tunnel Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stores",
+          "active_store",
+          "brands",
+          "gost_formats",
+          "tabs",
+          "mobile_token"
+        ],
+        "title": "BootstrapResponse"
+      },
+      "CatalogSearchResponse": {
+        "properties": {
+          "books": {
+            "items": {
+              "$ref": "#/components/schemas/BookDTO"
+            },
+            "type": "array",
+            "title": "Books"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "books",
+          "total",
+          "query"
+        ],
+        "title": "CatalogSearchResponse"
+      },
+      "ClassifyBatchRequest": {
+        "properties": {
+          "filenames": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Filenames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filenames"
+        ],
+        "title": "ClassifyBatchRequest"
+      },
+      "DimensionsDTO": {
+        "properties": {
+          "width_mm": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Width Mm",
+            "default": 130
+          },
+          "length_mm": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Length Mm",
+            "default": 200
+          },
+          "height_mm": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Height Mm",
+            "default": 15
+          },
+          "weight_g": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Weight G",
+            "default": 250
+          },
+          "book_format_code": {
+            "type": "string",
+            "title": "Book Format Code",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "DimensionsDTO"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MobileCommitDTO": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "store_id": {
+            "type": "string",
+            "title": "Store Id",
+            "default": "default"
+          },
+          "book_article": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Article"
+          },
+          "photo_roles": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Photo Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "title": "MobileCommitDTO"
+      },
+      "RecognizeRequest": {
+        "properties": {
+          "book": {
+            "$ref": "#/components/schemas/BookDTO"
+          },
+          "photos": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Photos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "book"
+        ],
+        "title": "RecognizeRequest"
+      },
+      "ReopenBookRequest": {
+        "properties": {
+          "article": {
+            "type": "string",
+            "title": "Article"
+          },
+          "tab_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tab Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "article"
+        ],
+        "title": "ReopenBookRequest"
+      },
+      "SaveBookRequest": {
+        "properties": {
+          "book": {
+            "$ref": "#/components/schemas/BookDTO"
+          },
+          "store_id": {
+            "type": "string",
+            "title": "Store Id",
+            "default": "default"
+          },
+          "skip_validation": {
+            "type": "boolean",
+            "title": "Skip Validation",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "book"
+        ],
+        "title": "SaveBookRequest"
+      },
+      "SwitchProfileRequest": {
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "title": "Store Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "store_id"
+        ],
+        "title": "SwitchProfileRequest"
+      },
+      "SyncSmartS3Request": {
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "title": "Store Id",
+            "default": "default"
+          },
+          "batch_size": {
+            "type": "integer",
+            "maximum": 50.0,
+            "title": "Batch Size",
+            "default": 50
+          }
+        },
+        "type": "object",
+        "title": "SyncSmartS3Request"
+      },
+      "TransformAssetRequest": {
+        "properties": {
+          "transformations": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Transformations"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "TransformAssetRequest"
+      },
+      "ValidateBookRequest": {
+        "properties": {
+          "book": {
+            "$ref": "#/components/schemas/BookDTO"
+          }
+        },
+        "type": "object",
+        "required": [
+          "book"
+        ],
+        "title": "ValidateBookRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorkspaceTabDTO": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "book_article": {
+            "type": "string",
+            "title": "Book Article"
+          },
+          "tab_order": {
+            "type": "integer",
+            "title": "Tab Order",
+            "default": 0
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": false
+          },
+          "is_edit_mode": {
+            "type": "boolean",
+            "title": "Is Edit Mode",
+            "default": false
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "book_article"
+        ],
+        "title": "WorkspaceTabDTO"
+      }
+    }
+  }
+}

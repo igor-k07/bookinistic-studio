@@ -10,8 +10,9 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,21 @@ class StoreProfile:
     client_id: str
     api_key: str
     is_test: bool = False
+    gemini_api_key: str = ""
+    s3_secret_key: str = ""
 
     def __post_init__(self) -> None:
         if not STORE_ID_REGEX.match(self.store_id):
             raise ValueError(
                 f"Invalid store_id '{self.store_id}': must match pattern ^[A-Za-z0-9_-]{{1,32}}$"
             )
+
+    @property
+    def ozon_api_key(self) -> str:
+        return self.api_key
+
+    def to_dict(self) -> dict:
+        return self.to_masked_dict()
 
     def to_masked_dict(self) -> dict:
         """Safe dictionary representation for UI / logs with masked secrets."""
@@ -130,6 +140,41 @@ class StoreContext:
         self.vault_dir.mkdir(parents=True, exist_ok=True)
         self.excel_pre2011_dir.mkdir(parents=True, exist_ok=True)
         self.excel_post2011_dir.mkdir(parents=True, exist_ok=True)
+
+    @cached_property
+    def uow(self) -> Any:
+        from backend.infrastructure.persistence.sqlite_uow import SqliteUnitOfWork
+        return SqliteUnitOfWork(self.db_path)
+
+    @cached_property
+    def book_repo(self) -> Any:
+        from backend.infrastructure.persistence.book_repo import SqliteBookRepository
+        return SqliteBookRepository(self.uow)
+
+    @cached_property
+    def asset_repo(self) -> Any:
+        from backend.infrastructure.persistence.asset_repo import SqliteAssetRepository
+        return SqliteAssetRepository(self.uow)
+
+    @cached_property
+    def reference_repo(self) -> Any:
+        from backend.infrastructure.persistence.reference_repo import SqliteReferenceRepository
+        return SqliteReferenceRepository(self.uow)
+
+    @cached_property
+    def vault_store(self) -> Any:
+        from backend.infrastructure.media.vault_store import VaultStore
+        return VaultStore(self.vault_dir)
+
+    @cached_property
+    def ozon_gateway(self) -> Any:
+        from backend.channels.ozon.gateway import OzonGateway
+        return OzonGateway(client_id=self.client_id, api_key=self.api_key)
+
+    @cached_property
+    def ozon_channel(self) -> Any:
+        from backend.channels.ozon.channel import OzonChannel
+        return OzonChannel(self.ozon_gateway)
 
 
 class StoreRegistry:
@@ -242,6 +287,19 @@ class StoreRegistry:
         self._profiles[profile.store_id] = profile
         if self._active_store_id is None:
             self._active_store_id = profile.store_id
+
+    @property
+    def active_store_id(self) -> str:
+        """Return the current active store ID."""
+        return self._active_store_id or ""
+
+    def list_stores(self) -> List[StoreProfile]:
+        """Alias for list_profiles."""
+        return self.list_profiles()
+
+    def set_active_store(self, store_id: str) -> StoreContext:
+        """Alias for switch_profile."""
+        return self.switch_profile(store_id)
 
     def list_profiles(self) -> List[StoreProfile]:
         """List all registered store profiles."""

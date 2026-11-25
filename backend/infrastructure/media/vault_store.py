@@ -81,8 +81,33 @@ class VaultStore:
             tmp_path = Path(tmp.name)
             tmp_path.write_text(json.dumps(clean_meta, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp_path.replace(manifest_path)
-
+        logger.info("Successfully updated vault archive for %s", article)
         return book_dir
+
+    def save_file(self, rel_path: str, data: bytes) -> str:
+        """Save a file relative to vault_dir conforming to IMediaStorage."""
+        target = safe_path(self.vault_dir, rel_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        return str(target)
+
+    def read_file(self, rel_path: str) -> bytes:
+        """Read a file relative to vault_dir conforming to IMediaStorage."""
+        target = safe_path(self.vault_dir, rel_path)
+        if not target.is_file():
+            raise FileNotFoundError(f"File not found: {rel_path}")
+        return target.read_bytes()
+
+    def delete_file(self, rel_path: str) -> bool:
+        """Delete a file relative to vault_dir conforming to IMediaStorage."""
+        try:
+            target = safe_path(self.vault_dir, rel_path)
+            if target.is_file():
+                target.unlink()
+                return True
+            return False
+        except Exception:
+            return False
 
     def get_manifest(self, article: str) -> Optional[Dict[str, Any]]:
         """Read and return manifest.json for article if present."""

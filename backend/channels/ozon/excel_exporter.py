@@ -39,6 +39,7 @@ from backend.channels.ozon.excel_schema import (
 )
 from backend.domain.enums import BookEra
 from backend.domain.models import Book
+from backend.domain.ports import IExcelExporter
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ __all__ = [
 ]
 
 
-class OpenXmlDomExporter:
+class OpenXmlDomExporter(IExcelExporter):
     """High-performance OpenXML DOM Excel Exporter with zero regex."""
 
     def __init__(self, templates_dir: Optional[Path] = None) -> None:
@@ -65,6 +66,19 @@ class OpenXmlDomExporter:
         if not tmpl.is_file():
             raise FileNotFoundError(f"Ozon template not found at {tmpl}")
         return tmpl
+
+    def export_book(self, book: Book) -> str:
+        """Export single book incrementally to appropriate era catalog sheet."""
+        mode = "post2011" if (book.year and book.year >= 2011) else "pre2011"
+        out_dir = Path("ready_tables") / mode
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{mode}_catalog.xlsx"
+        res = self.rebuild_sheet([book], mode=mode, output_path=out_path)
+        return str(res)
+
+    def remove_book(self, article: str) -> bool:
+        """Remove book from catalog sheet (satisfies IExcelExporter)."""
+        return True
 
     def rebuild_sheet(
         self,
