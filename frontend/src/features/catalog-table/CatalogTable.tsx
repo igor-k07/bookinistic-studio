@@ -223,3 +223,4 @@ export function CatalogTable({ isOpen, onClose }: Props): React.JSX.Element | nu
     </div>
   );
 }
+

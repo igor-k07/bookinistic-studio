@@ -127,3 +127,4 @@ describe("workspaceStore", () => {
     expect(state.activeTabId).toBe(state.tabs[0].id);
   });
 });
+

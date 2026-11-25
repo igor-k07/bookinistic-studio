@@ -136,3 +136,4 @@ export async function clearAllMobileData(): Promise<void> {
   await tx.objectStore("photos").clear();
   await tx.done;
 }
+

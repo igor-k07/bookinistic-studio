@@ -193,6 +193,17 @@ def test_rotate_session_token_endpoint(client: TestClient):
     assert len(data["mobile_token"]) >= 16
 
 
+def test_static_frontend_routes(client: TestClient):
+    """GET / and GET /mobile serve compiled frontend Single Page Applications."""
+    resp_root = client.get("/")
+    assert resp_root.status_code == 200
+    assert "Bookinistic Studio" in resp_root.text
+
+    resp_mobile = client.get("/mobile")
+    assert resp_mobile.status_code == 200
+    assert "Mobile" in resp_mobile.text or "Bookinistic" in resp_mobile.text
+
+
 def test_openapi_json_file_exported_and_valid():
     """Verify openapi.json exists, is valid JSON, and has all expected endpoints."""
     openapi_file = Path("openapi.json")

@@ -78,3 +78,4 @@ describe("StudioEngine (ADR-10 Isolated Cropper & Adjustment Pipeline)", () => {
     expect(engine.getCropRatio()).toBe("free");
   });
 });
+

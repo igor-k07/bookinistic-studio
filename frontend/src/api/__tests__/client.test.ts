@@ -74,3 +74,4 @@ describe("SSEClient", () => {
     expect(received).toHaveLength(1);
   });
 });
+

@@ -131,3 +131,4 @@ export function BarcodeLabel({
     </div>
   );
 }
+

@@ -110,3 +110,4 @@ export class HistoryStack {
     this.present = JSON.parse(JSON.stringify(resetState));
   }
 }
+

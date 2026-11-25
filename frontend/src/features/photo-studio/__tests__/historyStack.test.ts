@@ -82,3 +82,4 @@ describe("HistoryStack (ADR-10 Diff-based Undo/Redo)", () => {
     expect(stack.canUndo()).toBe(false);
   });
 });
+

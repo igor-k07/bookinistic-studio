@@ -342,3 +342,4 @@ sseClient.on("tab.opened", (payload) => {
     }
   }
 });
+

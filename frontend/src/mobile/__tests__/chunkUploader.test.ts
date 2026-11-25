@@ -74,3 +74,4 @@ describe("chunkUploader", () => {
     expect(remainingPhotos).toHaveLength(0);
   });
 });
+

@@ -229,3 +229,4 @@ export function SettingsModal({ isOpen, onClose }: Props): React.JSX.Element | n
     </div>
   );
 }
+

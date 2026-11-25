@@ -214,6 +214,14 @@ def create_app(settings: Optional[AppSettings] = None) -> FastAPI:
     # 4. Static frontend build mount (if dist exists)
     dist_dir = Path("frontend/dist")
     if dist_dir.is_dir():
+        mobile_html = dist_dir / "mobile.html"
+        if mobile_html.is_file():
+            from fastapi.responses import FileResponse
+
+            @app.get("/mobile", include_in_schema=False)
+            def serve_mobile_pwa() -> FileResponse:
+                return FileResponse(str(mobile_html), media_type="text/html")
+
         app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="frontend")
 
     return app

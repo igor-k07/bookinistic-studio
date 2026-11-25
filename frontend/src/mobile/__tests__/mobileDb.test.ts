@@ -62,3 +62,4 @@ describe("mobileDb IndexedDB persistence", () => {
     expect(photos).toHaveLength(0);
   });
 });
+
