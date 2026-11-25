@@ -12,7 +12,7 @@
 - [x] **Step 1.4 — Unified Domain Rules (`domain/rules.py`), Models (`domain/models.py`) & Ports (`domain/ports.py`)**
 - [x] **Step 2.1 — `SqliteUnitOfWork` & Versioned Migrations**
 - [x] **Step 2.2 — Repositories (`book_repo.py`, `asset_repo.py`, `reference_repo.py`)**
-- [ ] **Step 2.3 — Store-Scoped Cloud Backup & WAL-Safe Restore**
+- [x] **Step 2.3 — Store-Scoped Cloud Backup & WAL-Safe Restore**
 - [ ] **Step 3.1 — `ImageRenderPipeline`, `RembgImageProcessor` & `BarcodeScanner`**
 - [ ] **Step 3.2 — Local Archive `VaultStore` (`books_vault/{article}/`)**
 - [ ] **Step 3.3 — Two-Tier `YandexS3Adapter`**
@@ -38,4 +38,5 @@
 - 2026-11-25: Step 1.4 completed — Implemented domain rules (era boundary, GOST physics, dust-jacket fix, publisher/author/slot normalization), models (Book, Asset, WorkspaceTab, OutboxItem, EnrichmentCandidate), ports Protocol interfaces, and automated architecture guard tests (LOC <= 400, 0 external imports); verified by unit tests, ruff, and mypy.
 - 2026-11-25: Step 2.1 completed — Implemented SqliteUnitOfWork with guaranteed conn.close() in finally, WAL mode, foreign keys, and versioned non-destructive migrations preserving 2,378 existing books, FTS5 sync, and sequences; verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 2.2 completed — Implemented SqliteBookRepository (FTS5 search, workspace tabs, atomic sequences without 10000 ceiling), SqliteAssetRepository (Optimistic Locking via version), and SqliteReferenceRepository (fast normalized brand autocomplete); verified by integration tests, ruff, and mypy.
+- 2026-11-25: Step 2.3 completed — Implemented BackupService with debounced sqlite3.backup() snapshots, strict store isolation in S3 keys (backups/db/{store_id}/...), integrity validation, and WAL/SHM-safe atomic swap restore; verified by integration tests, ruff, and mypy.
 
