@@ -40,3 +40,14 @@ class StorageError(DomainError):
     pass
 
 
+class AuthenticationError(DomainError):
+    """Raised when external API authentication fails (e.g. invalid API key)."""
+    pass
+
+
+class ExternalServiceError(DomainError):
+    """Raised when external service (AI vision, enrichment, marketplace) fails."""
+    pass
+
+
+

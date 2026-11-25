@@ -54,12 +54,20 @@ class Isbn:
         if not raw or not str(raw).strip():
             return None
 
-        cleaned = re.sub(r"[\s\-–—]", "", str(raw)).strip().upper()
+        cleaned = cls.clean(raw)
         if not cleaned:
             return None
 
         is_valid = cls._validate_checksum(cleaned) and not cls._is_placeholder(cleaned)
         return cls(value=str(raw).strip(), clean_digits=cleaned, is_valid=is_valid)
+
+    @staticmethod
+    def clean(raw: Optional[str]) -> str:
+        """Strip hyphens, spaces, and formatting, returning uppercase alphanumeric digits."""
+        if not raw:
+            return ""
+        return re.sub(r"[^\dX]", "", str(raw).upper())
+
 
     @staticmethod
     def _is_placeholder(clean: str) -> bool:

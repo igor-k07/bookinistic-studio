@@ -16,7 +16,7 @@
 - [x] **Step 3.1 — `ImageRenderPipeline`, `RembgImageProcessor` & `BarcodeScanner`**
 - [x] **Step 3.2 — Local Archive `VaultStore` (`books_vault/{article}/`)**
 - [x] **Step 3.3 — Two-Tier `YandexS3Adapter`**
-- [ ] **Step 4.1 — `GeminiVisionClient` & `EnrichmentClients`**
+- [x] **Step 4.1 — `GeminiVisionClient` & `EnrichmentClients`**
 - [ ] **Step 4.2 — Ozon Channel Module (`backend/channels/ozon/`)**
 - [ ] **Step 4.3 — Pure `OpenXmlDomExporter` (Zero Regex!)**
 - [ ] **Step 5.1 — `SSEBroker`, `JobManager` & `OzonOutboxWorker`**
@@ -42,5 +42,7 @@
 - 2026-11-25: Step 3.1 completed — Implemented unified Pillow ImageRenderPipeline with float rotation (white fillcolor), clamped crop, 8 photo filters, and SHA-256 hashing; thread-safe RembgImageProcessor with OpenCV white-cover protection; and local OpenCV BarcodeScanner; verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 3.2 completed — Implemented VaultStore with strict article-only folder hierarchy (preventing title-rename duplication), atomic manifest.json (Base64 stripped), raw_sources isolation, and streaming Ozon ZIP exports (strictly excluding info pages); verified by integration tests, ruff, and mypy.
 - 2026-11-25: Step 3.3 completed — Implemented two-tier YandexS3Adapter (staging upload, server-side copy_object promotion, render_hash dedup, ThreadPoolExecutor parallel workers, shared static card, and Ozon 14-photo cap); verified by unit tests, ruff, and mypy.
+- 2026-11-25: Step 4.1 completed — Implemented GeminiVisionClient (httpx, x-goog-api-key header, 1200px resize, thinking parts extraction, recitation retry, model cascade) and EnrichmentClients (FantLabClient with 30-day cache, max 5 parallel detail fetches, strict illustrator role parsing, Cyrillic format, and OpenLibraryClient with \\bпо\\b word-boundary fix); verified by unit tests, ruff, and mypy.
+
 
 
