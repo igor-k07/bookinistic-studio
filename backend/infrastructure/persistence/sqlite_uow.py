@@ -146,6 +146,7 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
                 template_mode    TEXT NOT NULL DEFAULT 'pre2011',
                 status           TEXT NOT NULL DEFAULT 'DRAFT',
                 storage_location TEXT NOT NULL DEFAULT '',
+                data             TEXT DEFAULT '{}',
                 data_json        TEXT NOT NULL DEFAULT '{}',
                 created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -154,6 +155,8 @@ def _migrate_to_v1(conn: sqlite3.Connection) -> None:
     else:
         # Check existing columns
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(books);").fetchall()}
+        if "data" not in cols:
+            conn.execute("ALTER TABLE books ADD COLUMN data TEXT DEFAULT '{}';")
         if "data_json" not in cols and "data" in cols:
             conn.execute("ALTER TABLE books ADD COLUMN data_json TEXT NOT NULL DEFAULT '{}';")
             conn.execute("UPDATE books SET data_json = data WHERE data IS NOT NULL AND data != '';")

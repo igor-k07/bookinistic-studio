@@ -105,3 +105,4 @@ class SSEBroker(IEventBroker):
             with self._lock:
                 for dq in dead_queues:
                     self._subscribers.discard(dq)
+

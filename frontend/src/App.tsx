@@ -1,60 +1,156 @@
 import React, { useEffect, useState } from "react";
-import { apiRequest } from "./api/client";
-import { sseClient } from "./api/sse";
+import { BarcodeLabel } from "./features/barcode-label/BarcodeLabel";
+import { BookForm } from "./features/book-form/BookForm";
+import { PhotoPool } from "./features/photo-pool/PhotoPool";
+import { useSystemStore } from "./store/systemStore";
+import { useWorkspaceStore } from "./store/workspaceStore";
 
 export default function App(): React.JSX.Element {
-  const [bootstrapData, setBootstrapData] = useState<{
-    active_store?: string;
-    brands?: string[];
-    mobile_token?: string;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    activeStore,
+    stores,
+    outboxCounts,
+    hydrateFromBootstrap,
+    switchActiveStore,
+  } = useSystemStore();
+
+  const {
+    tabs,
+    activeTabId,
+    currentBook,
+    createTab,
+    closeTab,
+    setActiveTab,
+  } = useWorkspaceStore();
+
+  const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
 
   useEffect(() => {
-    // Fetch bootstrap state on mount
-    apiRequest<{
-      active_store: string;
-      brands: string[];
-      mobile_token: string;
-    }>("/api/bootstrap")
-      .then((data) => setBootstrapData(data))
-      .catch((err) => setError(err.message));
+    hydrateFromBootstrap();
+  }, [hydrateFromBootstrap]);
 
-    // Connect SSE listener
-    sseClient.connect();
-
-    return () => {
-      sseClient.disconnect();
-    };
-  }, []);
+  // Initial tab creation if none exist
+  useEffect(() => {
+    if (tabs.length === 0) {
+      createTab();
+    }
+  }, [tabs.length, createTab]);
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-slate-900 text-slate-100">
-      <header className="flex h-14 items-center justify-between border-b border-slate-800 px-6">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-bold tracking-tight text-white">
-            Bookinistic Studio <span className="text-emerald-500">2.0</span>
+    <div className="flex h-screen w-screen flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      {/* Top Main Navigation Bar */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-6 backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <span className="text-lg font-black tracking-tight text-white">
+            Bookinistic Studio <span className="text-emerald-400">2.0</span>
           </span>
-          {bootstrapData?.active_store && (
-            <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
-              Магазин: {bootstrapData.active_store}
-            </span>
-          )}
+
+          {/* Store Switcher Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsStoreMenuOpen((prev) => !prev)}
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 hover:border-slate-600 active:scale-95"
+            >
+              <span>🏬 {stores.find((s) => s.store_id === activeStore)?.name || activeStore}</span>
+              <span className="text-slate-400">▼</span>
+            </button>
+
+            {isStoreMenuOpen && (
+              <div className="absolute top-full left-0 z-50 mt-1.5 w-56 rounded-xl border border-slate-700 bg-slate-800/95 p-1 shadow-2xl backdrop-blur-md">
+                {stores.map((s) => (
+                  <button
+                    key={s.store_id}
+                    onClick={() => {
+                      switchActiveStore(s.store_id);
+                      setIsStoreMenuOpen(false);
+                    }}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium transition-colors ${
+                      s.store_id === activeStore
+                        ? "bg-emerald-600 text-white"
+                        : "text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    <div className="font-semibold">{s.name}</div>
+                    <div className="text-[10px] text-slate-400">ID: {s.store_id}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-4 text-sm text-slate-400">
-          {error && <span className="text-red-400">{error}</span>}
-          <span>Статус: Подключено</span>
+
+        {/* Live Outbox Status Stats */}
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-slate-400">Ozon Outbox:</span>
+          <span className="rounded bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 text-amber-300 font-semibold">
+            В очереди: {outboxCounts["QUEUED"] || 0}
+          </span>
+          <span className="rounded bg-blue-950/80 border border-blue-800/80 px-2 py-0.5 text-blue-300 font-semibold">
+            Модерация: {outboxCounts["PROCESSING"] || outboxCounts["MODERATION"] || 0}
+          </span>
+          <span className="rounded bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 text-emerald-300 font-semibold">
+            Опубликовано: {outboxCounts["PUBLISHED"] || 0}
+          </span>
         </div>
       </header>
-      <main className="flex flex-1 items-center justify-center p-6">
-        <div className="text-center">
-          <h2 className="text-2xl font-semibold">Рабочая область Desktop</h2>
-          <p className="mt-2 text-slate-400">
-            Инициализация ядра завершена. Готово к загрузке вкладок и пула фотографий.
-          </p>
+
+      {/* Workspace Tabs Strip */}
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900/40 px-4 pt-2 scrollbar-none">
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTabId;
+          return (
+            <div
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`group flex items-center gap-2 rounded-t-xl border-t border-x px-4 py-2 text-xs font-medium transition-all cursor-pointer ${
+                isActive
+                  ? "border-slate-800 bg-slate-900 text-emerald-400 border-b-2 border-b-emerald-500 shadow-sm"
+                  : "border-transparent bg-transparent text-slate-400 hover:bg-slate-850 hover:text-slate-200"
+              }`}
+            >
+              <span className="max-w-[140px] truncate">{tab.title || tab.book_article}</span>
+              {tabs.length > 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                  }}
+                  className="rounded p-0.5 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-slate-800 hover:text-red-400"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button
+          onClick={() => createTab()}
+          className="ml-2 mb-1 flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white"
+        >
+          + Новая книга
+        </button>
+      </div>
+
+      {/* Main Workspace Layout: Two-Column Split */}
+      <div className="flex flex-1 overflow-hidden p-4 gap-4">
+        {/* Left Column: Comprehensive Book Form */}
+        <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin">
+          <BookForm />
         </div>
-      </main>
+
+        {/* Right Column: Photo Pool & Barcode Label */}
+        <div className="flex w-96 shrink-0 flex-col gap-4 overflow-y-auto pl-1 scrollbar-thin">
+          <PhotoPool />
+          <BarcodeLabel
+            article={currentBook.article}
+            barcode={currentBook.barcode}
+            title={currentBook.title}
+            author={currentBook.author}
+            price={currentBook.price}
+            storageLocation={currentBook.storage_location}
+          />
+        </div>
+      </div>
     </div>
   );
 }
-

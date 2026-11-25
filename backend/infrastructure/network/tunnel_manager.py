@@ -81,6 +81,11 @@ class CloudflareTunnelManager:
                 self._process = None
             return self._tunnel_url
 
+    @property
+    def tunnel_url(self) -> Optional[str]:
+        """Property alias for get_tunnel_url()."""
+        return self.get_tunnel_url()
+
     def is_running(self) -> bool:
         """Check if tunnel process is actively running."""
         with self._lock:
