@@ -31,29 +31,42 @@ def get_next_article(request: Request) -> Any:
 
 @router.get("/excel-preview")
 def get_excel_preview(request: Request, mode: str = "pre2011") -> Any:
-    """Return non-draft books grouped by era for the embedded Excel preview table."""
+    """Return ONLY books present in the current session's Excel export files."""
     ctx = request.app.state.store_registry.get_active_context()
+    exporter = getattr(request.app.state, "excel_exporter", None)
+    if exporter is None:
+        return {"mode": mode, "books": [], "pre2011_count": 0, "post2011_count": 0, "total": 0}
+
+    pre_articles = exporter.read_articles("pre2011")
+    post_articles = exporter.read_articles("post2011")
+    target_articles = post_articles if mode == "post2011" else pre_articles
+
+    selected: list[BookDTO] = []
     with ctx.uow:
-        all_books = ctx.book_repo.search_fts("", limit=5000, offset=0)
+        for art in target_articles:
+            b = ctx.book_repo.get_by_article(art)
+            if b is not None:
+                selected.append(BookDTO(**b.to_dict()))
+            else:
+                selected.append(BookDTO(article=art, title=art))
 
-    pre_books = []
-    post_books = []
-    for b in all_books:
-        if (b.status or "").upper() == "DRAFT":
-            continue
-        if b.year and b.year >= 2011:
-            post_books.append(b)
-        else:
-            pre_books.append(b)
-
-    selected = post_books if mode == "post2011" else pre_books
     return {
         "mode": mode,
-        "books": [BookDTO(**b.to_dict()) for b in selected[:200]],
-        "pre2011_count": len(pre_books),
-        "post2011_count": len(post_books),
-        "total": len(pre_books) + len(post_books),
+        "books": selected,
+        "pre2011_count": len(pre_articles),
+        "post2011_count": len(post_articles),
+        "total": len(pre_articles) + len(post_articles),
     }
+
+
+@router.delete("/excel-row/{article}")
+def remove_excel_row_only(article: str, request: Request) -> Any:
+    """Remove book row ONLY from the current session's Excel table (keeps catalog.db & Ozon intact)."""
+    exporter = getattr(request.app.state, "excel_exporter", None)
+    if not exporter:
+        raise HTTPException(status_code=500, detail="Excel exporter not configured")
+    exporter.remove_book(article)
+    return {"success": True, "article": article, "scope": "excel_only"}
 
 
 @router.post("/clear-excel")

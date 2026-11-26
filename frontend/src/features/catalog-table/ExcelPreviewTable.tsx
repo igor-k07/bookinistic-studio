@@ -73,10 +73,16 @@ export function ExcelPreviewTable(): React.JSX.Element {
   };
 
   const handleDelete = async (article: string, title: string) => {
-    if (!confirm(`Удалить книгу ${article} («${title}») из базы и таблицы Excel?`)) return;
+    if (
+      !confirm(
+        `Убрать книгу ${article} («${title}») из таблицы текущей сессии?\n\nКарточка на Ozon и в общей базе НЕ будет удалена.`
+      )
+    ) {
+      return;
+    }
     setBusyArticle(article);
     try {
-      await apiRequest(`/api/books/${encodeURIComponent(article)}`, { method: "DELETE" });
+      await apiRequest(`/api/books/excel-row/${encodeURIComponent(article)}`, { method: "DELETE" });
       await loadPreview(mode);
     } finally {
       setBusyArticle(null);
@@ -97,7 +103,7 @@ export function ExcelPreviewTable(): React.JSX.Element {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-6 py-4">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-sm font-bold text-white uppercase tracking-wide">
-            📊 Таблицы выгрузки Ozon (Excel OpenXML)
+            📊 Книги текущей сессии (Excel)
           </h2>
 
           <div className="flex rounded-xl border border-slate-800 bg-slate-900 p-1 text-xs">
@@ -286,3 +292,4 @@ export function ExcelPreviewTable(): React.JSX.Element {
     </section>
   );
 }
+

@@ -12,3 +12,50 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Clean Native Apple/iOS Cropper.js Styling (ported from v1 desktop.html) */
+.cropper-view-box {
+  outline: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8), 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+}
+.cropper-line {
+  background-color: transparent !important;
+}
+.cropper-dashed {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+.cropper-center {
+  display: none !important;
+}
+.cropper-modal {
+  background-color: rgba(2, 6, 23, 0.65) !important;
+}
+.cropper-bg {
+  background-image: none !important;
+  background-color: #020617 !important;
+}
+.cropper-point.point-nw,
+.cropper-point.point-ne,
+.cropper-point.point-sw,
+.cropper-point.point-se {
+  width: 16px !important;
+  height: 16px !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+}
+.cropper-point.point-nw {
+  border-top: 3px solid #fff !important;
+  border-left: 3px solid #fff !important;
+}
+.cropper-point.point-ne {
+  border-top: 3px solid #fff !important;
+  border-right: 3px solid #fff !important;
+}
+.cropper-point.point-sw {
+  border-bottom: 3px solid #fff !important;
+  border-left: 3px solid #fff !important;
+}
+.cropper-point.point-se {
+  border-bottom: 3px solid #fff !important;
+  border-right: 3px solid #fff !important;
+}

@@ -227,3 +227,62 @@ SCHEMAS: Dict[str, SheetSchema] = {
         col_order=COLS_POST2011,
     ),
 }
+
+
+def read_sheet_articles(xlsx_path: Any, start_row: int = 5) -> List[str]:
+    """Read article codes from column B (rows >= start_row) using pure lxml DOM."""
+    import zipfile
+    from pathlib import Path
+
+    from lxml import etree
+
+    path = Path(xlsx_path)
+    if not path.is_file():
+        return []
+
+    articles: List[str] = []
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            shared: List[str] = []
+            if "xl/sharedStrings.xml" in zf.namelist():
+                ss_root = etree.fromstring(zf.read("xl/sharedStrings.xml"))
+                for si in ss_root.findall(QNAME_SI):
+                    parts = [t.text or "" for t in si.iter(QNAME_T)]
+                    shared.append("".join(parts))
+
+            if "xl/worksheets/sheet1.xml" not in zf.namelist():
+                return []
+
+            sheet_root = etree.fromstring(zf.read("xl/worksheets/sheet1.xml"))
+            sheet_data = sheet_root.find(QNAME_SHEETDATA)
+            if sheet_data is None:
+                return []
+
+            for row_el in sheet_data.findall(QNAME_ROW):
+                r_num = int(row_el.get("r", "0") or 0)
+                if r_num < start_row:
+                    continue
+                for c_el in row_el.findall(QNAME_C):
+                    ref = c_el.get("r", "")
+                    if not (ref.startswith("B") and ref[1:].isdigit()):
+                        continue
+                    c_type = c_el.get("t", "")
+                    val = ""
+                    if c_type == "s":
+                        v_el = c_el.find(QNAME_V)
+                        if v_el is not None and v_el.text and v_el.text.isdigit():
+                            idx = int(v_el.text)
+                            if 0 <= idx < len(shared):
+                                val = shared[idx]
+                    elif c_type == "inlineStr":
+                        val = "".join(t.text or "" for t in c_el.iter(QNAME_T))
+                    else:
+                        v_el = c_el.find(QNAME_V)
+                        if v_el is not None and v_el.text:
+                            val = v_el.text
+                    val = val.strip()
+                    if val:
+                        articles.append(val)
+    except Exception:
+        return []
+    return articles

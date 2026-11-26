@@ -17,6 +17,14 @@ export function CatalogTable({ isOpen, onClose }: Props): React.JSX.Element | nu
   const [books, setBooks] = useState<BookData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    progress: number;
+    total: number;
+    imported: number;
+    updated: number;
+    error: string | null;
+  } | null>(null);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [reopeningArticle, setReopeningArticle] = useState<string | null>(null);
 
@@ -69,6 +77,50 @@ export function CatalogTable({ isOpen, onClose }: Props): React.JSX.Element | nu
     }
   };
 
+  const handleImportFromOzon = async () => {
+    setIsImporting(true);
+    setSyncMsg(null);
+    setImportProgress({ progress: 0, total: 0, imported: 0, updated: 0, error: null });
+    try {
+      await apiRequest("/api/ozon/import-catalog", { method: "POST" });
+      const poll = async () => {
+        const st = await apiRequest<{
+          running: boolean;
+          progress: number;
+          total: number;
+          imported: number;
+          updated: number;
+          error: string | null;
+          done: boolean;
+        }>("/api/ozon/import-status");
+        setImportProgress({
+          progress: st.progress,
+          total: st.total,
+          imported: st.imported,
+          updated: st.updated,
+          error: st.error,
+        });
+        if (st.running) {
+          window.setTimeout(poll, 1200);
+        } else {
+          setIsImporting(false);
+          if (st.error) {
+            setSyncMsg(`Ошибка выгрузки: ${st.error}`);
+          } else {
+            setSyncMsg(`Готово! Новых: ${st.imported}, обновлено: ${st.updated}`);
+            fetchCatalog(searchQuery);
+            fetchOzonStatus();
+          }
+        }
+      };
+      window.setTimeout(poll, 800);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSyncMsg(`Ошибка старта выгрузки: ${msg}`);
+      setIsImporting(false);
+    }
+  };
+
   const handleSmartS3Sync = async () => {
     setIsSyncing(true);
     setSyncMsg(null);
@@ -108,11 +160,21 @@ export function CatalogTable({ isOpen, onClose }: Props): React.JSX.Element | nu
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleImportFromOzon}
+              disabled={isImporting}
+              className="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
+            >
+              {isImporting
+                ? `⏳ Выгрузка Ozon (${importProgress?.progress || 0}/${importProgress?.total || "?"})...`
+                : "📥 Выгрузить карточки с Ozon"}
+            </button>
+            <button
+              type="button"
               onClick={handleSmartS3Sync}
               disabled={isSyncing}
               className="rounded-xl border border-indigo-700/70 bg-indigo-950/70 px-3 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-900 disabled:opacity-50"
             >
-              {isSyncing ? "⏳ Синхронизация..." : "🔄 Smart S3 / Ozon Sync"}
+              {isSyncing ? "⏳ Синхронизация..." : "🔄 Smart S3 Sync"}
             </button>
             <button
               type="button"

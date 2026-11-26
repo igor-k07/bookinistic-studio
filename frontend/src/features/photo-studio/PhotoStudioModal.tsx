@@ -3,6 +3,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import "cropperjs/dist/cropper.css";
 import { usePoolStore, type AssetData } from "../../store/poolStore";
 import { HistoryStack, type StudioTransformState } from "./HistoryStack";
 import { StudioAdjustments } from "./StudioAdjustments";
@@ -274,7 +275,7 @@ export function PhotoStudioModal({
               </div>
             ) : (
               <div
-                className="max-h-[72vh] max-w-full overflow-hidden rounded-lg transition-all duration-75"
+                className="relative h-[72vh] w-full overflow-hidden rounded-lg bg-slate-950"
                 style={{ filter: cssFilter }}
               >
                 <img
@@ -282,7 +283,7 @@ export function PhotoStudioModal({
                   src={previewUrl}
                   alt="Editable"
                   crossOrigin="anonymous"
-                  className="block max-h-[70vh] max-w-full object-contain"
+                  className="block max-w-full"
                 />
               </div>
             )}

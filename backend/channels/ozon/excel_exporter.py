@@ -36,6 +36,7 @@ from backend.channels.ozon.excel_schema import (
     SCHEMAS,
     SheetSchema,
     is_valid_numeric_string,
+    read_sheet_articles,
     sanitize_xml10,
     sanitize_xml_text,
 )
@@ -83,15 +84,18 @@ class OpenXmlDomExporter(IExcelExporter):
         out_dir.mkdir(parents=True, exist_ok=True)
         return out_dir / f"{mode}_catalog.xlsx"
 
+    def read_articles(self, mode: str) -> List[str]:
+        return read_sheet_articles(self.get_target_path(mode))
+
     def _collect_books_for_mode(
         self, mode: str, upsert_book: Optional[Book] = None, exclude_article: Optional[str] = None
     ) -> List[Book]:
         books_by_art: Dict[str, Book] = {}
         if self.book_repo is not None:
-            for b in self.book_repo.search_fts("", limit=10000, offset=0):
-                if (b.status or "").upper() != "DRAFT":
-                    if ("post2011" if (b.year and b.year >= 2011) else "pre2011") == mode:
-                        books_by_art[b.article.upper()] = b
+            for art in self.read_articles(mode):
+                b = self.book_repo.get_by_article(art)
+                if b is not None:
+                    books_by_art[b.article.upper()] = b
         if upsert_book is not None:
             if ("post2011" if (upsert_book.year and upsert_book.year >= 2011) else "pre2011") == mode:
                 books_by_art[upsert_book.article.upper()] = upsert_book

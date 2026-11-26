@@ -125,3 +125,4 @@ export function generateEan13FromArticle(article: string): string {
   const check = (10 - (sum % 10)) % 10;
   return `${base12}${check}`;
 }
+
