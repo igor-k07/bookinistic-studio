@@ -26,6 +26,7 @@ export function PhotoPool({ onOpenStudio, isStudioOpen = false }: Props): React.
     runAiRembg,
     batchWhitenAll,
     distributeUnassigned,
+    clearPool,
   } = usePoolStore();
 
   const { currentBook } = useWorkspaceStore();
@@ -111,6 +112,19 @@ export function PhotoPool({ onOpenStudio, isStudioOpen = false }: Props): React.
             >
               ✨ Отбелить пул
             </button>
+            {unassigned.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Очистить ${unassigned.length} нераспределенных фото из пула?`)) {
+                    clearPool();
+                  }
+                }}
+                className="rounded-xl border border-rose-800/70 bg-rose-950/60 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-900 active:scale-95 transition"
+              >
+                🧹 Очистить пул
+              </button>
+            )}
           </div>
         </div>
 

@@ -86,6 +86,19 @@ def run_ai_rembg(asset_id: str, request: Request, force: bool = True) -> Any:
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.delete("/pool/clear")
+def clear_unassigned_pool(request: Request) -> Any:
+    """Clear all unassigned photos (slot IS NULL) from the desktop photo pool."""
+    ctx = request.app.state.store_registry.get_active_context()
+    with ctx.uow:
+        cursor = ctx.uow.execute(
+            "DELETE FROM assets WHERE (slot IS NULL OR slot = '') AND (book_article IS NULL OR book_article = '');"
+        )
+        deleted_count = cursor.rowcount
+        ctx.uow.commit()
+    return {"success": True, "deleted_count": deleted_count}
+
+
 @router.delete("/{asset_id}")
 def delete_asset(asset_id: str, request: Request) -> Any:
     """Delete an asset from workspace and media storage."""
@@ -99,17 +112,27 @@ def delete_asset(asset_id: str, request: Request) -> Any:
 
 @router.get("/{asset_id}/preview")
 def get_asset_preview(asset_id: str, request: Request) -> Response:
-    """Serve fast preview image (avoids Base64 in DOM/manifest)."""
+    """Serve high-quality preview image (prefers full original if legacy thumbnail is low-res)."""
     ctx = request.app.state.store_registry.get_active_context()
     with ctx.uow:
         asset = ctx.asset_repo.get_by_id(asset_id)
-    if not asset or not asset.preview_path:
+    if not asset:
         raise HTTPException(status_code=404, detail="Preview not found")
 
-    path = Path(asset.preview_path)
-    if not path.is_file():
+    prev = Path(asset.preview_path) if asset.preview_path else None
+    orig = Path(asset.original_path) if asset.original_path else None
+
+    # Prefer full HD original when no studio transforms are applied and preview is a small legacy thumbnail
+    chosen = prev
+    if not asset.transformations and orig and orig.is_file():
+        if not prev or not prev.is_file() or prev.stat().st_size < orig.stat().st_size:
+            chosen = orig
+    elif (not chosen or not chosen.is_file()) and orig and orig.is_file():
+        chosen = orig
+
+    if not chosen or not chosen.is_file():
         raise HTTPException(status_code=404, detail="File on disk not found")
-    return FileResponse(str(path), media_type="image/jpeg")
+    return FileResponse(str(chosen), media_type="image/jpeg")
 
 
 @router.get("/{asset_id}/full")

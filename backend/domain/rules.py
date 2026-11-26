@@ -277,6 +277,9 @@ def classify_filename_to_slot(filename_or_url: str) -> str:
     if not base:
         return "other"
 
+    if base in ("cover_front", "cover_back", "info_pages", "illustrations", "mantra_defects"):
+        return base
+
     # Token boundary matching helpers
     def _has_token(word: str) -> bool:
         return bool(re.search(rf"(?:^|[\W_]){re.escape(word)}(?:[\W_]|$)", base))

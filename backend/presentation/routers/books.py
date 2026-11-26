@@ -113,9 +113,90 @@ def validate_book(req: ValidateBookRequest, request: Request) -> Any:
     return {"valid": len(errors) == 0, "errors": errors}
 
 
+def _infer_slot_from_url_or_name(name: str, is_main: bool = False) -> str:
+    if is_main:
+        return "cover_front"
+    low = name.lower()
+    if "cover_front" in low or "01_cover" in low:
+        return "cover_front"
+    if "cover_back" in low or "04_cover_back" in low or "back" in low:
+        return "cover_back"
+    if "defect" in low or "02_defect" in low:
+        return "mantra_defects"
+    if "info_page" in low or "title" in low:
+        return "info_pages"
+    return "illustrations"
+
+
+def _hydrate_book_assets(ctx: Any, book: Book, asset_use_case: Any) -> list[Any]:
+    """Ensure a reopened Ozon/Vault book has its photos materialized in `assets`."""
+    with ctx.uow:
+        existing = ctx.asset_repo.list_by_article(book.article)
+    if existing:
+        return list(existing)
+
+    created: list[Any] = []
+
+    # 1. Try local books_vault/{article}/ or legacy {article}_* folder first
+    vault_root = ctx.vault_store.vault_dir
+    vault_dirs = [vault_root / book.article]
+    if vault_root.is_dir():
+        vault_dirs.extend(
+            p for p in vault_root.iterdir()
+            if p.is_dir() and p.name.upper().startswith(f"{book.article.upper()}_")
+        )
+    for vdir in vault_dirs:
+        if vdir.is_dir():
+            for img_path in sorted(vdir.iterdir()):
+                if img_path.is_file() and img_path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+                    if "99_card" in img_path.name.lower() or img_path.name.lower() == "card.png":
+                        continue
+                    slot = _infer_slot_from_url_or_name(img_path.name, is_main=img_path.name.startswith("01_"))
+                    asset = asset_use_case.create_asset(
+                        book_article=book.article,
+                        raw_data=img_path.read_bytes(),
+                        original_filename=img_path.name,
+                        slot=slot,
+                    )
+                    created.append(asset)
+            if created:
+                return created
+
+    # 2. Otherwise download full-res photos from Ozon / Yandex S3 URLs
+    urls: list[tuple[str, bool]] = []
+    if book.main_photo_url and book.main_photo_url.startswith("http"):
+        urls.append((book.main_photo_url, True))
+    for u in book.add_photo_urls or []:
+        if u and u.startswith("http") and u != book.main_photo_url:
+            if "99_card" in u.lower() or u.lower().endswith("/card.png"):
+                continue
+            urls.append((u, False))
+
+    if urls:
+        import httpx
+
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            for idx, (url, is_main) in enumerate(urls[:12]):
+                try:
+                    resp = client.get(url)
+                    if resp.status_code == 200 and resp.content:
+                        fname = url.split("?")[0].rsplit("/", 1)[-1] or f"ozon_{idx + 1}.jpg"
+                        slot = _infer_slot_from_url_or_name(fname, is_main=is_main)
+                        asset = asset_use_case.create_asset(
+                            book_article=book.article,
+                            raw_data=resp.content,
+                            original_filename=fname,
+                            slot=slot,
+                        )
+                        created.append(asset)
+                except Exception:
+                    continue
+    return created
+
+
 @router.post("/reopen")
 def reopen_book(req: ReopenBookRequest, request: Request) -> Any:
-    """Reopen cataloged book from DB or Vault manifest into active workspace tab."""
+    """Reopen cataloged book from DB/Ozon/Vault into active workspace tab with hydrated photos."""
     app_state = request.app.state
     reopen_use_case = app_state.reopen_book_use_case
 
@@ -124,6 +205,17 @@ def reopen_book(req: ReopenBookRequest, request: Request) -> Any:
         ctx = request.app.state.store_registry.get_active_context()
         with ctx.uow:
             book = ctx.book_repo.get_by_article(req.article)
+            if book:
+                tab.is_edit_mode = True
+                tab.title = book.title or book.article
+                ctx.book_repo.save_tab(tab)
+
+        hydrated_assets = (
+            _hydrate_book_assets(ctx, book, app_state.asset_pipeline_use_case)
+            if book is not None
+            else []
+        )
+
         return {
             "book": book.to_dict() if book else {},
             "tab": WorkspaceTabDTO(
@@ -135,6 +227,7 @@ def reopen_book(req: ReopenBookRequest, request: Request) -> Any:
                 title=tab.title,
                 created_at=tab.created_at,
             ),
+            "assets_loaded": len(hydrated_assets),
         }
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))

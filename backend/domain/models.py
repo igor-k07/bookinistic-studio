@@ -115,6 +115,20 @@ class Book:
         except ValueError:
             sync_status = None
 
+        raw_add = data.get("add_photo_urls")
+        if raw_add is None:
+            raw_add = data.get("images")
+        if isinstance(raw_add, str):
+            import re as _re
+
+            parsed_add = [u.strip() for u in _re.split(r"[\s;]+", raw_add) if u.strip().startswith("http")]
+        elif isinstance(raw_add, (list, tuple)):
+            parsed_add = [str(u).strip() for u in raw_add if str(u).strip()]
+        else:
+            parsed_add = []
+
+        main_url = str(data.get("main_photo_url") or data.get("primary_image") or "").strip()
+
         return cls(
             article=str(data.get("article", "")).strip().upper(),
             title=str(data.get("title", "")).strip(),
@@ -141,9 +155,9 @@ class Book:
             age_limit=str(data.get("age_limit", "")).strip(),
             translator=str(data.get("translator", "")).strip(),
             illustrator=str(data.get("illustrator", "")).strip(),
-            old_price=float(data["old_price"]) if data.get("old_price") is not None else None,
-            main_photo_url=str(data.get("main_photo_url", "")).strip(),
-            add_photo_urls=list(data.get("add_photo_urls") or []),
+            old_price=float(data["old_price"]) if data.get("old_price") not in (None, "") else None,
+            main_photo_url=main_url,
+            add_photo_urls=parsed_add,
             dimensions=dims,
             field_sources=sources,
             suggestions=data.get("suggestions") or {},

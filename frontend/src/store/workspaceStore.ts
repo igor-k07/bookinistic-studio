@@ -7,6 +7,7 @@
 import { create } from "zustand";
 import { apiRequest } from "../api/client";
 import { sseClient } from "../api/sse";
+import { usePoolStore } from "./poolStore";
 
 export interface BookData {
   article: string;
@@ -336,6 +337,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           saveMessage: null,
         };
       });
+      await usePoolStore.getState().fetchPool(res.book.article || article);
     } catch (err) {
       console.error("Failed to reopen book:", err);
       throw err;

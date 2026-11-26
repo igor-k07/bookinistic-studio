@@ -53,6 +53,7 @@ interface PoolState {
   runAiRembg: (assetId: string) => Promise<AssetData>;
   batchWhitenAll: () => Promise<void>;
   distributeUnassigned: (scheme: string, bookArticle: string) => Promise<void>;
+  clearPool: () => Promise<void>;
 }
 
 export const usePoolStore = create<PoolState>((set, get) => ({
@@ -206,6 +207,14 @@ export const usePoolStore = create<PoolState>((set, get) => ({
     for (let i = 0; i < Math.min(unassigned.length, roleOrder.length); i++) {
       await get().assignSlot(unassigned[i].id, roleOrder[i], bookArticle, i);
     }
+  },
+
+  clearPool: async () => {
+    await apiRequest("/api/assets/pool/clear", { method: "DELETE" });
+    set((state) => ({
+      assets: state.assets.filter((a) => Boolean(a.slot)),
+      selectedAssetId: null,
+    }));
   },
 }));
 
