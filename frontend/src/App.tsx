@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { BarcodeLabel } from "./features/barcode-label/BarcodeLabel";
 import { BookForm } from "./features/book-form/BookForm";
 import { CatalogTable } from "./features/catalog-table/CatalogTable";
+import { ExcelPreviewTable } from "./features/catalog-table/ExcelPreviewTable";
 import { PhotoPool } from "./features/photo-pool/PhotoPool";
 import { PhotoStudioModal } from "./features/photo-studio/PhotoStudioModal";
-import { SettingsModal } from "./features/settings-modals/SettingsModal";
+import { SettingsModal, type SettingsTabKey } from "./features/settings-modals/SettingsModal";
 import { usePoolStore, type AssetData } from "./store/poolStore";
 import { useSystemStore } from "./store/systemStore";
 import { useWorkspaceStore } from "./store/workspaceStore";
@@ -32,23 +33,22 @@ export default function App(): React.JSX.Element {
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
   const [selectedStudioAsset, setSelectedStudioAsset] = useState<AssetData | null>(null);
   const [isCatalogOpen, setIsCatalogOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTabKey>("keys");
 
   useEffect(() => {
     hydrateFromBootstrap();
   }, [hydrateFromBootstrap]);
 
-  // Initial tab creation if none exist
-  useEffect(() => {
-    if (tabs.length === 0) {
-      createTab();
-    }
-  }, [tabs.length, createTab]);
+  const openSettings = (tab: SettingsTabKey) => {
+    setSettingsTab(tab);
+    setSettingsOpen(true);
+  };
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
-      {/* Top Main Navigation Bar */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/90 px-6 backdrop-blur-md">
+    <div className="flex min-h-screen w-full flex-col bg-slate-950 text-slate-100 font-sans">
+      {/* Sticky Top Header (v1 layout + 2.0 Store Switcher & Outbox) */}
+      <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/95 px-6 backdrop-blur-md">
         <div className="flex items-center gap-4">
           <span className="text-lg font-black tracking-tight text-white">
             Bookinistic Studio <span className="text-emerald-400">2.0</span>
@@ -57,18 +57,21 @@ export default function App(): React.JSX.Element {
           {/* Store Switcher Dropdown */}
           <div className="relative">
             <button
+              type="button"
               onClick={() => setIsStoreMenuOpen((prev) => !prev)}
-              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 hover:border-slate-600 active:scale-95"
+              className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500/20 active:scale-95 transition"
             >
-              <span>🏬 {stores.find((s) => s.store_id === activeStore)?.name || activeStore}</span>
-              <span className="text-slate-400">▼</span>
+              <span>🏪 {stores.find((s) => s.store_id === activeStore)?.name || activeStore}</span>
+              <span className="font-mono text-[10px] opacity-80">({activeStore})</span>
+              <span>▼</span>
             </button>
 
             {isStoreMenuOpen && (
-              <div className="absolute top-full left-0 z-50 mt-1.5 w-56 rounded-xl border border-slate-700 bg-slate-800/95 p-1 shadow-2xl backdrop-blur-md">
+              <div className="absolute top-full left-0 z-50 mt-1.5 w-60 rounded-xl border border-slate-700 bg-slate-800/95 p-1 shadow-2xl backdrop-blur-md">
                 {stores.map((s) => (
                   <button
                     key={s.store_id}
+                    type="button"
                     onClick={() => {
                       switchActiveStore(s.store_id);
                       setIsStoreMenuOpen(false);
@@ -80,7 +83,7 @@ export default function App(): React.JSX.Element {
                     }`}
                   >
                     <div className="font-semibold">{s.name}</div>
-                    <div className="text-[10px] text-slate-400">ID: {s.store_id}</div>
+                    <div className="text-[10px] opacity-75">ID: {s.store_id}</div>
                   </button>
                 ))}
               </div>
@@ -88,42 +91,48 @@ export default function App(): React.JSX.Element {
           </div>
         </div>
 
-        {/* Center/Right Navigation Buttons & Live Outbox Status Stats */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsCatalogOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-all"
-            >
-              📚 Каталог
-            </button>
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white active:scale-95 transition-all"
-            >
-              ⚙️ Настройки
-            </button>
-          </div>
+        {/* Action Buttons & Live Ozon Outbox Counters */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsCatalogOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+          >
+            📚 База книг
+          </button>
+          <button
+            type="button"
+            onClick={() => openSettings("mobile")}
+            className="flex items-center gap-1.5 rounded-xl border border-amber-600/50 bg-amber-950/60 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-900/70 active:scale-95 transition"
+          >
+            📱 QR для телефона
+          </button>
+          <button
+            type="button"
+            onClick={() => openSettings("keys")}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+          >
+            ⚙️ Настройки
+          </button>
 
-          <div className="h-4 w-[1px] bg-slate-800" />
+          <div className="h-4 w-[1px] bg-slate-800 hidden xl:block" />
 
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-400">Ozon:</span>
+          <div className="hidden xl:flex items-center gap-2 text-xs">
             <span className="rounded bg-amber-950/80 border border-amber-800/80 px-2 py-0.5 text-amber-300 font-semibold">
-              В очереди: {outboxCounts["QUEUED"] || 0}
+              Очередь: {outboxCounts["QUEUED"] || 0}
             </span>
             <span className="rounded bg-blue-950/80 border border-blue-800/80 px-2 py-0.5 text-blue-300 font-semibold">
               Модерация: {outboxCounts["PROCESSING"] || outboxCounts["MODERATION"] || 0}
             </span>
             <span className="rounded bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 text-emerald-300 font-semibold">
-              Опубликовано: {outboxCounts["PUBLISHED"] || 0}
+              Ozon OK: {outboxCounts["PUBLISHED"] || 0}
             </span>
           </div>
         </div>
       </header>
 
-      {/* Workspace Tabs Strip */}
-      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900/40 px-4 pt-2 scrollbar-none">
+      {/* Workspace Session Tabs Strip */}
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-slate-800 bg-slate-900/50 px-6 pt-2 scrollbar-none">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           return (
@@ -133,12 +142,13 @@ export default function App(): React.JSX.Element {
               className={`group flex items-center gap-2 rounded-t-xl border-t border-x px-4 py-2 text-xs font-medium transition-all cursor-pointer ${
                 isActive
                   ? "border-slate-800 bg-slate-900 text-emerald-400 border-b-2 border-b-emerald-500 shadow-sm"
-                  : "border-transparent bg-transparent text-slate-400 hover:bg-slate-850 hover:text-slate-200"
+                  : "border-transparent bg-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
               }`}
             >
-              <span className="max-w-[140px] truncate">{tab.title || tab.book_article}</span>
+              <span className="max-w-[160px] truncate">{tab.title || tab.book_article}</span>
               {tabs.length > 1 && (
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeTab(tab.id);
@@ -152,6 +162,7 @@ export default function App(): React.JSX.Element {
           );
         })}
         <button
+          type="button"
           onClick={() => createTab()}
           className="ml-2 mb-1 flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-700 hover:text-white"
         >
@@ -159,19 +170,19 @@ export default function App(): React.JSX.Element {
         </button>
       </div>
 
-      {/* Main Workspace Layout: Two-Column Split */}
-      <div className="flex flex-1 overflow-hidden p-4 gap-4">
-        {/* Left Column: Comprehensive Book Form */}
-        <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin">
-          <BookForm />
-        </div>
+      {/* Main Vertical v1-Parity Workspace */}
+      <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-8 p-4 lg:px-8 pb-16">
+        {/* 1. FULL-WIDTH PHOTO POOL, BATCH PIPELINE & 5 SLOTS */}
+        <PhotoPool
+          onOpenStudio={(asset) => setSelectedStudioAsset(asset)}
+          isStudioOpen={Boolean(selectedStudioAsset)}
+        />
 
-        {/* Right Column: Photo Pool & Barcode Label */}
-        <div className="flex w-96 shrink-0 flex-col gap-4 overflow-y-auto pl-1 scrollbar-thin">
-          <PhotoPool
-            onOpenStudio={(asset) => setSelectedStudioAsset(asset)}
-            isStudioOpen={Boolean(selectedStudioAsset)}
-          />
+        {/* 2. COMPLETE 2-COLUMN OZON FORM */}
+        <BookForm />
+
+        {/* 3. THERMAL BARCODE LABEL PREVIEW (58x40 mm) */}
+        <div className="max-w-md">
           <BarcodeLabel
             article={currentBook.article}
             barcode={currentBook.barcode}
@@ -181,7 +192,10 @@ export default function App(): React.JSX.Element {
             storageLocation={currentBook.storage_location}
           />
         </div>
-      </div>
+
+        {/* 4. EMBEDDED EXCEL PREVIEW & OZON TABLE (v1 parity) */}
+        <ExcelPreviewTable />
+      </main>
 
       {/* Modals */}
       {selectedStudioAsset && (
@@ -204,14 +218,12 @@ export default function App(): React.JSX.Element {
         />
       )}
 
-      <CatalogTable
-        isOpen={isCatalogOpen}
-        onClose={() => setIsCatalogOpen(false)}
-      />
+      <CatalogTable isOpen={isCatalogOpen} onClose={() => setIsCatalogOpen(false)} />
 
       <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        isOpen={settingsOpen}
+        initialTab={settingsTab}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );

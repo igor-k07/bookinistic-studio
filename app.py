@@ -1,68 +1,36 @@
-"""
-app.py: Точка входа сервера Bookinistic Studio.
-Запуск локального многопоточного веб-сервера для пакетной каталогизации книг для Ozon.
+"""Bookinistic Studio 2.0 — Server Entrypoint.
+
+Starts high-performance asynchronous ASGI application powered by Uvicorn and FastAPI.
+All background workers, Cloudflare tunnel, and lifespan hooks run through backend.main:app.
 """
 
+from __future__ import annotations
+
+import logging
 import os
-import sys
-import threading
-from http.server import ThreadingHTTPServer
 
-from config import PORT, get_target_excel_file
-from server.handler import BatchHandler
-from services.db_service import init_db
-import services.tunnel_service as tunnel_service
+import uvicorn
 
-
-def _warmup_background_ai():
-    """Фоновый прогрев нейросетевой модели rembg, чтобы первый запрос пользователя был мгновенным."""
-    try:
-        from services.image_service import get_rembg_session
-        get_rembg_session()
-        print(" ⚡ [Warmup] Нейросетевая сессия rembg прогрета и готова к мгновенной обработке.")
-    except Exception as e:
-        print(f" ℹ️ [Warmup] Прогрев rembg пропущен: {e}")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("bookinistic")
 
 
-def run_server():
-    init_db()
-    # Запускаем фоновый прогрев нейросети без задержки старта сервера
-    threading.Thread(target=_warmup_background_ai, daemon=True, name="rembg_warmup").start()
+def main() -> None:
+    port = int(os.environ.get("BOOKINISTIC_PORT", "8095"))
+    logger.info("Starting Bookinistic Studio 2.0 on 0.0.0.0:%d (Desktop: http://localhost:%d)...", port, port)
 
-    server_address = ("", PORT)
-    ThreadingHTTPServer.allow_reuse_address = True
-    httpd = ThreadingHTTPServer(server_address, BatchHandler)
-
-    print("=" * 65)
-    print(f" 📚 Bookinistic Batch Studio запущена на порту {PORT}!")
-    print(f" 👉 Десктоп: http://localhost:{PORT}")
-    print(f" 📱 Мобильный: http://localhost:{PORT}/mobile")
-
-    # Запуск туннеля и сетевого мониторинга
-    print(f" 🚀 Запуск Cloudflare Tunnel для порта {PORT}...", flush=True)
-    tunnel_url = tunnel_service.start_tunnel(PORT)
-    tunnel_service.start_network_watchdog(PORT)
-
-    if tunnel_url:
-        print(f" 🌟 Cloudflare Tunnel активен: {tunnel_url}")
-    else:
-        print(" ℹ️ Cloudflare Tunnel не запустился (доступен локальный режим)")
-
-    pre_file = os.path.basename(get_target_excel_file("pre2011"))
-    post_file = os.path.basename(get_target_excel_file("post2011"))
-    print(f" 📊 Актуальные таблицы: {pre_file} | {post_file}")
-    print(" Для остановки нажмите Ctrl + C в терминале")
-    print("=" * 65, flush=True)
-
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\n🛑 Завершение работы Bookinistic Studio...", flush=True)
-    finally:
-        tunnel_service.stop_tunnel()
-        httpd.server_close()
-        print("✅ Сервер успешно остановлен.", flush=True)
+    uvicorn.run(
+        "backend.main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+        log_level="info",
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":
-    run_server()
+    main()

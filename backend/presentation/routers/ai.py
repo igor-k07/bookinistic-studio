@@ -24,10 +24,36 @@ def recognize_book(req: RecognizeRequest, request: Request) -> Any:
     """Run full AI recognition: candidate filtering, barcode lookup, Gemini Vision, and FantLab."""
     use_case = request.app.state.recognize_book_use_case
     book_domain = Book.from_dict(req.book.model_dump())
-    # photos format: [[path, role], ...]
     photo_tuples = [(p[0], p[1]) for p in req.photos if len(p) >= 2]
 
+    if not photo_tuples and book_domain.article:
+        ctx = request.app.state.store_registry.get_active_context()
+        with ctx.uow:
+            assets = ctx.asset_repo.list_by_article(book_domain.article)
+        photo_tuples = [
+            (a.preview_path or a.original_path, a.slot or "cover_front")
+            for a in assets
+            if (a.preview_path or a.original_path)
+        ]
+
     updated = use_case.execute(book_domain, photo_tuples)
+    return BookDTO(**updated.to_dict())
+
+
+@router.post("/enrich", response_model=BookDTO)
+def enrich_book_fantlab(req: RecognizeRequest, request: Request) -> Any:
+    """Manual FantLab / OpenLibrary enrichment preserving manual price, dims, and annotation."""
+    use_case = request.app.state.recognize_book_use_case
+    book_domain = Book.from_dict(req.book.model_dump())
+    orig_price, orig_old = book_domain.price, book_domain.old_price
+    orig_dims, orig_ann = book_domain.dimensions, book_domain.annotation
+
+    updated = use_case.execute(book_domain, [])
+    updated.price = orig_price
+    updated.old_price = orig_old
+    updated.dimensions = orig_dims
+    if orig_ann:
+        updated.annotation = orig_ann
     return BookDTO(**updated.to_dict())
 
 

@@ -31,6 +31,10 @@ def get_system_keys(request: Request) -> Dict[str, Any]:
     """Return masked API key statuses (strictly NO plaintext secrets)."""
     ctx = request.app.state.store_registry.get_active_context()
     prof = ctx.profile
+    cfg = getattr(request.app.state, "settings", None)
+    gemini_key = prof.gemini_api_key or (cfg.get_effective_gemini_key() if cfg else "")
+    s3_cfg = (cfg.get_effective_s3_config() or {}) if cfg else {}
+    s3_secret = prof.s3_secret_key or str(s3_cfg.get("secret_key", ""))
 
     def mask(secret: str) -> str:
         if not secret:
@@ -42,16 +46,16 @@ def get_system_keys(request: Request) -> Dict[str, Any]:
     return {
         "store_id": prof.store_id,
         "gemini_api_key": {
-            "configured": bool(prof.gemini_api_key),
-            "masked": mask(prof.gemini_api_key),
+            "configured": bool(gemini_key),
+            "masked": mask(gemini_key),
         },
         "ozon_api_key": {
             "configured": bool(prof.ozon_api_key),
             "masked": mask(prof.ozon_api_key),
         },
         "s3_secret_key": {
-            "configured": bool(prof.s3_secret_key),
-            "masked": mask(prof.s3_secret_key),
+            "configured": bool(s3_secret),
+            "masked": mask(s3_secret),
         },
     }
 
@@ -65,15 +69,29 @@ def trigger_storage_cleanup(request: Request, dry_run: bool = False) -> Any:
 
 
 @router.get("/system/excel/download")
-def download_excel_catalog(request: Request, filename: str = "all_books.xlsx") -> FileResponse:
-    """Download OpenXML catalog spreadsheet."""
-    excel_path = Path("ready_tables") / filename
+def download_excel_catalog(
+    request: Request,
+    mode: str = "",
+    filename: str = "all_books.xlsx",
+) -> FileResponse:
+    """Download OpenXML catalog spreadsheet by era mode or filename."""
+    exporter = getattr(request.app.state, "excel_exporter", None)
+    if mode in ("pre2011", "post2011") and exporter is not None:
+        excel_path = exporter.get_target_path(mode)
+        if not excel_path.is_file():
+            books = exporter._collect_books_for_mode(mode)
+            exporter.rebuild_sheet(books, mode=mode, output_path=excel_path)
+        download_name = f"Pechatnaya_kniga_{mode}.xlsx"
+    else:
+        excel_path = Path("ready_tables") / filename
+        download_name = filename
+
     if not excel_path.is_file():
         raise HTTPException(status_code=404, detail="Excel file not generated yet")
     return FileResponse(
         str(excel_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=filename,
+        filename=download_name,
     )
 
 
@@ -133,3 +151,14 @@ def rotate_session_token(request: Request) -> Dict[str, str]:
         raise HTTPException(status_code=500, detail="Token manager not initialized")
     new_token = token_mgr.rotate_token()
     return {"status": "ok", "mobile_token": new_token}
+
+
+@router.post("/system/tunnel/restart")
+def restart_tunnel_endpoint(request: Request) -> Dict[str, Any]:
+    """Restart Cloudflare Quick Tunnel and return updated URLs."""
+    tm = getattr(request.app.state, "tunnel_manager", None)
+    if not tm:
+        raise HTTPException(status_code=500, detail="Tunnel manager not initialized")
+    tm.stop_tunnel()
+    url = tm.start_tunnel(timeout=15.0)
+    return {"status": "ok", "tunnel_url": url, "local_url": tm.local_url}

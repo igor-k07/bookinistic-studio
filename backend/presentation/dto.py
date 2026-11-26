@@ -102,8 +102,9 @@ class TransformAssetRequest(BaseModel):
 
 
 class AssignAssetSlotRequest(BaseModel):
-    slot: str
+    slot: Optional[str] = Field(default=None)
     slot_order: int = Field(default=0)
+    book_article: Optional[str] = Field(default=None)
 
 
 class RecognizeRequest(BaseModel):
@@ -145,6 +146,7 @@ class BootstrapResponse(BaseModel):
     tabs: List[WorkspaceTabDTO]
     mobile_token: str
     tunnel_url: Optional[str] = None
+    local_url: Optional[str] = None
 
 
 class CatalogSearchResponse(BaseModel):

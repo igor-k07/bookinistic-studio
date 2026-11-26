@@ -183,6 +183,42 @@ class SqliteAssetRepository(IAssetRepository):
                 assets.append(Asset.from_dict(d))
             return assets
 
+    def list_pool(self, article: Optional[str] = None) -> List[Asset]:
+        """List unassigned pool assets and optionally assets for the active book."""
+        if article:
+            sql = """
+                SELECT id, book_article, slot, slot_order, status, status_message,
+                       original_path, preview_path, ai_white_path, transformations,
+                       render_hash, s3_staging_url, s3_final_url, s3_uploaded_hash,
+                       version, width, height, file_size_bytes, created_at, updated_at
+                FROM assets
+                WHERE book_article IS NULL OR book_article = '' OR book_article = ? COLLATE NOCASE
+                ORDER BY created_at DESC, slot_order ASC;
+            """
+            params: tuple = (article,)
+        else:
+            sql = """
+                SELECT id, book_article, slot, slot_order, status, status_message,
+                       original_path, preview_path, ai_white_path, transformations,
+                       render_hash, s3_staging_url, s3_final_url, s3_uploaded_hash,
+                       version, width, height, file_size_bytes, created_at, updated_at
+                FROM assets
+                WHERE book_article IS NULL OR book_article = ''
+                ORDER BY created_at DESC;
+            """
+            params = ()
+
+        with self.uow:
+            cursor = self.uow.execute(sql, params)
+            assets = []
+            for row in cursor.fetchall():
+                d = dict(row)
+                d["transformations"] = json.loads(d["transformations"] or "{}")
+                d["created_at"] = str(d["created_at"]) if d["created_at"] else None
+                d["updated_at"] = str(d["updated_at"]) if d["updated_at"] else None
+                assets.append(Asset.from_dict(d))
+            return assets
+
     def delete(self, asset_id: str) -> bool:
         """Delete asset record."""
         with self.uow:

@@ -187,12 +187,13 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         is_external = bool(cf_ip) or (not is_loopback)
 
         if is_external:
-            # External / Tunnel requests can access ONLY mobile endpoints and health check
+            # External / Tunnel requests can access ONLY mobile endpoints, static assets, and health check
+            is_static_asset = path.startswith("/assets/") or path == "/favicon.ico"
             is_permitted_mobile_path = (
-                path == "/mobile"
+                path in ("/mobile", "/mobile.html")
                 or path.startswith("/mobile/")
-                or path.startswith("/assets/mobile/")
                 or path.startswith("/api/mobile/")
+                or is_static_asset
                 or path == "/api/health"
             )
 
@@ -206,8 +207,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                 )
 
-            # Mobile access (except public health) requires a valid session token
-            if path != "/api/health":
+            # Mobile access (except public health and static JS/CSS bundles) requires a valid session token
+            if path != "/api/health" and not is_static_asset:
                 token = (
                     request.query_params.get("token")
                     or request.headers.get("x-mobile-token")

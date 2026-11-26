@@ -149,3 +149,14 @@ class RembgImageProcessor:
 
         return full_rgb, crop_relative
 
+    @classmethod
+    def process_bytes(cls, raw_data: bytes, jpeg_quality: int = 92) -> bytes:
+        """Convenience wrapper accepting JPEG/PNG bytes and returning white-background JPEG bytes."""
+        import io
+
+        im = Image.open(io.BytesIO(raw_data))
+        processed, _ = cls.process_white_background(im)
+        buf = io.BytesIO()
+        processed.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+        return buf.getvalue()
+

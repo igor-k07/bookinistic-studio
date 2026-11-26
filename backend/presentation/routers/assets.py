@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -12,6 +12,15 @@ from backend.domain.exceptions import ConcurrencyError, EntityNotFoundError
 from backend.presentation.dto import AssetDTO, AssignAssetSlotRequest, TransformAssetRequest
 
 router = APIRouter(prefix="/api/assets", tags=["Assets"])
+
+
+@router.get("/pool", response_model=List[AssetDTO])
+def list_pool_assets(request: Request, book_article: Optional[str] = None) -> Any:
+    """List unassigned pool assets and optionally assets for the active book."""
+    ctx = request.app.state.store_registry.get_active_context()
+    with ctx.uow:
+        assets = ctx.asset_repo.list_pool(article=book_article)
+    return [AssetDTO(**a.to_dict()) for a in assets]
 
 
 @router.post("/upload", response_model=AssetDTO)
@@ -39,10 +48,15 @@ async def upload_asset(
 
 @router.post("/{asset_id}/assign", response_model=AssetDTO)
 def assign_asset_slot(asset_id: str, req: AssignAssetSlotRequest, request: Request) -> Any:
-    """Assign asset to a semantic photo slot."""
+    """Assign or unassign asset to a semantic photo slot."""
     use_case = request.app.state.asset_pipeline_use_case
     try:
-        asset = use_case.assign_slot(asset_id, req.slot, req.slot_order)
+        asset = use_case.assign_slot(
+            asset_id,
+            req.slot,
+            req.slot_order,
+            book_article=req.book_article,
+        )
         return AssetDTO(**asset.to_dict())
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -62,11 +76,11 @@ def transform_asset(asset_id: str, req: TransformAssetRequest, request: Request)
 
 
 @router.post("/{asset_id}/run-ai", response_model=AssetDTO)
-def run_ai_rembg(asset_id: str, request: Request) -> Any:
-    """Trigger background removal strictly for book covers."""
+def run_ai_rembg(asset_id: str, request: Request, force: bool = True) -> Any:
+    """Trigger background removal via rembg (supports force=True from Photo Studio)."""
     use_case = request.app.state.asset_pipeline_use_case
     try:
-        asset = use_case.trigger_rembg(asset_id)
+        asset = use_case.trigger_rembg(asset_id, force=force)
         return AssetDTO(**asset.to_dict())
     except EntityNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

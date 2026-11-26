@@ -33,6 +33,8 @@ from backend.config.store_context import StoreRegistry
 from backend.infrastructure.ai.enrichment_clients import UnifiedEnrichmentClient
 from backend.infrastructure.ai.gemini_client import GeminiVisionClient
 from backend.infrastructure.cloud.yandex_s3 import YandexS3Adapter
+from backend.infrastructure.media.rembg_processor import RembgImageProcessor
+from backend.infrastructure.media.render_pipeline import ImageRenderPipeline
 from backend.infrastructure.network.tunnel_manager import CloudflareTunnelManager
 from backend.infrastructure.persistence.sqlite_uow import run_migrations
 from backend.presentation.middleware.security import SecurityMiddleware, SessionTokenManager
@@ -65,25 +67,29 @@ def init_store_components(registry: StoreRegistry, app: FastAPI, cfg: AppSetting
     asset_repo = ctx.asset_repo
     ref_repo = ctx.reference_repo
 
-    # 2. Media Vault & Cloud Adapters
+    # 2. Media Vault & Cloud Adapters (using effective credentials from env/files)
     vault_store = ctx.vault_store
+    s3_cfg = cfg.get_effective_s3_config() or {}
     s3_adapter = YandexS3Adapter(
-        bucket=cfg.s3_bucket or "another-piter-books1",
-        key_id=cfg.s3_key_id,
-        secret_key=cfg.s3_secret_key,
-        endpoint_url=cfg.s3_endpoint_url,
-        region_name=cfg.s3_region_name,
+        bucket=str(s3_cfg.get("bucket") or "another-piter-books1"),
+        key_id=str(s3_cfg.get("key_id") or ""),
+        secret_key=str(s3_cfg.get("secret_key") or ""),
+        endpoint_url=str(s3_cfg.get("endpoint_url") or cfg.s3_endpoint_url),
+        region_name=str(s3_cfg.get("region_name") or cfg.s3_region_name),
     )
 
     # 3. AI & Enrichment
-    ai_client = GeminiVisionClient(api_key=cfg.gemini_api_key or "")
+    ai_client = GeminiVisionClient(api_key=cfg.get_effective_gemini_key())
     enrichment_client = UnifiedEnrichmentClient(uow=uow)
 
     # 4. Marketplace Channels & Exporters
     ozon_gateway = ctx.ozon_gateway
     ozon_channel = ctx.ozon_channel
+    ready_dir = Path("ready_tables") if ctx.store_id == "870997" else (Path("ready_tables") / "stores" / ctx.store_id)
     excel_exporter = OpenXmlDomExporter(
         templates_dir=Path("templates"),
+        ready_tables_dir=ready_dir,
+        book_repo=book_repo,
     )
 
     # 5. Background Outbox Worker
@@ -95,11 +101,14 @@ def init_store_components(registry: StoreRegistry, app: FastAPI, cfg: AppSetting
     )
 
     # 6. Use Cases instantiation
+    app.state.excel_exporter = excel_exporter
     app.state.asset_pipeline_use_case = AssetPipelineUseCase(
         asset_repo=asset_repo,
         media_storage=vault_store,
         cloud_storage=s3_adapter,
         event_broker=app.state.event_broker,
+        render_pipeline=ImageRenderPipeline,
+        rembg_processor=RembgImageProcessor,
     )
     app.state.recognize_book_use_case = RecognizeBookUseCase(
         book_repo=book_repo,
@@ -116,6 +125,8 @@ def init_store_components(registry: StoreRegistry, app: FastAPI, cfg: AppSetting
         cloud_storage=s3_adapter,
         excel_exporter=excel_exporter,
         event_broker=app.state.event_broker,
+        asset_repo=asset_repo,
+        outbox_worker=outbox_worker,
     )
     app.state.reopen_book_use_case = ReopenBookUseCase(
         uow=uow,
@@ -187,6 +198,7 @@ def create_app(settings: Optional[AppSettings] = None) -> FastAPI:
     )
     registry = StoreRegistry(base_dir=cfg.base_dir)
 
+    app.state.settings = cfg
     app.state.event_broker = event_broker
     app.state.job_manager = job_manager
     app.state.token_manager = token_manager

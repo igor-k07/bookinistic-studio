@@ -28,6 +28,21 @@ logger = logging.getLogger(__name__)
 TUNNEL_URL_REGEX = re.compile(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com")
 
 
+def get_local_ip() -> str:
+    """Detect local LAN IPv4 address for direct Wi-Fi mobile device access."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("8.8.8.8", 80))
+        ip = str(sock.getsockname()[0])
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    finally:
+        sock.close()
+    return "127.0.0.1"
+
+
 class CloudflareTunnelManager:
     """Manages Cloudflare Quick Tunnel lifecycle safely without pkill."""
 
@@ -85,6 +100,11 @@ class CloudflareTunnelManager:
     def tunnel_url(self) -> Optional[str]:
         """Property alias for get_tunnel_url()."""
         return self.get_tunnel_url()
+
+    @property
+    def local_url(self) -> str:
+        """Return LAN HTTP URL for direct Wi-Fi connection."""
+        return f"http://{get_local_ip()}:{self.port}"
 
     def is_running(self) -> bool:
         """Check if tunnel process is actively running."""

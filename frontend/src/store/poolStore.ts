@@ -1,7 +1,5 @@
 /**
- * Photo Pool & Slot Placement Zustand Store.
- *
- * Implements ADR-9 (Unified Asset Registry, Optimistic Locking, slot auto-placement).
+ * Photo Pool & 5-Slot Semantic Pipeline Zustand Store (v1 logic on 2.0 Asset Registry).
  */
 
 import { create } from "zustand";
@@ -27,114 +25,217 @@ export interface AssetData {
 }
 
 export const PHOTO_SLOTS = [
-  { key: "01_cover_front", label: "Обложка (1)", shortcut: "1" },
-  { key: "02_title_page", label: "Титул (2)", shortcut: "2" },
-  { key: "03_cover_back", label: "Задник (3)", shortcut: "3" },
-  { key: "04_spine", label: "Корешок (4)", shortcut: "4" },
-  { key: "05_illustration", label: "Разворот (5)", shortcut: "5" },
-];
+  { key: "cover_front", label: "🌟 1. Обложка (перед)", shortcut: "1", multi: false },
+  { key: "cover_back", label: "🔄 2. Обложка (зад)", shortcut: "2", multi: true },
+  { key: "info_pages", label: "📄 3. Титул и мантра (ИИ)", shortcut: "3", multi: true },
+  { key: "illustrations", label: "🎨 4. Иллюстрации", shortcut: "4", multi: true },
+  { key: "mantra_defects", label: "⚠️ 5. Только дефекты", shortcut: "5", multi: true },
+] as const;
 
 interface PoolState {
   assets: AssetData[];
   selectedAssetId: string | null;
   isLoading: boolean;
+  isUploading: boolean;
 
   setAssets: (assets: AssetData[]) => void;
   selectAsset: (id: string | null) => void;
-  assignSlot: (assetId: string, slot: string, slotOrder?: number) => Promise<void>;
+  fetchPool: (bookArticle?: string) => Promise<void>;
+  uploadFiles: (files: FileList | File[], bookArticle?: string) => Promise<void>;
+  assignSlot: (assetId: string, slot: string, bookArticle?: string, slotOrder?: number) => Promise<void>;
   unassignSlot: (assetId: string) => Promise<void>;
   deleteAsset: (assetId: string) => Promise<void>;
   updateAssetTransform: (
     assetId: string,
     transforms: Record<string, unknown>,
     expectedVersion: number
-  ) => Promise<void>;
+  ) => Promise<AssetData>;
+  runAiRembg: (assetId: string) => Promise<AssetData>;
+  batchWhitenAll: () => Promise<void>;
+  distributeUnassigned: (scheme: string, bookArticle: string) => Promise<void>;
 }
 
-export const usePoolStore = create<PoolState>((set) => ({
+export const usePoolStore = create<PoolState>((set, get) => ({
   assets: [],
   selectedAssetId: null,
   isLoading: false,
+  isUploading: false,
 
   setAssets: (assets) => set({ assets }),
-
   selectAsset: (id) => set({ selectedAssetId: id }),
 
-  assignSlot: async (assetId, slot, slotOrder = 0) => {
+  fetchPool: async (bookArticle?: string) => {
+    set({ isLoading: true });
     try {
-      const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/assign`, {
-        method: "POST",
-        body: JSON.stringify({ slot, slot_order: slotOrder }),
-      });
-
-      set((state) => ({
-        assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
-      }));
+      const url = bookArticle
+        ? `/api/assets/pool?book_article=${encodeURIComponent(bookArticle)}`
+        : "/api/assets/pool";
+      const list = await apiRequest<AssetData[]>(url);
+      set({ assets: list || [], isLoading: false });
     } catch (err) {
-      console.error(`Failed to assign slot ${slot} to asset ${assetId}:`, err);
+      console.error("Failed to fetch photo pool:", err);
+      set({ isLoading: false });
     }
+  },
+
+  uploadFiles: async (files, bookArticle) => {
+    const fileArr = Array.from(files);
+    if (fileArr.length === 0) return;
+
+    set({ isUploading: true });
+    try {
+      const uploaded: AssetData[] = [];
+      for (const file of fileArr) {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (bookArticle) formData.append("book_article", bookArticle);
+
+        const resp = await fetch("/api/assets/upload", { method: "POST", body: formData });
+        if (resp.ok) {
+          uploaded.push((await resp.json()) as AssetData);
+        }
+      }
+      if (uploaded.length > 0) {
+        set((state) => ({
+          assets: [...uploaded, ...state.assets],
+          selectedAssetId: state.selectedAssetId || uploaded[0].id,
+        }));
+      }
+    } finally {
+      set({ isUploading: false });
+    }
+  },
+
+  assignSlot: async (assetId, slot, bookArticle, slotOrder = 0) => {
+    // v1 rule: cover_front is single — return previous cover_front back to pool
+    if (slot === "cover_front") {
+      const prev = get().assets.find((a) => a.slot === "cover_front" && a.id !== assetId);
+      if (prev) {
+        await get().unassignSlot(prev.id);
+      }
+    }
+
+    const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ slot, slot_order: slotOrder, book_article: bookArticle || null }),
+    });
+    set((state) => ({
+      assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
+    }));
   },
 
   unassignSlot: async (assetId) => {
-    try {
-      const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/assign`, {
-        method: "POST",
-        body: JSON.stringify({ slot: null, slot_order: 0 }),
-      });
-
-      set((state) => ({
-        assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
-      }));
-    } catch (err) {
-      console.error(`Failed to unassign asset ${assetId}:`, err);
-    }
+    const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ slot: null, slot_order: 0, book_article: null }),
+    });
+    set((state) => ({
+      assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
+    }));
   },
 
   deleteAsset: async (assetId) => {
-    try {
-      await apiRequest(`/api/assets/${assetId}`, { method: "DELETE" });
-      set((state) => ({
-        assets: state.assets.filter((a) => a.id !== assetId),
-        selectedAssetId: state.selectedAssetId === assetId ? null : state.selectedAssetId,
-      }));
-    } catch (err) {
-      console.error(`Failed to delete asset ${assetId}:`, err);
-    }
+    await apiRequest(`/api/assets/${assetId}`, { method: "DELETE" });
+    set((state) => ({
+      assets: state.assets.filter((a) => a.id !== assetId),
+      selectedAssetId: state.selectedAssetId === assetId ? null : state.selectedAssetId,
+    }));
   },
 
   updateAssetTransform: async (assetId, transforms, expectedVersion) => {
-    try {
-      const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/transform`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          transformations: transforms,
-          expected_version: expectedVersion,
-        }),
-      });
+    const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/transform`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        transformations: transforms,
+        expected_version: expectedVersion,
+      }),
+    });
+    set((state) => ({
+      assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
+    }));
+    return updated;
+  },
 
-      set((state) => ({
-        assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
-      }));
-    } catch (err) {
-      console.error(`Failed to update asset ${assetId} transform:`, err);
-      throw err;
+  runAiRembg: async (assetId) => {
+    const updated = await apiRequest<AssetData>(`/api/assets/${assetId}/run-ai?force=true`, {
+      method: "POST",
+    });
+    set((state) => ({
+      assets: state.assets.map((a) => (a.id === assetId ? updated : a)),
+    }));
+    return updated;
+  },
+
+  batchWhitenAll: async () => {
+    const targets = get().assets.filter((a) => !a.ai_white_path);
+    for (const a of targets) {
+      try {
+        await get().updateAssetTransform(
+          a.id,
+          {
+            ...(a.transformations || {}),
+            filters: {
+              ...((a.transformations?.filters as Record<string, unknown>) || {}),
+              whiten: 35,
+              contrast: 10,
+              sharpness: 15,
+            },
+          },
+          a.version || 1
+        );
+      } catch (err) {
+        console.warn("Batch whiten skipped for", a.id, err);
+      }
+    }
+  },
+
+  distributeUnassigned: async (scheme, bookArticle) => {
+    const unassigned = get().assets.filter((a) => !a.slot);
+    if (unassigned.length === 0) return;
+
+    const perBook = Number(scheme) || 3;
+    const roleOrder =
+      perBook === 2
+        ? ["cover_front", "info_pages"]
+        : perBook === 3
+        ? ["cover_front", "cover_back", "info_pages"]
+        : perBook === 4
+        ? ["cover_front", "cover_back", "info_pages", "illustrations"]
+        : ["cover_front", "cover_back", "info_pages", "illustrations", "mantra_defects"];
+
+    for (let i = 0; i < Math.min(unassigned.length, roleOrder.length); i++) {
+      await get().assignSlot(unassigned[i].id, roleOrder[i], bookArticle, i);
     }
   },
 }));
 
-// Listen for asset updates from backend via SSE
-sseClient.on("asset.updated", (payload) => {
+sseClient.on("asset.updated", (rawPayload) => {
+  const payload = rawPayload as {
+    asset_id?: string;
+    status?: string;
+    version?: number;
+    slot?: string | null;
+  } | null;
   if (payload?.asset_id) {
     const store = usePoolStore.getState();
-    const asset = store.assets.find((a) => a.id === payload.asset_id);
-    if (asset) {
+    const exists = store.assets.some((a) => a.id === payload.asset_id);
+    if (exists) {
       store.setAssets(
         store.assets.map((a) =>
           a.id === payload.asset_id
-            ? { ...a, status: payload.status, version: payload.version }
+            ? {
+                ...a,
+                status: payload.status ?? a.status,
+                version: payload.version ?? a.version,
+                slot: payload.slot !== undefined ? payload.slot : a.slot,
+              }
             : a
         )
       );
     }
   }
+});
+
+sseClient.on("mobile.committed", () => {
+  usePoolStore.getState().fetchPool();
 });

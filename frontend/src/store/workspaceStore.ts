@@ -33,6 +33,7 @@ export interface BookData {
   genre: string;
   paper_type: string;
   age_limit: string;
+  country: string;
   translator: string;
   illustrator: string;
   main_photo_url: string;
@@ -65,6 +66,7 @@ interface WorkspaceState {
   currentBook: BookData;
   validationErrors: Record<string, string>;
   isSaving: boolean;
+  isRecognizing: boolean;
   saveMessage: string | null;
 
   setTabs: (tabs: WorkspaceTab[]) => void;
@@ -74,8 +76,11 @@ interface WorkspaceState {
   updateBookField: <K extends keyof BookData>(field: K, value: BookData[K]) => void;
   updateDimensions: (dims: Partial<BookData["dimensions"]>) => void;
   validateCurrentBook: () => Promise<boolean>;
-  saveCurrentBook: () => Promise<{ success: boolean; errors?: Record<string, string> }>;
+  saveCurrentBook: (storeId?: string) => Promise<{ success: boolean; errors?: Record<string, string> }>;
   reopenBook: (article: string) => Promise<void>;
+  fetchNextArticle: () => Promise<string>;
+  recognizeCurrentBook: (photos?: Array<[string, string]>) => Promise<void>;
+  enrichWithFantlab: () => Promise<void>;
 }
 
 const DEFAULT_BOOK: BookData = {
@@ -103,15 +108,16 @@ const DEFAULT_BOOK: BookData = {
   genre: "Проза",
   paper_type: "Типографская",
   age_limit: "",
+  country: "Россия",
   translator: "",
   illustrator: "",
   main_photo_url: "",
   add_photo_urls: [],
   dimensions: {
     width_mm: 130,
-    length_mm: 200,
-    height_mm: 15,
-    weight_g: 250,
+    length_mm: 205,
+    height_mm: 22,
+    weight_g: 300,
     book_format_code: "84×108/32",
   },
   field_sources: {},
@@ -125,6 +131,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   currentBook: { ...DEFAULT_BOOK },
   validationErrors: {},
   isSaving: false,
+  isRecognizing: false,
   saveMessage: null,
 
   setTabs: (tabs) => {
@@ -218,11 +225,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set((state) => {
       const updated = { ...state.currentBook, [field]: value };
 
-      // ADR-4: Era boundary SSOT auto-switch
+      // ADR-4: Era boundary SSOT auto-switch + v1 auto-country detection
       if (field === "year") {
         const yr = value as number | null;
         if (yr !== null && yr !== undefined) {
           updated.template_mode = yr >= 2011 ? "post2011" : "pre2011";
+          updated.country = yr < 1992 ? "СССР" : "Россия";
         }
       }
 
@@ -267,15 +275,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
-  saveCurrentBook: async () => {
+  saveCurrentBook: async (storeId?: string) => {
     set({ isSaving: true, saveMessage: null });
     try {
-      const res = await apiRequest<{ success: boolean; errors?: Record<string, string> }>(
+      const res = await apiRequest<{ success: boolean; book?: BookData; errors?: Record<string, string> }>(
         "/api/books/save",
         {
           method: "POST",
           body: JSON.stringify({
             book: get().currentBook,
+            store_id: storeId || "default",
             skip_validation: false,
           }),
         }
@@ -284,7 +293,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       if (res.success) {
         set({
           isSaving: false,
-          saveMessage: "Книга успешно сохранена и поставлена в очередь Ozon!",
+          currentBook: res.book ? { ...get().currentBook, ...res.book } : get().currentBook,
+          saveMessage: "✅ Книга сохранена в БД, Excel-таблицу и поставлена в очередь Ozon!",
           validationErrors: {},
         });
         return { success: true };
@@ -321,13 +331,58 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         return {
           tabs,
           activeTabId: res.tab.id,
-          currentBook: res.book,
+          currentBook: { ...DEFAULT_BOOK, ...res.book },
           validationErrors: {},
+          saveMessage: null,
         };
       });
     } catch (err) {
       console.error("Failed to reopen book:", err);
       throw err;
+    }
+  },
+
+  fetchNextArticle: async () => {
+    const res = await apiRequest<{ article: string }>("/api/books/next-article");
+    if (res.article) {
+      get().updateBookField("article", res.article);
+    }
+    return res.article || "";
+  },
+
+  recognizeCurrentBook: async (photos: Array<[string, string]> = []) => {
+    set({ isRecognizing: true, saveMessage: null });
+    try {
+      const updated = await apiRequest<BookData>("/api/ai/recognize", {
+        method: "POST",
+        body: JSON.stringify({ book: get().currentBook, photos }),
+      });
+      set({
+        currentBook: { ...get().currentBook, ...updated },
+        isRecognizing: false,
+        saveMessage: "🤖 AI-распознавание (Gemini + FantLab) завершено!",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ isRecognizing: false, saveMessage: `Ошибка AI: ${msg}` });
+    }
+  },
+
+  enrichWithFantlab: async () => {
+    set({ isRecognizing: true, saveMessage: null });
+    try {
+      const updated = await apiRequest<BookData>("/api/ai/enrich", {
+        method: "POST",
+        body: JSON.stringify({ book: get().currentBook, photos: [] }),
+      });
+      set({
+        currentBook: { ...get().currentBook, ...updated },
+        isRecognizing: false,
+        saveMessage: "🌐 Сверка с базой FantLab завершена!",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ isRecognizing: false, saveMessage: `Ошибка FantLab: ${msg}` });
     }
   },
 }));

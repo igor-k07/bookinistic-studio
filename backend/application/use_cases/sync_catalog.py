@@ -49,8 +49,15 @@ class SyncCatalogUseCase:
         if not target_articles:
             try:
                 products_resp = self.gateway.list_products(limit=1000)
-                items = products_resp.get("result", {}).get("items", [])
-                target_articles = [it.get("offer_id") for it in items if it.get("offer_id")]
+                if isinstance(products_resp, list):
+                    items = products_resp
+                else:
+                    items = products_resp.get("result", {}).get("items", [])
+                target_articles = [
+                    str(it["offer_id"])
+                    for it in items
+                    if isinstance(it, dict) and it.get("offer_id")
+                ]
             except Exception as exc:
                 logger.error("Failed to list products from marketplace: %s", exc)
                 return {"status": "error", "error": str(exc), "total_updated": 0}
@@ -64,7 +71,10 @@ class SyncCatalogUseCase:
             chunk = target_articles[i : i + safe_batch_size]
             try:
                 info_resp = self.gateway.get_products_info(offer_ids=chunk)
-                products_info = info_resp.get("result", {}).get("items", [])
+                if isinstance(info_resp, list):
+                    products_info = info_resp
+                else:
+                    products_info = info_resp.get("result", {}).get("items", [])
             except Exception as e:
                 logger.warning("Error fetching info chunk %d-%d: %s", i, i + len(chunk), e)
                 for art in chunk:

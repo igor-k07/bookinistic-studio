@@ -13,7 +13,7 @@ import {
   type StudioTransformState,
 } from "./HistoryStack";
 
-export type CropRatio = "3:4" | "free";
+export type CropRatio = "3:4" | "4:3" | "1:1" | "free";
 
 export interface PresetDefinition {
   name: string;
@@ -23,24 +23,39 @@ export interface PresetDefinition {
 
 export const STUDIO_PRESETS: Record<string, PresetDefinition> = {
   auto: {
-    name: "⚡ Авто-баланс",
-    description: "Мягкое осветление и четкость шрифта",
-    filters: { brightness: 5, contrast: 15, sharpness: 12, whiten: 15 },
+    name: "🪄 Авто-улучшение",
+    description: "Баланс света, контраста и четкости шрифта",
+    filters: { whiten: 20, brightness: 4, contrast: 14, highlights: -8, shadows: 10, saturation: 3, warmth: -4, sharpness: 25 },
   },
-  vintage: {
-    name: "📜 Винтаж",
-    description: "Сохранение благородной патины старой бумаги",
-    filters: { contrast: 10, warmth: 15, whiten: 5, sharpness: 8 },
+  clean_white: {
+    name: "⬜ Белый фон Ozon",
+    description: "Выбеливание фона для витрины Ozon",
+    filters: { whiten: 75, brightness: 2, contrast: 5, warmth: -6, sharpness: 10 },
   },
   text: {
     name: "🔤 Четкий текст",
     description: "Максимальная читаемость страниц и автографов",
-    filters: { brightness: -5, contrast: 30, sharpness: 25, whiten: 30 },
+    filters: { whiten: 0, brightness: 3, contrast: 30, highlights: -5, shadows: 10, sharpness: 35 },
+  },
+  vibrant_art: {
+    name: "🎨 Яркие иллюстрации",
+    description: "Сочные краски для гравюр и обложек",
+    filters: { brightness: 2, contrast: 10, highlights: -10, shadows: 5, saturation: 18, sharpness: 15 },
+  },
+  vintage: {
+    name: "📜 Винтаж",
+    description: "Сохранение благородной патины старой бумаги",
+    filters: { contrast: 8, shadows: 14, saturation: -5, warmth: 12, sharpness: 15 },
   },
   bw: {
     name: "⚪ Черно-белый",
     description: "Обесцвечивание и удаление цветовых шумов",
     filters: { saturation: -100, contrast: 25, sharpness: 15, whiten: 25 },
+  },
+  original: {
+    name: "↺ Оригинал (сброс)",
+    description: "Сбросить все цветовые фильтры в 0",
+    filters: { whiten: 0, brightness: 0, contrast: 0, highlights: 0, shadows: 0, saturation: 0, warmth: 0, sharpness: 0 },
   },
 };
 
@@ -105,7 +120,9 @@ export class StudioEngine {
   public setCropRatio(ratio: CropRatio): void {
     this.cropRatio = ratio;
     if (this.cropper) {
-      this.cropper.setAspectRatio(ratio === "3:4" ? 3 / 4 : NaN);
+      const ar =
+        ratio === "3:4" ? 3 / 4 : ratio === "4:3" ? 4 / 3 : ratio === "1:1" ? 1 : NaN;
+      this.cropper.setAspectRatio(ar);
     }
   }
 

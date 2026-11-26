@@ -42,6 +42,11 @@ def get_bootstrap_data(request: Request) -> Any:
         if hasattr(app_state, "tunnel_manager")
         else None
     )
+    local_url = (
+        app_state.tunnel_manager.local_url
+        if hasattr(app_state, "tunnel_manager")
+        else None
+    )
 
     return BootstrapResponse(
         stores=[s.to_dict() for s in registry.list_stores()],
@@ -51,4 +56,5 @@ def get_bootstrap_data(request: Request) -> Any:
         tabs=tabs_dto,
         mobile_token=token,
         tunnel_url=tunnel_url,
+        local_url=local_url,
     )

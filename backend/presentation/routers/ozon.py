@@ -27,27 +27,35 @@ def get_ozon_status(request: Request) -> Any:
     return {
         "active_store": registry.active_store_id,
         "outbox_counts": counts,
-        "is_configured": ctx.ozon_gateway.is_configured() if hasattr(ctx, "ozon_gateway") else False,
+        "is_configured": bool(getattr(ctx.ozon_gateway, "is_configured", False))
+        if hasattr(ctx, "ozon_gateway")
+        else False,
     }
 
 
 @router.post("/switch-profile")
 def switch_store_profile(req: SwitchProfileRequest, request: Request) -> Any:
-    """Switch the active store profile in the StoreRegistry."""
+    """Switch the active store profile in StoreRegistry and re-wire store components."""
     registry = request.app.state.store_registry
     try:
         registry.set_active_store(req.store_id)
-        ctx = registry.get_active_context()
-        ctx.ensure_dirs()
-        from backend.infrastructure.persistence.sqlite_uow import run_migrations
-        run_migrations(ctx.db_path)
+        from backend.main import init_store_components
+
+        cfg = getattr(request.app.state, "settings", None)
+        if cfg is not None:
+            if hasattr(request.app.state, "outbox_worker") and request.app.state.outbox_worker:
+                request.app.state.outbox_worker.stop()
+            init_store_components(registry, request.app, cfg)
+            if hasattr(request.app.state, "outbox_worker") and request.app.state.outbox_worker:
+                request.app.state.outbox_worker.start()
+
         if hasattr(request.app.state, "event_broker") and request.app.state.event_broker:
             request.app.state.event_broker.publish(
                 "store.switched",
                 {"active_store": req.store_id},
             )
         return {"status": "ok", "active_store": req.store_id}
-    except ValueError as e:
+    except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -83,5 +91,18 @@ def run_outbox_batch(request: Request) -> Any:
 def trigger_smart_s3_sync(req: SyncSmartS3Request, request: Request) -> Any:
     """Trigger incremental Ozon -> S3 -> SQLite photo URL sync strictly chunked by 50."""
     use_case = request.app.state.sync_catalog_use_case
-    res = use_case.execute(store_id=req.store_id, batch_size=req.batch_size)
-    return res
+    registry = request.app.state.store_registry
+    store_id = req.store_id if req.store_id and req.store_id != "default" else registry.active_store_id
+    return use_case.execute(store_id=store_id, batch_size=req.batch_size)
+
+
+@router.post("/update-pictures/{article}")
+def update_ozon_pictures(article: str, request: Request) -> Any:
+    """Targeted Ozon photo update for an existing catalog book."""
+    ctx = request.app.state.store_registry.get_active_context()
+    with ctx.uow:
+        book = ctx.book_repo.get_by_article(article)
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {article} not found")
+    res = ctx.ozon_channel.publish_or_update(book)
+    return {"status": "ok", "article": article, "result": res}

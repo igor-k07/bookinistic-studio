@@ -1,7 +1,7 @@
 """Asset Pipeline Use Case.
 
 Handles binary uploads, non-destructive transformations with Optimistic Locking,
-selective rembg processing for covers, and proactive S3 staging upload.
+real ImageRenderPipeline rendering, selective/forced rembg processing, and S3 staging.
 """
 
 from __future__ import annotations
@@ -29,11 +29,15 @@ class AssetPipelineUseCase:
         media_storage: IMediaStorage,
         cloud_storage: Optional[ICloudStorage] = None,
         event_broker: Optional[IEventBroker] = None,
+        render_pipeline: Optional[Any] = None,
+        rembg_processor: Optional[Any] = None,
     ) -> None:
         self.asset_repo = asset_repo
         self.media_storage = media_storage
         self.cloud_storage = cloud_storage
         self.event_broker = event_broker
+        self.render_pipeline = render_pipeline
+        self.rembg_processor = rembg_processor
 
     def create_asset(
         self,
@@ -46,8 +50,18 @@ class AssetPipelineUseCase:
         asset_id = uuid.uuid4().hex[:12]
         file_hash = hashlib.sha256(raw_data).hexdigest()
 
-        # Slot normalization
-        normalized_slot = normalize_photo_role(slot or original_filename) if slot or original_filename else None
+        # Slot normalization: explicit slot or explicit semantic filename hint; generic camera names stay unassigned in pool
+        if slot:
+            normalized_slot: Optional[str] = normalize_photo_role(slot)
+        elif original_filename:
+            inferred = normalize_photo_role(original_filename)
+            normalized_slot = (
+                inferred
+                if inferred in ("cover_front", "cover_back", "info_pages", "mantra_defects")
+                else None
+            )
+        else:
+            normalized_slot = None
 
         # Save raw binary to local media vault
         rel_path = f"assets/{asset_id}_orig.jpg"
@@ -75,7 +89,7 @@ class AssetPipelineUseCase:
         transformations: Dict[str, Any],
         expected_version: int,
     ) -> Asset:
-        """Apply non-destructive transformations with Optimistic Locking protection."""
+        """Apply non-destructive transformations with Optimistic Locking and real Pillow render."""
         asset = self.asset_repo.get_by_id(asset_id)
         if not asset:
             raise EntityNotFoundError(f"Asset {asset_id} not found")
@@ -86,68 +100,103 @@ class AssetPipelineUseCase:
             )
 
         asset.transformations = dict(transformations)
-        # Compute new deterministic render_hash combining source hash with transformations
         tx_repr = str(sorted(transformations.items()))
         new_hash = hashlib.sha256(f"{asset.render_hash}:{tx_repr}".encode("utf-8")).hexdigest()
+
+        # Render actual preview image if render_pipeline is wired
+        if self.render_pipeline is not None:
+            try:
+                use_ai = bool(transformations.get("use_ai_white") and asset.ai_white_path)
+                src_path = asset.ai_white_path if use_ai and asset.ai_white_path else asset.original_path
+                src_bytes = self.media_storage.read_file(src_path)
+                rendered_bytes, render_sha, w, h = self.render_pipeline.render(
+                    src_bytes, transformations
+                )
+                preview_rel = f"assets/{asset_id}_preview.jpg"
+                saved_preview = self.media_storage.save_file(preview_rel, rendered_bytes)
+                asset.preview_path = saved_preview
+                asset.width = w
+                asset.height = h
+                new_hash = render_sha
+            except Exception as e:
+                logger.warning("Render pipeline failed for %s, keeping previous preview: %s", asset_id, e)
+
         asset.render_hash = new_hash
         asset.status = AssetStatus.READY
-
         self.asset_repo.save(asset)
-        self._notify_event("asset.updated", {"asset_id": asset_id, "status": asset.status.value})
+        self._notify_event(
+            "asset.updated",
+            {"asset_id": asset_id, "status": asset.status.value, "version": asset.version},
+        )
         return asset
 
     def assign_slot(
         self,
         asset_id: str,
-        slot: str,
+        slot: Optional[str],
         slot_order: int = 0,
+        book_article: Optional[str] = None,
     ) -> Asset:
-        """Assign or reassign an asset to a semantic photo slot."""
+        """Assign or unassign an asset to a semantic photo slot."""
         asset = self.asset_repo.get_by_id(asset_id)
         if not asset:
             raise EntityNotFoundError(f"Asset {asset_id} not found")
 
-        asset.slot = normalize_photo_role(slot)
+        asset.slot = normalize_photo_role(slot) if slot else None
         asset.slot_order = slot_order
+        if book_article is not None:
+            asset.book_article = book_article if book_article else None
+        elif slot is None:
+            asset.book_article = None
+
         self.asset_repo.save(asset)
         self._notify_event(
             "asset.updated",
-            {"asset_id": asset_id, "slot": asset.slot, "slot_order": slot_order},
+            {
+                "asset_id": asset_id,
+                "slot": asset.slot,
+                "slot_order": slot_order,
+                "version": asset.version,
+            },
         )
         return asset
 
-    def trigger_rembg(self, asset_id: str) -> Asset:
-        """Selectively trigger AI background removal strictly for book covers."""
+    def trigger_rembg(self, asset_id: str, force: bool = False) -> Asset:
+        """Trigger AI background removal for book covers (or any photo when force=True)."""
         asset = self.asset_repo.get_by_id(asset_id)
         if not asset:
             raise EntityNotFoundError(f"Asset {asset_id} not found")
 
-        # Selective rembg: only cover photos are candidates for background removal
         is_cover = bool(asset.slot and ("cover" in asset.slot or asset.slot in ("01_cover_front", "cover_front")))
-        if not is_cover:
+        if not force and not is_cover:
             logger.info("Asset %s (slot %s) is not a cover; skipping rembg", asset_id, asset.slot)
             return asset
 
         asset.status = AssetStatus.AI_PROCESSING
         self.asset_repo.save(asset)
 
-        # In pure use case, set white path relative to media storage
         white_rel_path = f"assets/{asset_id}_white.jpg"
         raw_data = self.media_storage.read_file(asset.original_path)
-        self.media_storage.save_file(white_rel_path, raw_data)
+        processed_data = raw_data
+        if self.rembg_processor is not None:
+            try:
+                processed_data = self.rembg_processor.process_bytes(raw_data)
+            except Exception as e:
+                logger.warning("rembg failed for %s, falling back to original: %s", asset_id, e)
 
-        asset.ai_white_path = white_rel_path
+        saved_white = self.media_storage.save_file(white_rel_path, processed_data)
+        asset.ai_white_path = saved_white
+        asset.preview_path = saved_white
+        asset.transformations = {**(asset.transformations or {}), "use_ai_white": True}
         asset.status = AssetStatus.READY
         self.asset_repo.save(asset)
-        self._notify_event("asset.updated", {"asset_id": asset_id, "status": asset.status.value})
+        self._notify_event(
+            "asset.updated",
+            {"asset_id": asset_id, "status": asset.status.value, "version": asset.version},
+        )
         return asset
 
-    def upload_to_staging(
-        self,
-        asset_id: str,
-        store_id: str,
-        data: bytes,
-    ) -> str:
+    def upload_to_staging(self, asset_id: str, store_id: str, data: bytes) -> str:
         """Proactively upload rendered asset to S3 staging keyed by render_hash."""
         if not self.cloud_storage:
             raise RuntimeError("Cloud storage adapter is not configured")
@@ -165,10 +214,7 @@ class AssetPipelineUseCase:
         asset.s3_staging_url = staging_url
         asset.s3_uploaded_hash = asset.render_hash
         self.asset_repo.save(asset)
-        self._notify_event(
-            "asset.updated",
-            {"asset_id": asset_id, "s3_staging_url": staging_url},
-        )
+        self._notify_event("asset.updated", {"asset_id": asset_id, "s3_staging_url": staging_url})
         return staging_url
 
     def _notify_event(self, event_type: str, data: Dict[str, Any]) -> None:

@@ -123,6 +123,10 @@ class OzonOutboxWorker:
 
         try:
             res = self.channel.publish_or_update(book)
+            if isinstance(res, dict) and res.get("success") is False:
+                err_msg = str(res.get("errors") or res.get("error") or "Ozon rejected item")
+                self._handle_failure(item, err_msg)
+                return
             task_id = self._extract_task_id(res)
 
             if task_id:
@@ -212,22 +216,18 @@ class OzonOutboxWorker:
                 last_error=error_message,
             )
 
-    def _extract_task_id(self, res: Dict[str, Any]) -> Optional[int]:
-        """Safely extract task_id from diverse Ozon API responses."""
-        if not isinstance(res, dict):
-            return None
-        # Could be directly {"result": {"task_id": 123}} or {"task_id": 123}
-        if "task_id" in res:
-            try:
-                return int(res["task_id"])
-            except (ValueError, TypeError):
-                pass
-        result = res.get("result")
-        if isinstance(result, dict) and "task_id" in result:
-            try:
-                return int(result["task_id"])
-            except (ValueError, TypeError):
-                pass
+    def _extract_task_id(self, res: Any) -> Optional[int]:
+        """Safely extract task_id from nested Ozon API responses."""
+        cur = res
+        for _ in range(4):
+            if not isinstance(cur, dict):
+                return None
+            if "task_id" in cur and cur["task_id"] is not None:
+                try:
+                    return int(cur["task_id"])
+                except (ValueError, TypeError):
+                    return None
+            cur = cur.get("result")
         return None
 
     def _parse_ozon_task_info(
@@ -295,6 +295,16 @@ class OzonOutboxWorker:
         status: OzonSyncStatus,
         last_error: str = "",
     ) -> None:
+        try:
+            book = self.book_repo.get_by_article(article)
+            if book:
+                book.ozon_sync_status = status
+                if status == OzonSyncStatus.PUBLISHED:
+                    book.status = "PUBLISHED"
+                self.book_repo.save(book)
+        except Exception as e:
+            logger.warning("Failed to persist ozon status for %s: %s", article, e)
+
         if self.event_broker:
             self.event_broker.publish(
                 EVENT_OZON_STATUS,

@@ -1,24 +1,12 @@
 /**
- * PhotoStudioModal — Modular Photo Studio for desktop image post-processing.
- *
- * Implements Step 7.4 & Architectural Guardrails 9 & 10:
- * - Isolated Cropper lifecycle with guaranteed engine.destroy() in cleanup
- * - Diff-based HistoryStack for undo/redo
- * - Honest Esc / Cancel: edits mutate draft and persist only on Enter / Apply
- * - Spacebar original image comparison
- * - Zero Base64 in DOM / memory (uses /api/assets/{id}/preview)
- * - Strict LOC <= 400
+ * PhotoStudioModal — Modular Photo Studio Pro (v1 UX + 2.0 isolated StudioEngine & Diff HistoryStack).
  */
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import type { AssetData } from "../../store/poolStore";
+import { usePoolStore, type AssetData } from "../../store/poolStore";
 import { HistoryStack, type StudioTransformState } from "./HistoryStack";
-import {
-  StudioEngine,
-  STUDIO_PRESETS,
-  type CropRatio,
-} from "./StudioEngine";
 import { StudioAdjustments } from "./StudioAdjustments";
+import { StudioEngine, type CropRatio } from "./StudioEngine";
 
 interface Props {
   asset: AssetData;
@@ -57,13 +45,15 @@ export function PhotoStudioModal({
   const engineRef = useRef<StudioEngine | null>(null);
   const historyRef = useRef<HistoryStack | null>(null);
 
+  const { runAiRembg } = usePoolStore();
+  const [imgVersion, setImgVersion] = useState<number>(asset.version || 1);
   const [currentTransform, setCurrentTransform] = useState<StudioTransformState>(() =>
     extractTransformFromAsset(asset)
   );
-
   const [cropRatio, setCropRatio] = useState<CropRatio>("3:4");
   const [showOriginal, setShowOriginal] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -78,6 +68,9 @@ export function PhotoStudioModal({
     if (!isOpen) return;
 
     const initial = extractTransformFromAsset(asset);
+    setCurrentTransform(initial);
+    setImgVersion(asset.version || 1);
+
     const history = new HistoryStack(initial);
     historyRef.current = history;
 
@@ -97,9 +90,9 @@ export function PhotoStudioModal({
       engineRef.current = null;
       historyRef.current = null;
     };
-  }, [isOpen, asset, syncHistoryState]);
+  }, [isOpen, asset.id, imgVersion, syncHistoryState]);
 
-  const handleApply = async () => {
+  const handleApply = useCallback(async () => {
     if (!engineRef.current || isApplying) return;
     setIsApplying(true);
     try {
@@ -111,7 +104,41 @@ export function PhotoStudioModal({
     } finally {
       setIsApplying(false);
     }
-  };
+  }, [asset.id, isApplying, onApplyTransform, onClose]);
+
+  const handleUndo = useCallback(() => {
+    if (!historyRef.current || !engineRef.current) return;
+    const prev = historyRef.current.undo();
+    if (prev) {
+      engineRef.current.applyState(prev);
+      setCurrentTransform(prev);
+      syncHistoryState();
+    }
+  }, [syncHistoryState]);
+
+  const handleRedo = useCallback(() => {
+    if (!historyRef.current || !engineRef.current) return;
+    const next = historyRef.current.redo();
+    if (next) {
+      engineRef.current.applyState(next);
+      setCurrentTransform(next);
+      syncHistoryState();
+    }
+  }, [syncHistoryState]);
+
+  const handleRunAiRembg = useCallback(async () => {
+    if (isAiProcessing) return;
+    setIsAiProcessing(true);
+    try {
+      const updated = await runAiRembg(asset.id);
+      engineRef.current?.setAiWhite(true);
+      setImgVersion((updated.version || imgVersion) + 1);
+    } catch (err) {
+      console.error("AI rembg failed:", err);
+    } finally {
+      setIsAiProcessing(false);
+    }
+  }, [asset.id, imgVersion, isAiProcessing, runAiRembg]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -123,16 +150,16 @@ export function PhotoStudioModal({
       } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleApply();
-      } else if (e.code === "Space" && !showOriginal && !e.repeat) {
+      } else if (e.code === "Space" && !e.repeat) {
         e.preventDefault();
         setShowOriginal(true);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      } else if (e.key.toLowerCase() === "r" && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        engineRef.current?.rotateStep(e.shiftKey ? -90 : 90);
       }
     };
 
@@ -149,59 +176,41 @@ export function PhotoStudioModal({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [isOpen, showOriginal, onClose]);
-
-  const handleUndo = () => {
-    if (!historyRef.current || !engineRef.current) return;
-    const prev = historyRef.current.undo();
-    if (prev) {
-      engineRef.current.applyState(prev);
-      setCurrentTransform(prev);
-      syncHistoryState();
-    }
-  };
-
-  const handleRedo = () => {
-    if (!historyRef.current || !engineRef.current) return;
-    const next = historyRef.current.redo();
-    if (next) {
-      engineRef.current.applyState(next);
-      setCurrentTransform(next);
-      syncHistoryState();
-    }
-  };
+  }, [isOpen, onClose, handleApply, handleUndo, handleRedo]);
 
   if (!isOpen) return null;
 
-  const previewUrl = `/api/assets/${asset.id}/preview`;
+  const previewUrl = `/api/assets/${asset.id}/preview?v=${imgVersion}`;
+  const fullOriginalUrl = `/api/assets/${asset.id}/full`;
   const fileName = asset.original_path ? asset.original_path.split("/").pop() : asset.id;
 
+  const f = currentTransform.filters;
+  const cssBrightness = 1 + (f.brightness + f.whiten * 0.35 + f.highlights * 0.15) / 100;
+  const cssContrast = 1 + (f.contrast + f.whiten * 0.15 + f.sharpness * 0.12) / 100;
+  const cssSaturate = Math.max(0, 1 + f.saturation / 100);
+  const cssSepia = f.warmth > 0 ? Math.min(0.55, f.warmth / 120) : 0;
+  const cssFilter = `brightness(${cssBrightness.toFixed(2)}) contrast(${cssContrast.toFixed(
+    2
+  )}) saturate(${cssSaturate.toFixed(2)}) sepia(${cssSepia.toFixed(2)})`;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-5">
       <div className="flex h-full max-h-[92vh] w-full max-w-7xl flex-col rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
         {/* Top Control Bar */}
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/90 px-6">
           <div className="flex items-center gap-3">
-            <span className="font-bold text-slate-200">📸 Фото-студия:</span>
+            <span className="font-bold text-slate-100">📸 Фото-студия Pro:</span>
             <span className="text-xs text-slate-400 font-mono">{fileName}</span>
-
-            {/* Presets */}
-            <div className="ml-4 flex items-center gap-1.5 border-l border-slate-800 pl-4">
-              {(Object.keys(STUDIO_PRESETS) as Array<keyof typeof STUDIO_PRESETS>).map((k) => (
-                <button
-                  key={k}
-                  onClick={() => engineRef.current?.applyPreset(k)}
-                  className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-700 hover:text-white"
-                >
-                  {STUDIO_PRESETS[k].name}
-                </button>
-              ))}
-            </div>
+            {currentTransform.useAiWhite && (
+              <span className="rounded-full bg-purple-600/30 border border-purple-500/50 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+                ✨ AI Белый фон
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Undo / Redo */}
+          <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={handleUndo}
               disabled={!canUndo}
               className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
@@ -211,6 +220,7 @@ export function PhotoStudioModal({
               ↩ Назад
             </button>
             <button
+              type="button"
               onClick={handleRedo}
               disabled={!canRedo}
               className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
@@ -220,86 +230,53 @@ export function PhotoStudioModal({
               ↪ Вперед
             </button>
 
-            {/* Aspect Ratio Toggle */}
-            <div className="flex rounded-lg border border-slate-700 bg-slate-800 p-0.5 text-xs">
-              <button
-                onClick={() => {
-                  setCropRatio("3:4");
-                  engineRef.current?.setCropRatio("3:4");
-                }}
-                className={`rounded-md px-2 py-0.5 ${
-                  cropRatio === "3:4" ? "bg-emerald-600 text-white font-semibold" : "text-slate-400"
-                }`}
-              >
-                3:4
-              </button>
-              <button
-                onClick={() => {
-                  setCropRatio("free");
-                  engineRef.current?.setCropRatio("free");
-                }}
-                className={`rounded-md px-2 py-0.5 ${
-                  cropRatio === "free" ? "bg-emerald-600 text-white font-semibold" : "text-slate-400"
-                }`}
-              >
-                Свободный
-              </button>
-            </div>
-
-            {/* AI Rembg Toggle */}
             <button
-              onClick={() => {
-                const next = !currentTransform.useAiWhite;
-                engineRef.current?.setAiWhite(next);
-              }}
-              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                currentTransform.useAiWhite
-                  ? "bg-purple-600 text-white ring-2 ring-purple-400/40 shadow-lg"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-              }`}
+              type="button"
+              onMouseDown={() => setShowOriginal(true)}
+              onMouseUp={() => setShowOriginal(false)}
+              onMouseLeave={() => setShowOriginal(false)}
+              className="rounded-lg border border-amber-700/60 bg-amber-950/50 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-900/60"
             >
-              ✨ AI Фон {currentTransform.useAiWhite ? "ВКЛ" : "ВЫКЛ"}
+              👁️ Оригинал (Пробел)
             </button>
 
-            {/* Spacebar compare hint */}
-            <span className="text-[11px] text-slate-400">
-              (Зажмите <kbd className="rounded bg-slate-800 px-1 py-0.5 text-amber-300">Пробел</kbd> — оригинал)
-            </span>
-
-            {/* Action buttons */}
             <button
+              type="button"
               onClick={onClose}
               className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-700"
             >
               Отмена (Esc)
             </button>
             <button
+              type="button"
               onClick={handleApply}
               disabled={isApplying}
               className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-emerald-500 active:scale-95 disabled:opacity-50"
             >
-              {isApplying ? "Применение..." : "Применить (Enter)"}
+              {isApplying ? "Сохранение..." : "Применить (Enter)"}
             </button>
           </div>
         </div>
 
-        {/* Studio Workspace: Left Canvas, Right Controls */}
+        {/* Studio Workspace */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Main Photo Viewport */}
           <div className="relative flex flex-1 items-center justify-center bg-slate-950 p-4">
             {showOriginal ? (
               <div className="flex flex-col items-center gap-2">
                 <span className="rounded-full bg-amber-500/20 px-3 py-0.5 text-xs font-bold text-amber-300 border border-amber-500/40">
-                  Оригинал без правок
+                  Исходный снимок камеры (без правок)
                 </span>
                 <img
-                  src={previewUrl}
+                  src={fullOriginalUrl}
                   alt="Original"
                   className="max-h-[70vh] max-w-full rounded-lg object-contain shadow-2xl"
                 />
               </div>
             ) : (
-              <div className="max-h-[72vh] max-w-full overflow-hidden rounded-lg">
+              <div
+                className="max-h-[72vh] max-w-full overflow-hidden rounded-lg transition-all duration-75"
+                style={{ filter: cssFilter }}
+              >
                 <img
                   ref={imgRef}
                   src={previewUrl}
@@ -311,12 +288,20 @@ export function PhotoStudioModal({
             )}
           </div>
 
-          {/* Right Adjustments Panel */}
           <StudioAdjustments
             currentTransform={currentTransform}
+            cropRatio={cropRatio}
+            isAiProcessing={isAiProcessing}
+            onCropRatioChange={(ratio) => {
+              setCropRatio(ratio);
+              engineRef.current?.setCropRatio(ratio);
+            }}
             onRotate={(deg) => engineRef.current?.rotateStep(deg)}
             onStraighten={(deg) => engineRef.current?.setRotation(deg)}
             onFilterChange={(key, val) => engineRef.current?.setFilter(key, val)}
+            onApplyPreset={(k) => engineRef.current?.applyPreset(k)}
+            onRunAiRembg={handleRunAiRembg}
+            onResetAll={() => engineRef.current?.reset()}
           />
         </div>
       </div>

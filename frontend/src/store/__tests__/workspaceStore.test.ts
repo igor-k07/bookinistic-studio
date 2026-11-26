@@ -56,6 +56,7 @@ describe("workspaceStore", () => {
         genre: "Наука",
         paper_type: "Типографская",
         age_limit: "",
+        country: "Россия",
         translator: "",
         illustrator: "",
         main_photo_url: "",

@@ -190,6 +190,116 @@
         }
       }
     },
+    "/api/books/next-article": {
+      "get": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Get Next Article",
+        "description": "Return next sequential DP-B-XXXXX article number.",
+        "operationId": "get_next_article_api_books_next_article_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Next Article Api Books Next Article Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/excel-preview": {
+      "get": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Get Excel Preview",
+        "description": "Return non-draft books grouped by era for the embedded Excel preview table.",
+        "operationId": "get_excel_preview_api_books_excel_preview_get",
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "pre2011",
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Excel Preview Api Books Excel Preview Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/books/clear-excel": {
+      "post": {
+        "tags": [
+          "Books"
+        ],
+        "summary": "Clear Excel Tables",
+        "description": "Backup and reset Excel export table(s) to clean Ozon template.",
+        "operationId": "clear_excel_tables_api_books_clear_excel_post",
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "pre2011",
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Clear Excel Tables Api Books Clear Excel Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/books/save": {
       "post": {
         "tags": [
@@ -427,7 +537,7 @@
           "Books"
         ],
         "summary": "Delete Book",
-        "description": "Delete book and cascade to workspace tabs and outbox.",
+        "description": "Delete book from SQLite and Excel catalog.",
         "operationId": "delete_book_api_books__article__delete",
         "parameters": [
           {
@@ -447,6 +557,60 @@
               "application/json": {
                 "schema": {
                   "title": "Response Delete Book Api Books  Article  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/pool": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "List Pool Assets",
+        "description": "List unassigned pool assets and optionally assets for the active book.",
+        "operationId": "list_pool_assets_api_assets_pool_get",
+        "parameters": [
+          {
+            "name": "book_article",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Book Article"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssetDTO"
+                  },
+                  "title": "Response List Pool Assets Api Assets Pool Get"
                 }
               }
             }
@@ -512,7 +676,7 @@
           "Assets"
         ],
         "summary": "Assign Asset Slot",
-        "description": "Assign asset to a semantic photo slot.",
+        "description": "Assign or unassign asset to a semantic photo slot.",
         "operationId": "assign_asset_slot_api_assets__asset_id__assign_post",
         "parameters": [
           {
@@ -618,7 +782,7 @@
           "Assets"
         ],
         "summary": "Run Ai Rembg",
-        "description": "Trigger background removal strictly for book covers.",
+        "description": "Trigger background removal via rembg (supports force=True from Photo Studio).",
         "operationId": "run_ai_rembg_api_assets__asset_id__run_ai_post",
         "parameters": [
           {
@@ -628,6 +792,16 @@
             "schema": {
               "type": "string",
               "title": "Asset Id"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Force"
             }
           }
         ],
@@ -788,6 +962,48 @@
         "summary": "Recognize Book",
         "description": "Run full AI recognition: candidate filtering, barcode lookup, Gemini Vision, and FantLab.",
         "operationId": "recognize_book_api_ai_recognize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecognizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookDTO"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/enrich": {
+      "post": {
+        "tags": [
+          "AI & Enrichment"
+        ],
+        "summary": "Enrich Book Fantlab",
+        "description": "Manual FantLab / OpenLibrary enrichment preserving manual price, dims, and annotation.",
+        "operationId": "enrich_book_fantlab_api_ai_enrich_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1022,7 +1238,7 @@
           "Ozon Marketplace"
         ],
         "summary": "Switch Store Profile",
-        "description": "Switch the active store profile in the StoreRegistry.",
+        "description": "Switch the active store profile in StoreRegistry and re-wire store components.",
         "operationId": "switch_store_profile_api_ozon_switch_profile_post",
         "requestBody": {
           "content": {
@@ -1165,6 +1381,49 @@
         }
       }
     },
+    "/api/ozon/update-pictures/{article}": {
+      "post": {
+        "tags": [
+          "Ozon Marketplace"
+        ],
+        "summary": "Update Ozon Pictures",
+        "description": "Targeted Ozon photo update for an existing catalog book.",
+        "operationId": "update_ozon_pictures_api_ozon_update_pictures__article__post",
+        "parameters": [
+          {
+            "name": "article",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Article"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Update Ozon Pictures Api Ozon Update Pictures  Article  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -1265,9 +1524,19 @@
           "System"
         ],
         "summary": "Download Excel Catalog",
-        "description": "Download OpenXML catalog spreadsheet.",
+        "description": "Download OpenXML catalog spreadsheet by era mode or filename.",
         "operationId": "download_excel_catalog_api_system_excel_download_get",
         "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Mode"
+            }
+          },
           {
             "name": "filename",
             "in": "query",
@@ -1404,6 +1673,30 @@
                   },
                   "type": "object",
                   "title": "Response Rotate Session Token Api System Tokens Rotate Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/tunnel/restart": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Restart Tunnel Endpoint",
+        "description": "Restart Cloudflare Quick Tunnel and return updated URLs.",
+        "operationId": "restart_tunnel_endpoint_api_system_tunnel_restart_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Restart Tunnel Endpoint Api System Tunnel Restart Post"
                 }
               }
             }
@@ -1613,19 +1906,34 @@
       "AssignAssetSlotRequest": {
         "properties": {
           "slot": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Slot"
           },
           "slot_order": {
             "type": "integer",
             "title": "Slot Order",
             "default": 0
+          },
+          "book_article": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Article"
           }
         },
         "type": "object",
-        "required": [
-          "slot"
-        ],
         "title": "AssignAssetSlotRequest"
       },
       "Body_upload_asset_api_assets_upload_post": {
@@ -1934,6 +2242,17 @@
               }
             ],
             "title": "Tunnel Url"
+          },
+          "local_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Url"
           }
         },
         "type": "object",

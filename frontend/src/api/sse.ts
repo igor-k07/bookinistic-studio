@@ -22,6 +22,7 @@ export type SSEHandler<T = unknown> = (data: T) => void;
 export class SSEClient {
   private eventSource: EventSource | null = null;
   private listeners: Map<string, Set<SSEHandler<any>>> = new Map();
+  private boundEventNames: Set<string> = new Set();
   private reconnectTimeout: number | null = null;
   private backoffMs: number = 1000;
   private isExplicitlyClosed: boolean = false;
@@ -55,6 +56,12 @@ export class SSEClient {
         }
       };
 
+      // Attach listeners for all named SSE events already registered
+      this.boundEventNames.clear();
+      for (const eventName of this.listeners.keys()) {
+        this.bindNamedEvent(eventName);
+      }
+
       this.eventSource.onerror = () => {
         this.close();
         if (!this.isExplicitlyClosed) {
@@ -64,6 +71,23 @@ export class SSEClient {
     } catch {
       this.scheduleReconnect();
     }
+  }
+
+  private bindNamedEvent(eventName: string): void {
+    if (!this.eventSource || eventName === "*" || this.boundEventNames.has(eventName)) {
+      return;
+    }
+    this.boundEventNames.add(eventName);
+    this.eventSource.addEventListener(eventName, (e: Event) => {
+      const me = e as MessageEvent;
+      try {
+        const parsed = JSON.parse(me.data);
+        const payload = parsed && parsed.data !== undefined ? parsed.data : parsed;
+        this.emit(eventName, payload);
+      } catch {
+        this.emit(eventName, me.data);
+      }
+    });
   }
 
   private scheduleReconnect(): void {
@@ -83,6 +107,7 @@ export class SSEClient {
       this.listeners.set(event, new Set());
     }
     this.listeners.get(event)!.add(handler);
+    this.bindNamedEvent(event);
 
     // Return unbind callback
     return () => this.off(event, handler);

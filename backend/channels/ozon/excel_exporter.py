@@ -14,8 +14,10 @@ import fcntl
 import logging
 import os
 import re
+import shutil
 import threading
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -56,8 +58,15 @@ __all__ = [
 class OpenXmlDomExporter(IExcelExporter):
     """High-performance OpenXML DOM Excel Exporter with zero regex."""
 
-    def __init__(self, templates_dir: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        templates_dir: Optional[Path] = None,
+        ready_tables_dir: Optional[Path] = None,
+        book_repo: Optional[Any] = None,
+    ) -> None:
         self.templates_dir = templates_dir or Path("templates")
+        self.ready_tables_dir = ready_tables_dir or Path("ready_tables")
+        self.book_repo = book_repo
         self._thread_lock = threading.RLock()
 
     def get_template_path(self, mode: str) -> Path:
@@ -67,18 +76,57 @@ class OpenXmlDomExporter(IExcelExporter):
             raise FileNotFoundError(f"Ozon template not found at {tmpl}")
         return tmpl
 
-    def export_book(self, book: Book) -> str:
-        """Export single book incrementally to appropriate era catalog sheet."""
-        mode = "post2011" if (book.year and book.year >= 2011) else "pre2011"
-        out_dir = Path("ready_tables") / mode
+    def get_target_path(self, mode: str) -> Path:
+        """Return canonical target .xlsx path for pre2011 or post2011."""
+        sub = "1942-2010" if mode == "pre2011" else "с_2011"
+        out_dir = self.ready_tables_dir / sub
         out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{mode}_catalog.xlsx"
-        res = self.rebuild_sheet([book], mode=mode, output_path=out_path)
-        return str(res)
+        return out_dir / f"{mode}_catalog.xlsx"
+
+    def _collect_books_for_mode(
+        self, mode: str, upsert_book: Optional[Book] = None, exclude_article: Optional[str] = None
+    ) -> List[Book]:
+        books_by_art: Dict[str, Book] = {}
+        if self.book_repo is not None:
+            for b in self.book_repo.search_fts("", limit=10000, offset=0):
+                if (b.status or "").upper() != "DRAFT":
+                    if ("post2011" if (b.year and b.year >= 2011) else "pre2011") == mode:
+                        books_by_art[b.article.upper()] = b
+        if upsert_book is not None:
+            if ("post2011" if (upsert_book.year and upsert_book.year >= 2011) else "pre2011") == mode:
+                books_by_art[upsert_book.article.upper()] = upsert_book
+            else:
+                books_by_art.pop(upsert_book.article.upper(), None)
+        if exclude_article:
+            books_by_art.pop(exclude_article.upper(), None)
+        return list(books_by_art.values())
+
+    def export_book(self, book: Book) -> str:
+        mode = "post2011" if (book.year and book.year >= 2011) else "pre2011"
+        return str(self.rebuild_sheet(self._collect_books_for_mode(mode, upsert_book=book), mode, self.get_target_path(mode)))
 
     def remove_book(self, article: str) -> bool:
-        """Remove book from catalog sheet (satisfies IExcelExporter)."""
+        for mode in ("pre2011", "post2011"):
+            out_path = self.get_target_path(mode)
+            if out_path.is_file():
+                self.rebuild_sheet(self._collect_books_for_mode(mode, exclude_article=article), mode, out_path)
         return True
+
+    def clear_table(self, mode: str) -> Dict[str, Any]:
+        modes = ["pre2011", "post2011"] if mode == "all" else [mode]
+        backed_up: List[str] = []
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        with self._thread_lock:
+            for m in modes:
+                target, tmpl = self.get_target_path(m), self.get_template_path(m)
+                if target.is_file():
+                    bdir = self.ready_tables_dir / "backups" / m
+                    bdir.mkdir(parents=True, exist_ok=True)
+                    bpath = bdir / f"{ts}_{target.name}"
+                    shutil.copy2(target, bpath)
+                    backed_up.append(str(bpath))
+                shutil.copy2(tmpl, target)
+        return {"status": "ok", "modes": modes, "backups": backed_up}
 
     def rebuild_sheet(
         self,
